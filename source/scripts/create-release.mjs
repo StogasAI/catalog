@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -18,7 +18,7 @@ if (Number.isNaN(createdAt.valueOf())) {
 }
 
 const expiresAt = new Date(createdAt);
-expiresAt.setUTCDate(expiresAt.getUTCDate() + 180);
+expiresAt.setUTCDate(expiresAt.getUTCDate() + 30);
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });

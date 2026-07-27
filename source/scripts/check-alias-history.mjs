@@ -46,7 +46,7 @@ for (const [alias, oldRecord] of Object.entries(previous.aliases ?? {})) {
 	}
 	const oldDeployment = previous.graph?.deployments?.[oldRecord.deploymentId];
 	const nextDeployment = current.graph?.deployments?.[nextRecord.deploymentId];
-	for (const field of ['modelId', 'upstreamId', 'modelSelection']) {
+	for (const field of ['modelId', 'upstream']) {
 		if (JSON.stringify(oldDeployment?.[field]) !== JSON.stringify(nextDeployment?.[field])) {
 			failures.push(`${alias}: fixed deployment changed ${field}`);
 		}

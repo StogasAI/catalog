@@ -11,15 +11,12 @@ package catalog
 #Modality:        "text" | "image" | "audio" | "video"
 #Flavor:          "base" | "instruct" | "search" | "preview" | "code" | "unknown"
 #ReasoningEffort: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
-#ServiceTier:     "auto" | "default" | "standard" | "standard_only" | "flex" | "priority"
-#Speed:           "standard" | "fast"
 #Interface:       "chat_completions" | "responses"
 
-#ModelSelectionMode: "fixed" | "provider_alias" | "provider_routed"
-#AliasBinding:       "fixed" | "moving"
-#AliasPurpose:       "canonical" | "compatibility"
-#AliasStatus:        "active" | "deprecated"
-#LifecycleStatus:    "active" | "deprecated" | "retired"
+#AliasBinding:    "fixed" | "moving"
+#AliasPurpose:    "canonical" | "compatibility"
+#AliasStatus:     "active" | "deprecated"
+#LifecycleStatus: "active" | "deprecated" | "retired"
 
 #Guarantee:       "required" | "best_effort" | "none" | "unknown"
 #RetentionMode:   "none" | "fixed" | "feature_dependent" | "unknown"
@@ -32,4 +29,3 @@ package catalog
 #TeeMechanism: "sev-snp" | "tdx" | "nitro-enclave" | "other" | "unknown"
 
 #Slugs: [#Slug, ...#Slug]
-

@@ -10,6 +10,7 @@
 		type NodeTypes
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
+	import { SvelteSet } from 'svelte/reactivity';
 	import catalogJson from '../../generated/catalog.public.json';
 	import CatalogNode from './CatalogNode.svelte';
 	import {
@@ -235,7 +236,7 @@
 	}
 
 	function dedupedVisibleLineage(nodes: LineageNode[]) {
-		const seen = new Set<string>();
+		const seen = new SvelteSet<string>();
 		const visible: LineageNode[] = [];
 		for (const node of nodes) {
 			const key = nodeKey(node.type, node.id);

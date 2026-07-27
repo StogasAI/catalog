@@ -34,13 +34,11 @@ evidence:    [#Id]: #Evidence
 			"\(id):model": models[deployment.modelId]
 			for routeId in deployment.routeIds {
 				"\(id):route:\(routeId)": routes[routeId]
-			}
-			if deployment.modelSelection.mode == "provider_alias" && deployment.modelSelection.observedModelId != _|_ {
-				"\(id):observedModel": models[deployment.modelSelection.observedModelId]
-			}
-			if deployment.modelSelection.mode == "provider_routed" && deployment.modelSelection.candidateModelIds != _|_ {
-				for candidateId in deployment.modelSelection.candidateModelIds {
-					"\(id):candidate:\(candidateId)": models[candidateId]
+				if routes[routeId].providerId == "openai" {
+					"\(id):openaiUpstream:\(routeId)": deployment.upstream & #OpenAIUpstream
+				}
+				if routes[routeId].providerId == "anthropic" {
+					"\(id):anthropicUpstream:\(routeId)": deployment.upstream & #AnthropicUpstream
 				}
 			}
 		}

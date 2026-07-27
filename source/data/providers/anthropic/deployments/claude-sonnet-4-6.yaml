@@ -2,10 +2,12 @@
 deployments:
   modelId: claude-sonnet-4-6
   routeIds: [anthropic-messages]
-  upstreamId: claude-sonnet-4-6
-  modelSelection:
-    mode: fixed
-    modelId: claude-sonnet-4-6
+  upstream:
+    model: claude-sonnet-4-6
+    fixedRequest:
+      speed: standard
+      inference_geo: global
+      service_tier: standard_only
   aliases:
     claude-sonnet-4-6:
       binding: fixed
@@ -15,8 +17,6 @@ deployments:
       binding: moving
       purpose: compatibility
       status: active
-  serviceTier: standard
-  processingRegionId: multi-region
   pricing:
     input_tokens:
       per_mill_tokens: '3000000000000000000'

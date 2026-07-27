@@ -2,17 +2,17 @@
 deployments:
   modelId: claude-sonnet-4-6
   routeIds: [anthropic-messages]
-  upstreamId: claude-sonnet-4-6
-  modelSelection:
-    mode: fixed
-    modelId: claude-sonnet-4-6
+  upstream:
+    model: claude-sonnet-4-6
+    fixedRequest:
+      speed: standard
+      inference_geo: us
+      service_tier: standard_only
   aliases:
     claude-sonnet-4-6-us:
       binding: fixed
       purpose: canonical
       status: active
-  serviceTier: standard
-  processingRegionId: us
   dataHandling:
     processing:
       regionIds: [us]

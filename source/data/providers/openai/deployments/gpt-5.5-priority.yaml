@@ -2,10 +2,10 @@
 deployments:
   modelId: gpt-5.5-2026-04-23
   routeIds: [openai-chat-completions, openai-responses]
-  upstreamId: gpt-5.5-2026-04-23
-  modelSelection:
-    mode: fixed
-    modelId: gpt-5.5-2026-04-23
+  upstream:
+    model: gpt-5.5-2026-04-23
+    fixedRequest:
+      service_tier: priority
   aliases:
     gpt-5.5-2026-04-23-priority:
       binding: fixed
@@ -15,8 +15,6 @@ deployments:
       binding: moving
       purpose: canonical
       status: active
-  serviceTier: priority
-  processingRegionId: multi-region
   limits:
     contextTokens: 272000
   pricing:

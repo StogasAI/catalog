@@ -2,17 +2,17 @@
 deployments:
   modelId: claude-opus-4-8
   routeIds: [anthropic-messages]
-  upstreamId: claude-opus-4-8
-  modelSelection:
-    mode: fixed
-    modelId: claude-opus-4-8
+  upstream:
+    model: claude-opus-4-8
+    fixedRequest:
+      speed: standard
+      inference_geo: us
+      service_tier: standard_only
   aliases:
     claude-opus-4-8-us:
       binding: fixed
       purpose: canonical
       status: active
-  serviceTier: standard
-  processingRegionId: us
   dataHandling:
     processing:
       regionIds: [us]

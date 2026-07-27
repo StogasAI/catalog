@@ -28,11 +28,9 @@ describe('compiled catalog v2', () => {
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(runtimeCatalog.graph.models[deployment.modelId]).toBeDefined();
 			expect(deployment.routeIds.length).toBeGreaterThan(0);
+			expect(deployment.upstream.model).not.toBe('');
 			for (const routeId of deployment.routeIds) {
 				expect(runtimeCatalog.graph.routes[routeId]).toBeDefined();
-			}
-			if (deployment.modelSelection.mode === 'fixed') {
-				expect(deployment.modelSelection.modelId).toBe(deployment.modelId);
 			}
 		}
 	});
@@ -47,13 +45,20 @@ describe('compiled catalog v2', () => {
 		}
 	});
 
-	test('materializes effective admission, billing, privacy, and moderation facts', () => {
+	test('materializes runtime admission and billing facts', () => {
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(deployment.limits.contextTokens).toBeGreaterThan(0);
 			expect(deployment.limits.outputTokens).toBeGreaterThan(0);
 			for (const effort of deployment.reasoning.acceptedEfforts) {
 				expect(canonicalEfforts.has(effort)).toBe(true);
 			}
+			expect(deployment).not.toHaveProperty('dataHandling');
+			expect(deployment).not.toHaveProperty('moderation');
+		}
+	});
+
+	test('materializes public privacy and moderation facts', () => {
+		for (const deployment of Object.values(publicCatalog.graph.deployments)) {
 			expect(moderationActors.has(deployment.moderation.input)).toBe(true);
 			expect(moderationActors.has(deployment.moderation.output)).toBe(true);
 			expect(deployment.dataHandling).toHaveProperty('processing.guarantee');
@@ -62,12 +67,20 @@ describe('compiled catalog v2', () => {
 		}
 	});
 
-	test('models Anthropic speed and processing geography as deployment facts', () => {
+	test('keeps Anthropic selection literal and its guarantee normalized', () => {
 		const deployment = runtimeCatalog.graph.deployments['claude-opus-4-8-fast-us'];
 		expect(deployment.routeIds).toEqual(['anthropic-messages']);
-		expect(deployment.speed).toBe('fast');
-		expect(deployment.processingRegionId).toBe('us');
-		expect(deployment.dataHandling.processing).toEqual({
+		expect(deployment.upstream).toEqual({
+			model: 'claude-opus-4-8',
+			fixedRequest: {
+				inference_geo: 'us',
+				service_tier: 'standard_only',
+				speed: 'fast'
+			}
+		});
+		expect(
+			publicCatalog.graph.deployments['claude-opus-4-8-fast-us'].dataHandling.processing
+		).toEqual({
 			guarantee: 'required',
 			regionIds: ['us']
 		});

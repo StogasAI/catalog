@@ -326,11 +326,18 @@ function buildCatalogs(source) {
 		const deployment = structuredClone(sourceDeployment);
 		const model = requireNode(graph.models, deployment.modelId, deploymentId);
 		const providerId = providerForDeployment(graph, deploymentId, deployment);
-		if (
-			deployment.modelSelection.mode === 'fixed' &&
-			deployment.modelSelection.modelId !== deployment.modelId
-		) {
-			throw new Error(`${deploymentId}: fixed modelSelection must equal modelId`);
+		if (!deployment.upstream?.model || !deployment.upstream?.fixedRequest) {
+			throw new Error(`${deploymentId}: upstream model and fixedRequest are required`);
+		}
+		const selectorKeys = Object.keys(deployment.upstream.fixedRequest).sort();
+		const expectedKeys =
+			providerId === 'openai'
+				? ['service_tier']
+				: providerId === 'anthropic'
+					? ['inference_geo', 'service_tier', 'speed']
+					: null;
+		if (!expectedKeys || JSON.stringify(selectorKeys) !== JSON.stringify(expectedKeys)) {
+			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
 		const limits = effectiveLimits(deploymentId, model, deployment);
 		const capabilities = effectiveCapabilities(graph, deploymentId, model, deployment);
@@ -351,19 +358,11 @@ function buildCatalogs(source) {
 		const common = {
 			modelId: deployment.modelId,
 			routeIds: [...deployment.routeIds].sort(),
-			upstreamId: deployment.upstreamId,
-			modelSelection: deployment.modelSelection,
-			...(deployment.serviceTier ? { serviceTier: deployment.serviceTier } : {}),
-			...(deployment.speed ? { speed: deployment.speed } : {}),
-			...(deployment.processingRegionId
-				? { processingRegionId: deployment.processingRegionId }
-				: {}),
+			upstream: deployment.upstream,
 			limits,
 			capabilities,
 			reasoning,
 			pricing,
-			dataHandling,
-			moderation,
 			lifecycle: deployment.lifecycle,
 			...(deployment.tee ? { tee: deployment.tee } : {})
 		};

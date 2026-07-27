@@ -9,24 +9,29 @@ package catalog
 	webSearch?:       bool
 })
 
-#Deployment: close({
-	modelId:    #Id
-	routeIds:   [#Id, ...#Id]
-	upstreamId: #UpstreamId
-	modelSelection: close({
-		mode: #ModelSelectionMode
-		modelId?:         #Id
-		observedModelId?: #Id
-		observedAt?:      #Date
-		candidateModelIds?: [...#Id]
+#OpenAIUpstream: close({
+	model: #UpstreamId
+	fixedRequest: close({
+		service_tier: "default" | "flex" | "priority"
 	})
-	if modelSelection.mode == "fixed" {
-		modelSelection: modelId: modelId
-	}
+})
+
+#AnthropicUpstream: close({
+	model: #UpstreamId
+	fixedRequest: close({
+		speed:         "standard" | "fast"
+		inference_geo: "global" | "us"
+		service_tier:  "standard_only"
+	})
+})
+
+#Upstream: #OpenAIUpstream | #AnthropicUpstream
+
+#Deployment: close({
+	modelId:  #Id
+	routeIds: [#Id, ...#Id]
+	upstream: #Upstream
 	aliases: [#Slug]: #Alias
-	serviceTier?:       #ServiceTier
-	speed?:             #Speed
-	processingRegionId?: #Id
 	limits?: close({
 		contextTokens?: int & >0
 		outputTokens?:  int & >0
@@ -53,4 +58,3 @@ package catalog
 		retiredAt?:    #Date
 	})
 })
-
