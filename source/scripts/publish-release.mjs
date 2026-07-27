@@ -7,75 +7,41 @@ import { spawnSync } from 'node:child_process';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
-const requestedChannel = process.argv[3];
-if (!['canary', 'stable'].includes(requestedChannel)) {
-	throw new Error('Publication requires an explicit canary or stable channel.');
-}
+const targetBucket = process.argv[3]?.trim();
 const tag = `catalog-v${sequence}`;
 const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
-const draftRoot = join(workRoot, 'draft');
 const releaseRoot = join(workRoot, 'release');
 
 try {
 	requireCommands();
-	requireCleanSource();
-	run('gh', ['release', 'download', tag, '--repo', 'StogasAI/catalog', '--dir', draftRoot]);
-
-	const draftPath = join(draftRoot, 'catalog.draft.json');
-	for (const path of [
-		draftPath,
-		join(draftRoot, 'catalog.runtime.json'),
-		join(draftRoot, 'catalog.public.json')
-	]) {
-		run('gh', ['attestation', 'verify', path, '--repo', 'StogasAI/catalog']);
-	}
-
-	const draft = parseDraft(draftPath);
-	if (draft.sequence !== sequence)
-		throw new Error('Draft sequence does not match the requested release.');
-	if (draft.channel !== requestedChannel) {
+	requireCleanPublishedSource();
+	const latest = readLatest();
+	if (latest.envelope && latest.envelope.manifest.sequence > sequence) {
 		throw new Error(
-			`Draft channel ${draft.channel} does not match requested channel ${requestedChannel}.`
-		);
-	}
-	const sourceCommit = output('git', ['rev-parse', 'HEAD']);
-	if (draft.source.commit !== sourceCommit) {
-		throw new Error(
-			`Draft source commit ${draft.source.commit} does not match local HEAD ${sourceCommit}.`
+			`Catalog latest is already sequence ${latest.envelope.manifest.sequence}; ${sequence} would roll it back.`
 		);
 	}
 
 	run('bun', ['install', '--frozen-lockfile']);
 	run('bun', ['run', 'check']);
-	assertArtifact(draft, 'runtime', 'catalog.runtime.json');
-	assertArtifact(draft, 'public', 'catalog.public.json');
 	verifySigningKey();
-
-	run(process.execPath, ['source/scripts/create-release.mjs', String(sequence), releaseRoot], {
-		...process.env,
-		CATALOG_MIN_GATEWAY_VERSION: draft.minGatewayVersion,
-		CATALOG_SOURCE_COMMIT: sourceCommit,
-		CATALOG_SOURCE_TIMESTAMP: draft.createdAt
-	});
+	run(process.execPath, ['source/scripts/create-release.mjs', String(sequence), releaseRoot]);
 	verifyChecksums(releaseRoot);
 
-	const immutableFiles = [
-		...draftArtifactPaths(releaseRoot, 'blobs/sha256'),
-		join(releaseRoot, 'releases', `${sequence}.json`)
-	];
-	for (const path of immutableFiles) publishImmutable(path, releaseRoot);
-	publishGitHubAssets(releaseRoot);
-	run('gh', [
-		'release',
-		'edit',
-		tag,
-		'--repo',
-		'StogasAI/catalog',
-		'--draft=false',
-		'--latest=false'
-	]);
-	activateChannel(requestedChannel, join(releaseRoot, 'channel.json'));
-	console.log(`Published catalog ${sequence} to ${requestedChannel}.`);
+	const releasePath = join(releaseRoot, 'releases', `${sequence}.json`);
+	const envelope = parseEnvelope(releasePath);
+	if (latest.envelope?.manifest.sequence === sequence) {
+		if (compareSync(readFileSync(releasePath), readFileSync(latest.path)) !== 0) {
+			throw new Error(`Catalog sequence ${sequence} is already bound to different content.`);
+		}
+	}
+
+	for (const path of [...artifactPaths(releaseRoot), releasePath]) {
+		publishImmutable(path, releaseRoot);
+	}
+	publishGitHubRelease(envelope);
+	activateLatest(latest, join(releaseRoot, 'latest.json'));
+	console.log(`Published catalog ${sequence}.`);
 } finally {
 	rmSync(workRoot, { force: true, recursive: true });
 }
@@ -89,45 +55,21 @@ function requireCommands() {
 		'AWS_SECRET_ACCESS_KEY',
 		'CATALOG_SIGNING_KEY_ID',
 		'CATALOG_SIGNING_PRIVATE_KEY_PEM',
-		'R2_BUCKET',
 		'R2_ENDPOINT'
 	]) {
 		requiredEnvironment(name);
 	}
+	if (!targetBucket) requiredEnvironment('R2_BUCKET');
 }
 
-function requireCleanSource() {
+function requireCleanPublishedSource() {
 	if (output('git', ['status', '--porcelain']) !== '') {
 		throw new Error('Catalog source must be committed and clean before publication.');
 	}
-}
-
-function parseDraft(path) {
-	const draft = JSON.parse(readFileSync(path, 'utf8'));
-	if (
-		draft?.schema !== 'stogas.catalog.draft.v1' ||
-		!['canary', 'stable'].includes(draft.channel) ||
-		draft.source?.repository !== 'https://github.com/StogasAI/catalog' ||
-		typeof draft.minGatewayVersion !== 'string' ||
-		!draft.minGatewayVersion
-	) {
-		throw new Error('Catalog draft metadata is invalid.');
-	}
-	return draft;
-}
-
-function assertArtifact(draft, key, filename) {
-	const generated = join(repositoryRoot, 'generated', filename);
-	const proposed = join(draftRoot, filename);
-	const generatedBytes = readFileSync(generated);
-	const proposedBytes = readFileSync(proposed);
-	if (compareSync(generatedBytes, proposedBytes) !== 0) {
-		throw new Error(`${filename} differs from the attested GitHub draft.`);
-	}
-	const expected = draft[key];
-	const digest = `sha256:${sha256(generatedBytes)}`;
-	if (expected?.digest !== digest || expected?.size !== generatedBytes.byteLength) {
-		throw new Error(`${filename} does not match its draft metadata.`);
+	const head = output('git', ['rev-parse', 'HEAD']);
+	const remote = output('git', ['ls-remote', 'origin', 'refs/heads/main']).split(/\s+/)[0];
+	if (!remote || remote !== head) {
+		throw new Error('Catalog HEAD must be published at origin/main before release.');
 	}
 }
 
@@ -138,14 +80,28 @@ function verifySigningKey() {
 		readFileSync(join(repositoryRoot, 'keys/catalog-signing-keys.json'), 'utf8')
 	);
 	const trusted = keyring[id];
-	if (typeof trusted !== 'string')
+	if (typeof trusted !== 'string') {
 		throw new Error(`Catalog signing key ${id} is not trusted by this source.`);
+	}
 	const actual = createPublicKey(privateKey)
 		.export({ format: 'der', type: 'spki' })
 		.subarray(-32)
 		.toString('base64');
-	if (actual !== trusted)
+	if (actual !== trusted) {
 		throw new Error(`Catalog signing key ${id} does not match its committed public key.`);
+	}
+}
+
+function parseEnvelope(path) {
+	const envelope = JSON.parse(readFileSync(path, 'utf8'));
+	if (
+		envelope?.schema !== 'stogas.catalog.signed.v2' ||
+		envelope.manifest?.schema !== 'stogas.catalog.release.v2' ||
+		envelope.manifest.sequence !== sequence
+	) {
+		throw new Error('Generated catalog release is invalid.');
+	}
+	return envelope;
 }
 
 function verifyChecksums(root) {
@@ -159,8 +115,8 @@ function verifyChecksums(root) {
 	}
 }
 
-function draftArtifactPaths(root, relative) {
-	const directory = join(root, relative);
+function artifactPaths(root) {
+	const directory = join(root, 'blobs', 'sha256');
 	return readdirSync(directory, { withFileTypes: true })
 		.filter((entry) => entry.isFile())
 		.map((entry) => join(directory, entry.name))
@@ -168,7 +124,7 @@ function draftArtifactPaths(root, relative) {
 }
 
 function publishImmutable(path, root) {
-	const key = path.slice(root.length + 1);
+	const key = objectKey(path.slice(root.length + 1));
 	const existing = join(workRoot, `existing-${basename(path)}`);
 	const head = spawn('aws', awsArgs(['s3api', 'head-object', '--bucket', bucket(), '--key', key]), {
 		allowFailure: true,
@@ -179,9 +135,7 @@ function publishImmutable(path, root) {
 			'aws',
 			awsArgs(['s3api', 'get-object', '--bucket', bucket(), '--key', key, existing]),
 			process.env,
-			{
-				stdout: 'ignore'
-			}
+			{ stdout: 'ignore' }
 		);
 		if (compareSync(readFileSync(path), readFileSync(existing)) !== 0) {
 			throw new Error(`Refusing to overwrite immutable catalog object ${key}.`);
@@ -211,18 +165,46 @@ function publishImmutable(path, root) {
 	);
 }
 
-function publishGitHubAssets(root) {
+function publishGitHubRelease(envelope) {
 	const assets = [
-		join(root, 'releases', `${sequence}.json`),
-		...draftArtifactPaths(root, 'blobs/sha256'),
-		join(root, 'SHA256SUMS')
+		join(releaseRoot, 'releases', `${sequence}.json`),
+		...artifactPaths(releaseRoot),
+		join(releaseRoot, 'SHA256SUMS')
 	];
-	run('gh', ['release', 'upload', tag, '--repo', 'StogasAI/catalog', ...assets, '--clobber']);
+	const existing = spawn('gh', ['release', 'view', tag, '--repo', 'StogasAI/catalog'], {
+		allowFailure: true,
+		stdout: 'ignore'
+	});
+	if (existing.status === 0) {
+		const downloaded = join(workRoot, 'github-release');
+		run('gh', ['release', 'download', tag, '--repo', 'StogasAI/catalog', '--dir', downloaded]);
+		for (const path of assets) {
+			const remote = join(downloaded, basename(path));
+			if (compareSync(readFileSync(path), readFileSync(remote)) !== 0) {
+				throw new Error(`GitHub release ${tag} contains different ${basename(path)} bytes.`);
+			}
+		}
+		return;
+	}
+	const head = output('git', ['rev-parse', 'HEAD']);
+	run('gh', [
+		'release',
+		'create',
+		tag,
+		'--repo',
+		'StogasAI/catalog',
+		'--target',
+		head,
+		'--title',
+		`Catalog ${sequence}`,
+		'--notes',
+		[`Runtime: ${envelope.manifest.runtime}`, `Public: ${envelope.manifest.public}`].join('\n'),
+		...assets
+	]);
 }
 
-function activateChannel(channel, path) {
-	const key = `channels/${channel}.json`;
-	const existing = join(workRoot, `channel-${channel}.json`);
+function readLatest() {
+	const path = join(workRoot, 'latest.json');
 	const head = spawn(
 		'aws',
 		awsArgs([
@@ -231,7 +213,7 @@ function activateChannel(channel, path) {
 			'--bucket',
 			bucket(),
 			'--key',
-			key,
+			objectKey('latest.json'),
 			'--query',
 			'ETag',
 			'--output',
@@ -239,29 +221,26 @@ function activateChannel(channel, path) {
 		]),
 		{ allowFailure: true, capture: true }
 	);
-	const conditional = [];
-	if (head.status === 0) {
-		run(
-			'aws',
-			awsArgs(['s3api', 'get-object', '--bucket', bucket(), '--key', key, existing]),
-			process.env,
-			{
-				stdout: 'ignore'
-			}
-		);
-		const current = JSON.parse(readFileSync(existing, 'utf8'));
-		if (
-			!Number.isSafeInteger(current?.manifest?.sequence) ||
-			current.manifest.sequence >= sequence
-		) {
-			throw new Error(
-				`Catalog channel ${channel} is already at sequence ${current?.manifest?.sequence}.`
-			);
-		}
-		conditional.push('--if-match', head.stdout.trim());
-	} else {
-		conditional.push('--if-none-match', '*');
+	if (head.status !== 0) return { envelope: null, etag: null, path };
+	run(
+		'aws',
+		awsArgs(['s3api', 'get-object', '--bucket', bucket(), '--key', objectKey('latest.json'), path]),
+		process.env,
+		{ stdout: 'ignore' }
+	);
+	const envelope = JSON.parse(readFileSync(path, 'utf8'));
+	if (
+		envelope?.schema !== 'stogas.catalog.signed.v2' ||
+		!Number.isSafeInteger(envelope.manifest?.sequence)
+	) {
+		throw new Error('Published catalog latest.json is invalid.');
 	}
+	return { envelope, etag: head.stdout.trim(), path };
+}
+
+function activateLatest(latest, path) {
+	if (latest.envelope?.manifest.sequence === sequence) return;
+	const conditional = latest.etag ? ['--if-match', latest.etag] : ['--if-none-match', '*'];
 	run(
 		'aws',
 		awsArgs([
@@ -270,13 +249,13 @@ function activateChannel(channel, path) {
 			'--bucket',
 			bucket(),
 			'--key',
-			key,
+			objectKey('latest.json'),
 			'--body',
 			path,
 			'--content-type',
 			'application/json',
 			'--cache-control',
-			'no-store',
+			'public,max-age=0,must-revalidate',
 			...conditional
 		]),
 		process.env,
@@ -289,7 +268,12 @@ function awsArgs(args) {
 }
 
 function bucket() {
-	return requiredEnvironment('R2_BUCKET');
+	return targetBucket || requiredEnvironment('R2_BUCKET');
+}
+
+function objectKey(path) {
+	const prefix = (process.env.R2_PREFIX ?? 'catalog').trim().replace(/^\/+|\/+$/g, '');
+	return prefix ? `${prefix}/${path}` : path;
 }
 
 function parseSequence(value) {
@@ -297,8 +281,9 @@ function parseSequence(value) {
 		throw new Error('Release sequence must be a positive decimal integer.');
 	}
 	const parsed = Number(value);
-	if (!Number.isSafeInteger(parsed))
+	if (!Number.isSafeInteger(parsed)) {
 		throw new Error('Release sequence exceeds the safe integer range.');
+	}
 	return parsed;
 }
 

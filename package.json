@@ -17,7 +17,6 @@
 		"check": "bun run format:check && bun run typecheck && bun run build --check && bun test",
 		"check:alias-history": "node source/scripts/check-alias-history.mjs",
 		"clean": "node source/scripts/build.mjs --clean",
-		"create-draft": "node source/scripts/create-draft.mjs",
 		"create-release": "node source/scripts/create-release.mjs",
 		"editor": "bun run --cwd editor dev",
 		"format": "prettier --write .",

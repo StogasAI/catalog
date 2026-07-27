@@ -6,19 +6,8 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
 const outputRoot = process.argv[3] ?? join(repositoryRoot, 'release');
-const sourceCommit = requiredEnvironment('CATALOG_SOURCE_COMMIT');
-const sourceTimestamp = requiredEnvironment('CATALOG_SOURCE_TIMESTAMP');
-const minGatewayVersion = requiredEnvironment('CATALOG_MIN_GATEWAY_VERSION');
 const signingKeyId = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
 const signingPrivateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
-const createdAt = new Date(sourceTimestamp);
-
-if (Number.isNaN(createdAt.valueOf())) {
-	throw new Error('CATALOG_SOURCE_TIMESTAMP must be an ISO 8601 timestamp.');
-}
-
-const expiresAt = new Date(createdAt);
-expiresAt.setUTCDate(expiresAt.getUTCDate() + 30);
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
@@ -26,18 +15,11 @@ mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
 const manifest = {
-	schema: 'stogas.catalog.release.v1',
-	sequence,
 	catalogSchema: 2,
-	createdAt: createdAt.toISOString(),
-	expiresAt: expiresAt.toISOString(),
-	minGatewayVersion,
-	source: {
-		commit: sourceCommit,
-		repository: 'https://github.com/StogasAI/catalog'
-	},
-	runtime,
-	public: publicCatalog
+	public: publicCatalog.digest,
+	runtime: runtime.digest,
+	schema: 'stogas.catalog.release.v2',
+	sequence
 };
 const manifestBytes = stableJson(manifest);
 const privateKey = createPrivateKey(signingPrivateKey);
@@ -46,18 +28,15 @@ if (privateKey.asymmetricKeyType !== 'ed25519') {
 }
 const signature = sign(null, Buffer.from(manifestBytes), privateKey).toString('base64');
 const envelope = {
-	schema: 'stogas.catalog.signed.v1',
+	keyId: signingKeyId,
 	manifest,
-	signature: {
-		algorithm: 'Ed25519',
-		keyId: signingKeyId,
-		value: signature
-	}
+	schema: 'stogas.catalog.signed.v2',
+	signature
 };
 
 mkdirSync(join(outputRoot, 'releases'), { recursive: true });
 writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), stableJson(envelope));
-writeFileSync(join(outputRoot, 'channel.json'), stableJson(envelope));
+writeFileSync(join(outputRoot, 'latest.json'), stableJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),
 	[
@@ -76,9 +55,7 @@ function addBlob(filename) {
 	writeFileSync(join(outputRoot, relativePath), bytes);
 	return {
 		digest: `sha256:${digest}`,
-		mediaType: 'application/json',
-		path: relativePath,
-		size: bytes.byteLength
+		path: relativePath
 	};
 }
 

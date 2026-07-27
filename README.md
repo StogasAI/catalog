@@ -22,9 +22,8 @@ bun run editor
 
 Generated runtime and public JSON are committed so catalog changes remain reviewable.
 
-Fixed aliases cannot be removed or retargeted. Releases have a monotonically increasing sequence,
-30-day metadata validity, content-addressed bundles, an Ed25519-signed manifest, and GitHub build
-provenance. GitHub Actions creates an attested unsigned draft. The Stogas release command then
-independently rebuilds and compares the bytes before signing and conditionally advancing the R2
-channel. Public verification keys are committed under `keys/`; private release and R2 credentials
-remain outside GitHub Actions.
+Fixed aliases cannot be removed or retargeted. A release is one monotonically increasing sequence,
+the runtime and public SHA-256 values, and one Ed25519 authorization signature. The release command
+checks and builds the committed source, publishes immutable content-addressed artifacts and a
+GitHub release, then conditionally advances `latest.json` in R2. Public verification keys are
+committed under `keys/`; private release and R2 credentials remain outside GitHub Actions.
