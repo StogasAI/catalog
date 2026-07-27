@@ -6,7 +6,7 @@ const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments
 const moderationActors = new Set(['provider', 'stogas', 'both', 'none', 'unknown']);
 const canonicalEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
-describe('compiled catalog v2', () => {
+describe('compiled catalog v3', () => {
 	test('contains exactly the five useful graph primitives', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -35,21 +35,25 @@ describe('compiled catalog v2', () => {
 		}
 	});
 
-	test('keeps aliases explicit, deployment-bound, and unique', () => {
-		expect(Object.keys(runtimeCatalog.aliases).length).toBe(36);
-		for (const [alias, record] of Object.entries(runtimeCatalog.aliases)) {
-			expect(alias).not.toContain('/');
-			expect(runtimeCatalog.graph.deployments[record.deploymentId]).toBeDefined();
-			expect(['fixed', 'moving']).toContain(record.binding);
-			expect(['canonical', 'compatibility']).toContain(record.purpose);
+	test('keeps aliases directly on deployments and unique', () => {
+		const aliases = new Set<string>();
+		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
+			expect(deployment.aliases.length).toBeGreaterThan(0);
+			for (const alias of deployment.aliases) {
+				expect(alias).not.toContain('/');
+				expect(aliases.has(alias)).toBe(false);
+				aliases.add(alias);
+			}
 		}
+		expect(aliases.size).toBe(36);
+		expect(runtimeCatalog).not.toHaveProperty('aliases');
 	});
 
 	test('materializes runtime admission and billing facts', () => {
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(deployment.limits.contextTokens).toBeGreaterThan(0);
 			expect(deployment.limits.outputTokens).toBeGreaterThan(0);
-			for (const effort of deployment.reasoning.acceptedEfforts) {
+			for (const effort of deployment.reasoningEfforts) {
 				expect(canonicalEfforts.has(effort)).toBe(true);
 			}
 			expect(deployment).not.toHaveProperty('dataHandling');
@@ -61,10 +65,12 @@ describe('compiled catalog v2', () => {
 		for (const deployment of Object.values(publicCatalog.graph.deployments)) {
 			expect(moderationActors.has(deployment.moderation.input)).toBe(true);
 			expect(moderationActors.has(deployment.moderation.output)).toBe(true);
-			expect(deployment.dataHandling).toHaveProperty('processing.guarantee');
-			expect(deployment.dataHandling).toHaveProperty('storage.guarantee');
+			expect(deployment.dataHandling).toHaveProperty('processingRegions');
+			expect(deployment.dataHandling).toHaveProperty('storageRegions');
 			expect(deployment.dataHandling).not.toHaveProperty('gdpr');
+			expect(deployment).not.toHaveProperty('provenance');
 		}
+		expect(publicCatalog).not.toHaveProperty('evidence');
 	});
 
 	test('keeps Anthropic selection literal and its guarantee normalized', () => {
@@ -79,17 +85,14 @@ describe('compiled catalog v2', () => {
 			}
 		});
 		expect(
-			publicCatalog.graph.deployments['claude-opus-4-8-fast-us'].dataHandling.processing
-		).toEqual({
-			guarantee: 'required',
-			regionIds: ['us']
-		});
+			publicCatalog.graph.deployments['claude-opus-4-8-fast-us'].dataHandling.processingRegions
+		).toEqual(['us']);
 	});
 
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v2');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v2');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v3');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v3');
 	});
 });

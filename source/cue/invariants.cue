@@ -5,7 +5,6 @@ models:      [#Id]: #Model
 providers:   [#Id]: #Provider
 routes:      [#Id]: #Route
 deployments: [#Id]: #Deployment
-evidence:    [#Id]: #Evidence
 
 #Catalog: {
 	_modelRefs: {
@@ -20,12 +19,6 @@ evidence:    [#Id]: #Evidence
 	_routeRefs: {
 		for id, route in routes {
 			"\(id):provider": providers[route.providerId]
-			for evidenceId in route.dataHandling.evidenceIds {
-				"\(id):dataHandling:\(evidenceId)": evidence[evidenceId]
-			}
-			for evidenceId in route.moderation.evidenceIds {
-				"\(id):moderation:\(evidenceId)": evidence[evidenceId]
-			}
 		}
 	}
 

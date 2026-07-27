@@ -13,7 +13,6 @@ models:
   capabilities:
     inputModalities: [text, image]
     outputModalities: [text]
-  reasoning:
-    acceptedEfforts: [low, medium, high, max]
+  reasoningEfforts: [low, medium, high, max]
   releaseDate: 2026-02-17
   knowledgeCutoff: 2025-08-01

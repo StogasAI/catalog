@@ -27,6 +27,7 @@ describe('catalog release metadata', () => {
 			expect(envelope.schema).toBe('stogas.catalog.signed.v2');
 			expect(envelope.keyId).toBe('test-key');
 			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v2');
+			expect(envelope.manifest.catalogSchema).toBe(3);
 			expect(envelope.manifest.sequence).toBe(7);
 			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
 			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);

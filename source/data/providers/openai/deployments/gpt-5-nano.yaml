@@ -6,15 +6,7 @@ deployments:
     model: gpt-5-nano-2025-08-07
     fixedRequest:
       service_tier: default
-  aliases:
-    gpt-5-nano-2025-08-07:
-      binding: fixed
-      purpose: canonical
-      status: active
-    gpt-5-nano:
-      binding: moving
-      purpose: canonical
-      status: active
+  aliases: [gpt-5-nano-2025-08-07, gpt-5-nano]
   pricing:
     input_tokens:
       per_mill_tokens: '50000000000000000'
@@ -22,5 +14,4 @@ deployments:
       per_mill_tokens: '5000000000000000'
     output_tokens:
       per_mill_tokens: '400000000000000000'
-  lifecycle:
-    status: active
+  status: active

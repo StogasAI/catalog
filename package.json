@@ -15,7 +15,6 @@
 		"build": "node source/scripts/build.mjs",
 		"build:editor": "bun run --cwd editor build",
 		"check": "bun run format:check && bun run typecheck && bun run build --check && bun test",
-		"check:alias-history": "node source/scripts/check-alias-history.mjs",
 		"clean": "node source/scripts/build.mjs --clean",
 		"create-release": "node source/scripts/create-release.mjs",
 		"editor": "bun run --cwd editor dev",

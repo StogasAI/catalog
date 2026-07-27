@@ -268,9 +268,9 @@ function effectiveCapabilities(graph, deploymentId, model, deployment) {
 }
 
 function effectiveReasoning(deploymentId, model, deployment) {
-	const reasoning = structuredClone(deployment.reasoning ?? model.reasoning);
-	const modelEfforts = new Set(model.reasoning.acceptedEfforts);
-	for (const effort of reasoning.acceptedEfforts) {
+	const reasoningEfforts = [...(deployment.reasoningEfforts ?? model.reasoningEfforts)];
+	const modelEfforts = new Set(model.reasoningEfforts);
+	for (const effort of reasoningEfforts) {
 		if (!canonicalEfforts.has(effort)) {
 			throw new Error(`${deploymentId}: invalid reasoning effort ${effort}`);
 		}
@@ -278,22 +278,18 @@ function effectiveReasoning(deploymentId, model, deployment) {
 			throw new Error(`${deploymentId}: reasoning effort ${effort} is absent from the model`);
 		}
 	}
-	if (reasoning.maxTokens && reasoning.maxTokens.min > reasoning.maxTokens.max) {
-		throw new Error(`${deploymentId}: reasoning maxTokens min exceeds max`);
-	}
-	return reasoning;
+	return reasoningEfforts;
 }
 
 function effectiveDataHandling(graph, deploymentId, deployment) {
 	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'dataHandling');
 	const override = deployment.dataHandling ?? {};
 	return {
-		processing: structuredClone(override.processing ?? routeValue.processing),
-		storage: structuredClone(override.storage ?? routeValue.storage),
-		retention: structuredClone(override.retention ?? routeValue.retention),
+		processingRegions: [...(override.processingRegions ?? routeValue.processingRegions)],
+		storageRegions: [...(override.storageRegions ?? routeValue.storageRegions)],
+		retentionDays: override.retentionDays ?? routeValue.retentionDays,
 		trainingUse: override.trainingUse ?? routeValue.trainingUse,
-		zeroDataRetention: structuredClone(override.zeroDataRetention ?? routeValue.zeroDataRetention),
-		evidenceIds: [...(override.evidenceIds ?? routeValue.evidenceIds)]
+		zeroDataRetention: override.zeroDataRetention ?? routeValue.zeroDataRetention
 	};
 }
 
@@ -302,14 +298,13 @@ function effectiveModeration(graph, deploymentId, deployment) {
 	const override = deployment.moderation ?? {};
 	return {
 		input: override.input ?? routeValue.input,
-		output: override.output ?? routeValue.output,
-		evidenceIds: [...(override.evidenceIds ?? routeValue.evidenceIds)]
+		output: override.output ?? routeValue.output
 	};
 }
 
 function buildCatalogs(source) {
 	const graph = source.graph;
-	const aliases = {};
+	const aliases = new Set();
 	const runtimeDeployments = {};
 	const publicDeployments = {};
 	const providerSlugOwners = new Map();
@@ -341,65 +336,38 @@ function buildCatalogs(source) {
 		}
 		const limits = effectiveLimits(deploymentId, model, deployment);
 		const capabilities = effectiveCapabilities(graph, deploymentId, model, deployment);
-		const reasoning = effectiveReasoning(deploymentId, model, deployment);
+		const reasoningEfforts = effectiveReasoning(deploymentId, model, deployment);
 		const pricing = mergePricing(graph, deploymentId, deployment);
 		const dataHandling = effectiveDataHandling(graph, deploymentId, deployment);
 		const moderation = effectiveModeration(graph, deploymentId, deployment);
 
-		for (const [alias, metadata] of Object.entries(deployment.aliases)) {
-			if (aliases[alias]) {
-				throw new Error(
-					`${deploymentId}: alias ${alias} already belongs to ${aliases[alias].deploymentId}`
-				);
+		for (const alias of deployment.aliases) {
+			if (alias.trim() !== alias || alias.includes('/')) {
+				throw new Error(`${deploymentId}: alias ${alias} is not canonical`);
 			}
-			aliases[alias] = { deploymentId, ...metadata };
+			if (aliases.has(alias)) throw new Error(`${deploymentId}: alias ${alias} is duplicated`);
+			aliases.add(alias);
 		}
 
 		const common = {
+			aliases: [...deployment.aliases],
 			modelId: deployment.modelId,
 			routeIds: [...deployment.routeIds].sort(),
 			upstream: deployment.upstream,
 			limits,
 			capabilities,
-			reasoning,
+			reasoningEfforts,
 			pricing,
-			lifecycle: deployment.lifecycle,
+			status: deployment.status,
+			...(deployment.deprecatedAt ? { deprecatedAt: deployment.deprecatedAt } : {}),
+			...(deployment.retiredAt ? { retiredAt: deployment.retiredAt } : {}),
 			...(deployment.tee ? { tee: deployment.tee } : {})
 		};
 		runtimeDeployments[deploymentId] = common;
 		publicDeployments[deploymentId] = {
 			...common,
 			dataHandling,
-			moderation,
-			provenance: {
-				capabilities: [
-					`model:${deployment.modelId}`,
-					...deployment.routeIds.map((routeId) => `route:${routeId}`),
-					...(deployment.capabilities ? [`deployment:${deploymentId}`] : [])
-				],
-				dataHandling: [
-					...deployment.routeIds.map((routeId) => `route:${routeId}`),
-					...(deployment.dataHandling ? [`deployment:${deploymentId}`] : [])
-				],
-				limits: [
-					`model:${deployment.modelId}`,
-					...(deployment.limits ? [`deployment:${deploymentId}`] : [])
-				],
-				moderation: [
-					...deployment.routeIds.map((routeId) => `route:${routeId}`),
-					...(deployment.moderation ? [`deployment:${deploymentId}`] : [])
-				],
-				pricing: [
-					...deployment.routeIds
-						.filter((routeId) => Object.keys(graph.routes[routeId].pricing ?? {}).length > 0)
-						.map((routeId) => `route:${routeId}`),
-					`deployment:${deploymentId}`
-				],
-				reasoning: [
-					`model:${deployment.modelId}`,
-					...(deployment.reasoning ? [`deployment:${deploymentId}`] : [])
-				]
-			}
+			moderation
 		};
 
 		requireNode(graph.providers, providerId, deploymentId);
@@ -439,27 +407,24 @@ function buildCatalogs(source) {
 
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v2',
+			schema: 'stogas.catalog.runtime.v3',
 			graph: {
 				authors: runtimeAuthors,
 				models: runtimeModels,
 				providers: runtimeProviders,
 				routes: runtimeRoutes,
 				deployments: runtimeDeployments
-			},
-			aliases
+			}
 		},
 		public: {
-			schema: 'stogas.catalog.public.v2',
+			schema: 'stogas.catalog.public.v3',
 			graph: {
 				authors: graph.authors,
 				models: graph.models,
 				providers: graph.providers,
 				routes: graph.routes,
 				deployments: publicDeployments
-			},
-			aliases,
-			evidence: source.evidence
+			}
 		}
 	};
 }

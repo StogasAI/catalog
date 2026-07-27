@@ -16,14 +16,7 @@ package catalog
 		inputModalities:  [#Modality, ...#Modality]
 		outputModalities: [#Modality, ...#Modality]
 	})
-	reasoning: close({
-		acceptedEfforts: [...#ReasoningEffort]
-		maxTokens?: close({
-			min: int & >0
-			max: int & >0
-		})
-	})
+	reasoningEfforts: [...#ReasoningEffort]
 	releaseDate:     #MaybeDate
 	knowledgeCutoff: #MaybeDate
 })
-

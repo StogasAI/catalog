@@ -6,15 +6,7 @@ deployments:
     model: gpt-5-search-api-2025-10-14
     fixedRequest:
       service_tier: default
-  aliases:
-    gpt-5-search-api-2025-10-14:
-      binding: fixed
-      purpose: canonical
-      status: active
-    gpt-5-search-api:
-      binding: moving
-      purpose: canonical
-      status: active
+  aliases: [gpt-5-search-api-2025-10-14, gpt-5-search-api]
   pricing:
     input_tokens:
       per_mill_tokens: '1250000000000000000'
@@ -24,5 +16,4 @@ deployments:
       per_mill_tokens: '10000000000000000000'
     openai_chat_completion_search_model_calls:
       per_1k_calls: '10000000000000000000'
-  lifecycle:
-    status: active
+  status: active

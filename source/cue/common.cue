@@ -13,16 +13,10 @@ package catalog
 #ReasoningEffort: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 #Interface:       "chat_completions" | "responses"
 
-#AliasBinding:    "fixed" | "moving"
-#AliasPurpose:    "canonical" | "compatibility"
-#AliasStatus:     "active" | "deprecated"
 #LifecycleStatus: "active" | "deprecated" | "retired"
 
-#Guarantee:       "required" | "best_effort" | "none" | "unknown"
-#RetentionMode:   "none" | "fixed" | "feature_dependent" | "unknown"
 #TrainingUse:     "no" | "opt_in" | "yes" | "unknown"
 #ZDRAvailability: "default" | "contractual" | "unsupported" | "unknown"
-#Applicability:   "unconditional" | "conditional" | "unknown"
 #Moderator:       "provider" | "stogas" | "both" | "none" | "unknown"
 
 #TeeStatus:    "attested" | "provider_claimed" | "unverified" | "unknown"

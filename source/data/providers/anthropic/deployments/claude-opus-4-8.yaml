@@ -8,15 +8,7 @@ deployments:
       speed: standard
       inference_geo: global
       service_tier: standard_only
-  aliases:
-    claude-opus-4-8:
-      binding: fixed
-      purpose: canonical
-      status: active
-    claude-opus-latest:
-      binding: moving
-      purpose: compatibility
-      status: active
+  aliases: [claude-opus-4-8, claude-opus-latest]
   pricing:
     input_tokens:
       per_mill_tokens: '5000000000000000000'
@@ -28,5 +20,4 @@ deployments:
       per_mill_tokens: '10000000000000000000'
     output_tokens:
       per_mill_tokens: '25000000000000000000'
-  lifecycle:
-    status: active
+  status: active

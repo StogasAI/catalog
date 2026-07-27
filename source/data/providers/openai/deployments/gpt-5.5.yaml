@@ -6,23 +6,7 @@ deployments:
     model: gpt-5.5-2026-04-23
     fixedRequest:
       service_tier: default
-  aliases:
-    gpt-5.5-2026-04-23:
-      binding: fixed
-      purpose: canonical
-      status: active
-    gpt-5.5:
-      binding: moving
-      purpose: canonical
-      status: active
-    gpt-5.5-2026-04-23-standard:
-      binding: fixed
-      purpose: compatibility
-      status: active
-    gpt-5.5-standard:
-      binding: moving
-      purpose: compatibility
-      status: active
+  aliases: [gpt-5.5-2026-04-23, gpt-5.5, gpt-5.5-2026-04-23-standard, gpt-5.5-standard]
   pricing:
     input_tokens:
       per_mill_context_lte_272k: '5000000000000000000'
@@ -33,5 +17,4 @@ deployments:
     output_tokens:
       per_mill_context_lte_272k: '30000000000000000000'
       per_mill_context_gt_272k: '45000000000000000000'
-  lifecycle:
-    status: active
+  status: active

@@ -1,47 +1,27 @@
 package catalog
 
-#RegionalHandling: close({
-	regionIds: [...#Id]
-	guarantee: #Guarantee
-})
-
-#Retention: close({
-	mode:  #RetentionMode
-	days?: null | (int & >=0)
-})
-
-#ZeroDataRetention: close({
-	availability:  #ZDRAvailability
-	applicability: #Applicability
-})
-
 #DataHandling: close({
-	processing:        #RegionalHandling
-	storage:           #RegionalHandling
-	retention:         #Retention
+	processingRegions:  [...#Id]
+	storageRegions:     [...#Id]
+	retentionDays:      null | (int & >=0)
 	trainingUse:       #TrainingUse
-	zeroDataRetention: #ZeroDataRetention
-	evidenceIds:       [#Id, ...#Id]
+	zeroDataRetention: #ZDRAvailability
 })
 
 #DataHandlingOverride: close({
-	processing?:        #RegionalHandling
-	storage?:           #RegionalHandling
-	retention?:         #Retention
+	processingRegions?:  [...#Id]
+	storageRegions?:     [...#Id]
+	retentionDays?:      null | (int & >=0)
 	trainingUse?:       #TrainingUse
-	zeroDataRetention?: #ZeroDataRetention
-	evidenceIds?:       [#Id, ...#Id]
+	zeroDataRetention?: #ZDRAvailability
 })
 
 #Moderation: close({
-	input:       #Moderator
-	output:      #Moderator
-	evidenceIds: [#Id, ...#Id]
+	input:  #Moderator
+	output: #Moderator
 })
 
 #ModerationOverride: close({
-	input?:       #Moderator
-	output?:      #Moderator
-	evidenceIds?: [#Id, ...#Id]
+	input?:  #Moderator
+	output?: #Moderator
 })
-

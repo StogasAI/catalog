@@ -10,24 +10,14 @@ routes:
     toolChoice: true
     webSearch: true
   dataHandling:
-    processing:
-      regionIds: [multi-region]
-      guarantee: none
-    storage:
-      regionIds: []
-      guarantee: unknown
-    retention:
-      mode: feature_dependent
-      days: 30
+    processingRegions: [multi-region]
+    storageRegions: []
+    retentionDays: 30
     trainingUse: no
-    zeroDataRetention:
-      availability: contractual
-      applicability: conditional
-    evidenceIds: [anthropic-data-controls]
+    zeroDataRetention: contractual
   moderation:
     input: provider
     output: provider
-    evidenceIds: [anthropic-safety]
   pricing:
     anthropic_web_search_calls:
       per_1k_calls: '10000000000000000000'

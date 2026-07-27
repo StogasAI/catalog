@@ -31,30 +31,21 @@ package catalog
 	modelId:  #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
-	aliases: [#Slug]: #Alias
+	aliases: [#Slug, ...#Slug]
 	limits?: close({
 		contextTokens?: int & >0
 		outputTokens?:  int & >0
 	})
 	capabilities?: #DeploymentCapabilityOverrides
-	reasoning?: close({
-		acceptedEfforts: [...#ReasoningEffort]
-		maxTokens?: close({
-			min: int & >0
-			max: int & >0
-		})
-	})
+	reasoningEfforts?: [...#ReasoningEffort]
 	dataHandling?: #DataHandlingOverride
 	moderation?:   #ModerationOverride
 	tee?: close({
-		status:      #TeeStatus
-		mechanism:   #TeeMechanism
-		evidenceIds: [#Id, ...#Id]
+		status:    #TeeStatus
+		mechanism: #TeeMechanism
 	})
 	pricing: #Pricing
-	lifecycle: close({
-		status:        #LifecycleStatus
-		deprecatedAt?: #Date
-		retiredAt?:    #Date
-	})
+	status:        #LifecycleStatus
+	deprecatedAt?: #Date
+	retiredAt?:    #Date
 })

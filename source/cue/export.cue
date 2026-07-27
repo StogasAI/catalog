@@ -5,7 +5,6 @@ let sourceModels = models
 let sourceProviders = providers
 let sourceRoutes = routes
 let sourceDeployments = deployments
-let sourceEvidence = evidence
 
 compiledSource: {
 	_checks: #Catalog
@@ -16,6 +15,4 @@ compiledSource: {
 		routes:      sourceRoutes
 		deployments: sourceDeployments
 	}
-	evidence: sourceEvidence
 }
-

@@ -11,10 +11,8 @@ export type CatalogGraph = {
 };
 
 export type Catalog = {
-	schema: 'stogas.catalog.public.v2';
+	schema: 'stogas.catalog.public.v3';
 	graph: CatalogGraph;
-	aliases: Record<string, Record<string, unknown>>;
-	evidence: Record<string, Record<string, unknown>>;
 };
 
 export type GraphNodeData = {
