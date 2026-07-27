@@ -1,5 +1,5 @@
 import { createHash, createPublicKey } from 'node:crypto';
-import { compareSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +31,7 @@ try {
 	const releasePath = join(releaseRoot, 'releases', `${sequence}.json`);
 	const envelope = parseEnvelope(releasePath);
 	if (latest.envelope?.manifest.sequence === sequence) {
-		if (compareSync(readFileSync(releasePath), readFileSync(latest.path)) !== 0) {
+		if (!readFileSync(releasePath).equals(readFileSync(latest.path))) {
 			throw new Error(`Catalog sequence ${sequence} is already bound to different content.`);
 		}
 	}
@@ -137,7 +137,7 @@ function publishImmutable(path, root) {
 			process.env,
 			{ stdout: 'ignore' }
 		);
-		if (compareSync(readFileSync(path), readFileSync(existing)) !== 0) {
+		if (!readFileSync(path).equals(readFileSync(existing))) {
 			throw new Error(`Refusing to overwrite immutable catalog object ${key}.`);
 		}
 		return;
@@ -180,7 +180,7 @@ function publishGitHubRelease(envelope) {
 		run('gh', ['release', 'download', tag, '--repo', 'StogasAI/catalog', '--dir', downloaded]);
 		for (const path of assets) {
 			const remote = join(downloaded, basename(path));
-			if (compareSync(readFileSync(path), readFileSync(remote)) !== 0) {
+			if (!readFileSync(path).equals(readFileSync(remote))) {
 				throw new Error(`GitHub release ${tag} contains different ${basename(path)} bytes.`);
 			}
 		}
