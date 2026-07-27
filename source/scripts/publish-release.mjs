@@ -4,6 +4,12 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import {
+	GetObjectCommand,
+	HeadObjectCommand,
+	PutObjectCommand,
+	S3Client
+} from '@aws-sdk/client-s3';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
@@ -11,11 +17,21 @@ const targetBucket = process.argv[3]?.trim();
 const tag = `catalog-v${sequence}`;
 const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 const releaseRoot = join(workRoot, 'release');
+let r2;
 
 try {
 	requireCommands();
+	r2 = new S3Client({
+		credentials: {
+			accessKeyId: requiredEnvironment('AWS_ACCESS_KEY_ID'),
+			secretAccessKey: requiredEnvironment('AWS_SECRET_ACCESS_KEY')
+		},
+		endpoint: requiredEnvironment('R2_ENDPOINT'),
+		forcePathStyle: true,
+		region: 'auto'
+	});
 	requireCleanPublishedSource();
-	const latest = readLatest();
+	const latest = await readLatest();
 	if (latest.envelope && latest.envelope.manifest.sequence > sequence) {
 		throw new Error(
 			`Catalog latest is already sequence ${latest.envelope.manifest.sequence}; ${sequence} would roll it back.`
@@ -31,23 +47,24 @@ try {
 	const releasePath = join(releaseRoot, 'releases', `${sequence}.json`);
 	const envelope = parseEnvelope(releasePath);
 	if (latest.envelope?.manifest.sequence === sequence) {
-		if (!readFileSync(releasePath).equals(readFileSync(latest.path))) {
+		if (!readFileSync(releasePath).equals(latest.bytes)) {
 			throw new Error(`Catalog sequence ${sequence} is already bound to different content.`);
 		}
 	}
 
 	for (const path of [...artifactPaths(releaseRoot), releasePath]) {
-		publishImmutable(path, releaseRoot);
+		await publishImmutable(path, releaseRoot);
 	}
 	publishGitHubRelease(envelope);
-	activateLatest(latest, join(releaseRoot, 'latest.json'));
+	await activateLatest(latest, join(releaseRoot, 'latest.json'));
 	console.log(`Published catalog ${sequence}.`);
 } finally {
+	r2?.destroy();
 	rmSync(workRoot, { force: true, recursive: true });
 }
 
 function requireCommands() {
-	for (const command of ['aws', 'bun', 'gh', 'git']) {
+	for (const command of ['bun', 'gh', 'git']) {
 		run(command, ['--version'], process.env, { stdout: 'ignore' });
 	}
 	for (const name of [
@@ -123,45 +140,23 @@ function artifactPaths(root) {
 		.sort();
 }
 
-function publishImmutable(path, root) {
+async function publishImmutable(path, root) {
 	const key = objectKey(path.slice(root.length + 1));
-	const existing = join(workRoot, `existing-${basename(path)}`);
-	const head = spawn('aws', awsArgs(['s3api', 'head-object', '--bucket', bucket(), '--key', key]), {
-		allowFailure: true,
-		stdout: 'ignore'
-	});
-	if (head.status === 0) {
-		run(
-			'aws',
-			awsArgs(['s3api', 'get-object', '--bucket', bucket(), '--key', key, existing]),
-			process.env,
-			{ stdout: 'ignore' }
-		);
-		if (!readFileSync(path).equals(readFileSync(existing))) {
+	if (await headObject(key)) {
+		if (!readFileSync(path).equals(await getObject(key))) {
 			throw new Error(`Refusing to overwrite immutable catalog object ${key}.`);
 		}
 		return;
 	}
-	run(
-		'aws',
-		awsArgs([
-			's3api',
-			'put-object',
-			'--bucket',
-			bucket(),
-			'--key',
-			key,
-			'--body',
-			path,
-			'--content-type',
-			'application/json',
-			'--cache-control',
-			'public,max-age=31536000,immutable',
-			'--if-none-match',
-			'*'
-		]),
-		process.env,
-		{ stdout: 'ignore' }
+	await r2.send(
+		new PutObjectCommand({
+			Body: readFileSync(path),
+			Bucket: bucket(),
+			CacheControl: 'public,max-age=31536000,immutable',
+			ContentType: 'application/json',
+			IfNoneMatch: '*',
+			Key: key
+		})
 	);
 }
 
@@ -203,68 +198,55 @@ function publishGitHubRelease(envelope) {
 	]);
 }
 
-function readLatest() {
+async function readLatest() {
 	const path = join(workRoot, 'latest.json');
-	const head = spawn(
-		'aws',
-		awsArgs([
-			's3api',
-			'head-object',
-			'--bucket',
-			bucket(),
-			'--key',
-			objectKey('latest.json'),
-			'--query',
-			'ETag',
-			'--output',
-			'text'
-		]),
-		{ allowFailure: true, capture: true }
-	);
-	if (head.status !== 0) return { envelope: null, etag: null, path };
-	run(
-		'aws',
-		awsArgs(['s3api', 'get-object', '--bucket', bucket(), '--key', objectKey('latest.json'), path]),
-		process.env,
-		{ stdout: 'ignore' }
-	);
-	const envelope = JSON.parse(readFileSync(path, 'utf8'));
+	const key = objectKey('latest.json');
+	const head = await headObject(key);
+	if (!head) return { envelope: null, etag: null, path };
+	const bytes = await getObject(key);
+	const envelope = JSON.parse(bytes.toString('utf8'));
 	if (
 		envelope?.schema !== 'stogas.catalog.signed.v2' ||
 		!Number.isSafeInteger(envelope.manifest?.sequence)
 	) {
 		throw new Error('Published catalog latest.json is invalid.');
 	}
-	return { envelope, etag: head.stdout.trim(), path };
+	return { bytes, envelope, etag: head.ETag, path };
 }
 
-function activateLatest(latest, path) {
+async function activateLatest(latest, path) {
 	if (latest.envelope?.manifest.sequence === sequence) return;
-	const conditional = latest.etag ? ['--if-match', latest.etag] : ['--if-none-match', '*'];
-	run(
-		'aws',
-		awsArgs([
-			's3api',
-			'put-object',
-			'--bucket',
-			bucket(),
-			'--key',
-			objectKey('latest.json'),
-			'--body',
-			path,
-			'--content-type',
-			'application/json',
-			'--cache-control',
-			'public,max-age=0,must-revalidate',
-			...conditional
-		]),
-		process.env,
-		{ stdout: 'ignore' }
+	await r2.send(
+		new PutObjectCommand({
+			Body: readFileSync(path),
+			Bucket: bucket(),
+			CacheControl: 'public,max-age=0,must-revalidate',
+			ContentType: 'application/json',
+			...(latest.etag ? { IfMatch: latest.etag } : { IfNoneMatch: '*' }),
+			Key: objectKey('latest.json')
+		})
 	);
 }
 
-function awsArgs(args) {
-	return [...args, '--endpoint-url', requiredEnvironment('R2_ENDPOINT'), '--region', 'auto'];
+async function headObject(key) {
+	try {
+		return await r2.send(new HeadObjectCommand({ Bucket: bucket(), Key: key }));
+	} catch (error) {
+		if (
+			error?.$metadata?.httpStatusCode === 404 ||
+			error?.name === 'NotFound' ||
+			error?.name === 'NoSuchKey'
+		) {
+			return null;
+		}
+		throw error;
+	}
+}
+
+async function getObject(key) {
+	const response = await r2.send(new GetObjectCommand({ Bucket: bucket(), Key: key }));
+	if (!response.Body) throw new Error(`R2 object ${key} has no body.`);
+	return Buffer.from(await response.Body.transformToByteArray());
 }
 
 function bucket() {
