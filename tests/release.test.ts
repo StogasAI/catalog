@@ -34,7 +34,7 @@ describe('catalog release metadata', () => {
 			expect(
 				verify(
 					null,
-					Buffer.from(`stogas catalog release v2\n${stableJson(envelope.manifest)}`),
+					Buffer.from(`stogas catalog release v2\n${canonicalJson(envelope.manifest)}`),
 					publicKey,
 					Buffer.from(envelope.signature, 'base64')
 				)
@@ -45,8 +45,8 @@ describe('catalog release metadata', () => {
 	});
 });
 
-function stableJson(value: unknown) {
-	return `${JSON.stringify(stableValue(value))}\n`;
+function canonicalJson(value: unknown) {
+	return JSON.stringify(stableValue(value));
 }
 
 function stableValue(value: unknown): unknown {

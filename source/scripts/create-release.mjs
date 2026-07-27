@@ -21,7 +21,7 @@ const manifest = {
 	schema: 'stogas.catalog.release.v2',
 	sequence
 };
-const manifestBytes = stableJson(manifest);
+const manifestBytes = canonicalJson(manifest);
 const privateKey = createPrivateKey(signingPrivateKey);
 if (privateKey.asymmetricKeyType !== 'ed25519') {
 	throw new Error('CATALOG_SIGNING_PRIVATE_KEY_PEM must contain an Ed25519 private key.');
@@ -87,7 +87,11 @@ function sha256(value) {
 }
 
 function stableJson(value) {
-	return `${JSON.stringify(stableValue(value))}\n`;
+	return `${canonicalJson(value)}\n`;
+}
+
+function canonicalJson(value) {
+	return JSON.stringify(stableValue(value));
 }
 
 function stableValue(value) {
