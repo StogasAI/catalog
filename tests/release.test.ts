@@ -34,7 +34,7 @@ describe('catalog release metadata', () => {
 			expect(
 				verify(
 					null,
-					Buffer.from(stableJson(envelope.manifest)),
+					Buffer.from(`stogas catalog release v2\n${stableJson(envelope.manifest)}`),
 					publicKey,
 					Buffer.from(envelope.signature, 'base64')
 				)

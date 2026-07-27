@@ -26,7 +26,6 @@
 		"typecheck": "bun run --cwd editor typecheck"
 	},
 	"devDependencies": {
-		"@aws-sdk/client-s3": "3.984.0",
 		"prettier": "3.8.3",
 		"typescript": "6.0.3"
 	}

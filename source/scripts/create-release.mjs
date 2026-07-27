@@ -26,7 +26,14 @@ const privateKey = createPrivateKey(signingPrivateKey);
 if (privateKey.asymmetricKeyType !== 'ed25519') {
 	throw new Error('CATALOG_SIGNING_PRIVATE_KEY_PEM must contain an Ed25519 private key.');
 }
-const signature = sign(null, Buffer.from(manifestBytes), privateKey).toString('base64');
+const signature = sign(
+	null,
+	Buffer.concat([
+		Buffer.from('stogas catalog release v2\n', 'utf8'),
+		Buffer.from(manifestBytes, 'utf8')
+	]),
+	privateKey
+).toString('base64');
 const envelope = {
 	keyId: signingKeyId,
 	manifest,

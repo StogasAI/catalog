@@ -4,12 +4,6 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import {
-	GetObjectCommand,
-	HeadObjectCommand,
-	PutObjectCommand,
-	S3Client
-} from '@aws-sdk/client-s3';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
@@ -17,19 +11,9 @@ const targetBucket = process.argv[3]?.trim();
 const tag = `catalog-v${sequence}`;
 const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 const releaseRoot = join(workRoot, 'release');
-let r2;
 
 try {
 	requireCommands();
-	r2 = new S3Client({
-		credentials: {
-			accessKeyId: requiredEnvironment('AWS_ACCESS_KEY_ID'),
-			secretAccessKey: requiredEnvironment('AWS_SECRET_ACCESS_KEY')
-		},
-		endpoint: requiredEnvironment('R2_ENDPOINT'),
-		forcePathStyle: true,
-		region: 'auto'
-	});
 	requireCleanPublishedSource();
 	const latest = await readLatest();
 	if (latest.envelope && latest.envelope.manifest.sequence > sequence) {
@@ -59,7 +43,6 @@ try {
 	await activateLatest(latest, join(releaseRoot, 'latest.json'));
 	console.log(`Published catalog ${sequence}.`);
 } finally {
-	r2?.destroy();
 	rmSync(workRoot, { force: true, recursive: true });
 }
 
@@ -68,11 +51,10 @@ function requireCommands() {
 		run(command, ['--version'], process.env, { stdout: 'ignore' });
 	}
 	for (const name of [
-		'AWS_ACCESS_KEY_ID',
-		'AWS_SECRET_ACCESS_KEY',
 		'CATALOG_SIGNING_KEY_ID',
 		'CATALOG_SIGNING_PRIVATE_KEY_PEM',
-		'R2_ENDPOINT'
+		'CLOUDFLARE_ACCOUNT_ID',
+		'CLOUDFLARE_API_TOKEN'
 	]) {
 		requiredEnvironment(name);
 	}
@@ -102,7 +84,6 @@ function verifySigningKey() {
 	}
 	const actual = createPublicKey(privateKey)
 		.export({ format: 'der', type: 'spki' })
-		.subarray(-32)
 		.toString('base64');
 	if (actual !== trusted) {
 		throw new Error(`Catalog signing key ${id} does not match its committed public key.`);
@@ -142,22 +123,18 @@ function artifactPaths(root) {
 
 async function publishImmutable(path, root) {
 	const key = objectKey(path.slice(root.length + 1));
-	if (await headObject(key)) {
-		if (!readFileSync(path).equals(await getObject(key))) {
+	const existing = await getObject(key);
+	if (existing) {
+		if (!readFileSync(path).equals(existing.bytes)) {
 			throw new Error(`Refusing to overwrite immutable catalog object ${key}.`);
 		}
 		return;
 	}
-	await r2.send(
-		new PutObjectCommand({
-			Body: readFileSync(path),
-			Bucket: bucket(),
-			CacheControl: 'public,max-age=31536000,immutable',
-			ContentType: 'application/json',
-			IfNoneMatch: '*',
-			Key: key
-		})
-	);
+	await putObject(key, readFileSync(path));
+	const published = await getObject(key);
+	if (!published || !readFileSync(path).equals(published.bytes)) {
+		throw new Error(`Catalog object ${key} failed post-publication verification.`);
+	}
 }
 
 function publishGitHubRelease(envelope) {
@@ -201,56 +178,67 @@ function publishGitHubRelease(envelope) {
 async function readLatest() {
 	const path = join(workRoot, 'latest.json');
 	const key = objectKey('latest.json');
-	const head = await headObject(key);
-	if (!head) return { envelope: null, etag: null, path };
-	const bytes = await getObject(key);
-	const envelope = JSON.parse(bytes.toString('utf8'));
+	const current = await getObject(key);
+	if (!current) return { envelope: null, path };
+	const envelope = JSON.parse(current.bytes.toString('utf8'));
 	if (
 		envelope?.schema !== 'stogas.catalog.signed.v2' ||
 		!Number.isSafeInteger(envelope.manifest?.sequence)
 	) {
 		throw new Error('Published catalog latest.json is invalid.');
 	}
-	return { bytes, envelope, etag: head.ETag, path };
+	return { bytes: current.bytes, envelope, path };
 }
 
 async function activateLatest(latest, path) {
 	if (latest.envelope?.manifest.sequence === sequence) return;
-	await r2.send(
-		new PutObjectCommand({
-			Body: readFileSync(path),
-			Bucket: bucket(),
-			CacheControl: 'public,max-age=0,must-revalidate',
-			ContentType: 'application/json',
-			...(latest.etag ? { IfMatch: latest.etag } : { IfNoneMatch: '*' }),
-			Key: objectKey('latest.json')
-		})
-	);
-}
-
-async function headObject(key) {
-	try {
-		return await r2.send(new HeadObjectCommand({ Bucket: bucket(), Key: key }));
-	} catch (error) {
-		if (
-			error?.$metadata?.httpStatusCode === 404 ||
-			error?.name === 'NotFound' ||
-			error?.name === 'NoSuchKey'
-		) {
-			return null;
-		}
-		throw error;
+	const bytes = readFileSync(path);
+	await putObject(objectKey('latest.json'), bytes);
+	const published = await getObject(objectKey('latest.json'));
+	if (!published || !bytes.equals(published.bytes)) {
+		throw new Error('Catalog latest.json failed post-publication verification.');
 	}
 }
 
 async function getObject(key) {
-	const response = await r2.send(new GetObjectCommand({ Bucket: bucket(), Key: key }));
-	if (!response.Body) throw new Error(`R2 object ${key} has no body.`);
-	return Buffer.from(await response.Body.transformToByteArray());
+	const response = await fetch(objectUrl(key), {
+		headers: { authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}` }
+	});
+	if (response.status === 404) return null;
+	if (!response.ok) {
+		throw new Error(`R2 GET ${key} failed (${response.status}): ${await response.text()}`);
+	}
+	return {
+		bytes: Buffer.from(await response.arrayBuffer())
+	};
+}
+
+async function putObject(key, bytes) {
+	const response = await fetch(objectUrl(key), {
+		body: bytes,
+		headers: {
+			authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}`,
+			'content-type': 'application/json'
+		},
+		method: 'PUT'
+	});
+	if (!response.ok) {
+		throw new Error(`R2 PUT ${key} failed (${response.status}): ${await response.text()}`);
+	}
 }
 
 function bucket() {
 	return targetBucket || requiredEnvironment('R2_BUCKET');
+}
+
+function objectUrl(key) {
+	const account = encodeURIComponent(requiredEnvironment('CLOUDFLARE_ACCOUNT_ID'));
+	const bucketName = encodeURIComponent(bucket());
+	const safeKey = key
+		.split('/')
+		.map((segment) => encodeURIComponent(segment))
+		.join('/');
+	return `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucketName}/objects/${safeKey}`;
 }
 
 function objectKey(path) {
