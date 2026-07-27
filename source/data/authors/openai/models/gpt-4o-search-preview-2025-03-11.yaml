@@ -1,0 +1,19 @@
+---
+models:
+  authorId: openai
+  name: GPT-4o Search Preview
+  family: GPT
+  series: GPT-4o
+  snapshot: 2025-03-11
+  derivedFrom: []
+  flavors: [search, preview]
+  limits:
+    contextTokens: 128000
+    outputTokens: 16384
+  capabilities:
+    inputModalities: [text, image]
+    outputModalities: [text]
+  reasoning:
+    acceptedEfforts: []
+  releaseDate: 2025-03-11
+  knowledgeCutoff: 2023-10-01

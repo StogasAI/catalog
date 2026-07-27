@@ -1,0 +1,31 @@
+{
+	"name": "@stogas/catalog",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"packageManager": "bun@1.3.3",
+	"engines": {
+		"bun": ">=1.3.3",
+		"node": ">=22.13.0"
+	},
+	"workspaces": [
+		"editor"
+	],
+	"scripts": {
+		"build": "node source/scripts/build.mjs",
+		"build:editor": "bun run --cwd editor build",
+		"check": "bun run format:check && bun run typecheck && bun run build --check && bun test",
+		"check:alias-history": "node source/scripts/check-alias-history.mjs",
+		"clean": "node source/scripts/build.mjs --clean",
+		"create-release": "node source/scripts/create-release.mjs",
+		"editor": "bun run --cwd editor dev",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"test": "bun test",
+		"typecheck": "bun run --cwd editor typecheck"
+	},
+	"devDependencies": {
+		"prettier": "3.8.3",
+		"typescript": "6.0.3"
+	}
+}

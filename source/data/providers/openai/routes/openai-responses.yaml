@@ -1,0 +1,37 @@
+---
+routes:
+  providerId: openai
+  interfaces: [responses]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    promptCaching: true
+    systemMessages: true
+    toolChoice: true
+    webSearch: true
+  dataHandling:
+    processing:
+      regionIds: [multi-region]
+      guarantee: none
+    storage:
+      regionIds: []
+      guarantee: unknown
+    retention:
+      mode: feature_dependent
+      days: 30
+    trainingUse: no
+    zeroDataRetention:
+      availability: contractual
+      applicability: conditional
+    evidenceIds: [openai-data-controls]
+  moderation:
+    input: provider
+    output: provider
+    evidenceIds: [openai-safety]
+  pricing:
+    openai_responses_web_search_calls:
+      per_1k_calls: '10000000000000000000'
+    openai_responses_web_search_preview_calls:
+      per_1k_calls: '10000000000000000000'
+    openai_responses_web_search_preview_non_reasoning_calls:
+      per_1k_calls: '25000000000000000000'

@@ -1,0 +1,34 @@
+---
+deployments:
+  modelId: claude-opus-4-8
+  routeIds: [anthropic-messages]
+  upstreamId: claude-opus-4-8
+  modelSelection:
+    mode: fixed
+    modelId: claude-opus-4-8
+  aliases:
+    claude-opus-4-8-fast-us:
+      binding: fixed
+      purpose: canonical
+      status: active
+  serviceTier: standard
+  speed: fast
+  processingRegionId: us
+  dataHandling:
+    processing:
+      regionIds: [us]
+      guarantee: required
+    evidenceIds: [anthropic-data-controls, anthropic-residency]
+  pricing:
+    input_tokens:
+      per_mill_tokens: '11000000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '1100000000000000000'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '13750000000000000000'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '22000000000000000000'
+    output_tokens:
+      per_mill_tokens: '55000000000000000000'
+  lifecycle:
+    status: active

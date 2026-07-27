@@ -1,0 +1,7 @@
+authors:
+  description: AI safety and research company.
+  headquarters:
+    countryCode: US
+    locality: San Francisco
+  slugs: [anthropic]
+  name: Anthropic

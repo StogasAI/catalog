@@ -1,0 +1,7 @@
+authors:
+  description: AI research and deployment company.
+  headquarters:
+    countryCode: US
+    locality: San Francisco
+  slugs: [openai, open-ai]
+  name: OpenAI

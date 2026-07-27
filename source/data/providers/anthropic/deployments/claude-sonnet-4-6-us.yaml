@@ -1,0 +1,33 @@
+---
+deployments:
+  modelId: claude-sonnet-4-6
+  routeIds: [anthropic-messages]
+  upstreamId: claude-sonnet-4-6
+  modelSelection:
+    mode: fixed
+    modelId: claude-sonnet-4-6
+  aliases:
+    claude-sonnet-4-6-us:
+      binding: fixed
+      purpose: canonical
+      status: active
+  serviceTier: standard
+  processingRegionId: us
+  dataHandling:
+    processing:
+      regionIds: [us]
+      guarantee: required
+    evidenceIds: [anthropic-data-controls, anthropic-residency]
+  pricing:
+    input_tokens:
+      per_mill_tokens: '3300000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '330000000000000000'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '4125000000000000000'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '6600000000000000000'
+    output_tokens:
+      per_mill_tokens: '16500000000000000000'
+  lifecycle:
+    status: active

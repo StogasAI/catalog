@@ -1,0 +1,21 @@
+evidence:
+  openai-data-controls:
+    url: https://developers.openai.com/api/docs/guides/your-data
+    reviewedAt: 2026-07-27
+    description: OpenAI API retention, training-use, regional processing, and ZDR eligibility.
+  openai-safety:
+    url: https://developers.openai.com/api/docs/guides/moderation
+    reviewedAt: 2026-07-27
+    description: OpenAI provider moderation and content-filter behavior.
+  anthropic-data-controls:
+    url: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
+    reviewedAt: 2026-07-27
+    description: Anthropic API retention, training-use, and ZDR eligibility.
+  anthropic-residency:
+    url: https://platform.claude.com/docs/en/build-with-claude/data-residency
+    reviewedAt: 2026-07-27
+    description: Anthropic inference geography and regional pricing.
+  anthropic-safety:
+    url: https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/handle-streaming-refusals
+    reviewedAt: 2026-07-27
+    description: Anthropic provider safety-classifier refusals.

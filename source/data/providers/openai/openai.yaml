@@ -1,0 +1,8 @@
+---
+providers:
+  name: OpenAI
+  slugs: [openai, open-ai]
+  description: AI research and deployment company operating the OpenAI API.
+  headquarters:
+    countryCode: US
+    locality: San Francisco

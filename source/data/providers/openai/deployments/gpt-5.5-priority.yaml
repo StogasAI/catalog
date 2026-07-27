@@ -1,0 +1,30 @@
+---
+deployments:
+  modelId: gpt-5.5-2026-04-23
+  routeIds: [openai-chat-completions, openai-responses]
+  upstreamId: gpt-5.5-2026-04-23
+  modelSelection:
+    mode: fixed
+    modelId: gpt-5.5-2026-04-23
+  aliases:
+    gpt-5.5-2026-04-23-priority:
+      binding: fixed
+      purpose: canonical
+      status: active
+    gpt-5.5-priority:
+      binding: moving
+      purpose: canonical
+      status: active
+  serviceTier: priority
+  processingRegionId: multi-region
+  limits:
+    contextTokens: 272000
+  pricing:
+    input_tokens:
+      per_mill_tokens: '12500000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '1250000000000000000'
+    output_tokens:
+      per_mill_tokens: '75000000000000000000'
+  lifecycle:
+    status: active

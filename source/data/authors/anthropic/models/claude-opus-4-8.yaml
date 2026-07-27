@@ -1,0 +1,19 @@
+---
+models:
+  authorId: anthropic
+  name: Claude Opus 4.8
+  family: Claude
+  series: Claude Opus
+  snapshot: null
+  derivedFrom: []
+  flavors: [base]
+  limits:
+    contextTokens: 1000000
+    outputTokens: 128000
+  capabilities:
+    inputModalities: [text, image]
+    outputModalities: [text]
+  reasoning:
+    acceptedEfforts: [low, medium, high, xhigh, max]
+  releaseDate: 2026-05-28
+  knowledgeCutoff: 2026-01-01

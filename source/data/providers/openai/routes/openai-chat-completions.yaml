@@ -1,0 +1,30 @@
+---
+routes:
+  providerId: openai
+  interfaces: [chat_completions]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    promptCaching: true
+    systemMessages: true
+    toolChoice: true
+    webSearch: true
+  dataHandling:
+    processing:
+      regionIds: [multi-region]
+      guarantee: none
+    storage:
+      regionIds: []
+      guarantee: unknown
+    retention:
+      mode: feature_dependent
+      days: 30
+    trainingUse: no
+    zeroDataRetention:
+      availability: contractual
+      applicability: conditional
+    evidenceIds: [openai-data-controls]
+  moderation:
+    input: provider
+    output: provider
+    evidenceIds: [openai-safety]

@@ -1,0 +1,34 @@
+---
+deployments:
+  modelId: gpt-4o-search-preview-2025-03-11
+  routeIds: [openai-chat-completions]
+  upstreamId: gpt-4o-search-preview-2025-03-11
+  modelSelection:
+    mode: fixed
+    modelId: gpt-4o-search-preview-2025-03-11
+  aliases:
+    gpt-4o-search-preview-2025-03-11:
+      binding: fixed
+      purpose: canonical
+      status: active
+    gpt-4o-search-preview:
+      binding: moving
+      purpose: canonical
+      status: active
+  serviceTier: default
+  processingRegionId: multi-region
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2500000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '1250000000000000000'
+    output_tokens:
+      per_mill_tokens: '10000000000000000000'
+    # GPT-4o search-preview query pricing varies by web_search_options.search_context_size;
+    # omitted size is treated as medium by the Go pricing path.
+    openai_chat_completion_search_preview_model_calls:
+      per_1k_search_context_low_calls: '30000000000000000000'
+      per_1k_search_context_medium_calls: '35000000000000000000'
+      per_1k_search_context_high_calls: '50000000000000000000'
+  lifecycle:
+    status: active
