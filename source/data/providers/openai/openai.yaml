@@ -2,7 +2,7 @@
 providers:
   name: OpenAI
   aliases: [open-ai]
-  headquartersCountry: US
+  headquarteredCountry: US
   dataHandling:
     processingRegions: [multi-region]
     storageRegions: []

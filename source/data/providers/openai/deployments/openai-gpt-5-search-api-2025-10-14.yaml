@@ -17,4 +17,4 @@ deployments:
       per_mill_tokens: '10000000000000000000'
     openai_chat_completion_search_model_calls:
       per_1k_calls: '10000000000000000000'
-  retirementDate: null
+  deprecationDate: null

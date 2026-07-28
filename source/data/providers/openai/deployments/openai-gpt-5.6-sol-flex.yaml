@@ -21,4 +21,4 @@ deployments:
     output_tokens:
       per_mill_context_lte_272k: '15000000000000000000'
       per_mill_context_gt_272k: '22500000000000000000'
-  retirementDate: null
+  deprecationDate: null

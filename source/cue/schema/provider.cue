@@ -3,7 +3,7 @@ package catalog
 #Provider: close({
 	name:                 string & !=""
 	aliases:              [...#Slug]
-	headquartersCountry?: #CountryCode
+	headquarteredCountry?: #CountryCode
 	capabilities?:        #RouteCapabilityOverrides
 	dataHandling?:        #DataHandlingOverride
 	moderated:            bool

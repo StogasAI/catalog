@@ -16,3 +16,4 @@ models:
   snapshot: null
   releaseDate: 2026-05-28
   knowledgeCutoff: 2026-01-01
+  deprecationDate: null

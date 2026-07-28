@@ -40,5 +40,5 @@ package catalog
 		attestationStatusUri?: string & !=""
 	})
 	pricing: #Pricing
-	retirementDate: #MaybeDate
+	deprecationDate: #MaybeDate
 })

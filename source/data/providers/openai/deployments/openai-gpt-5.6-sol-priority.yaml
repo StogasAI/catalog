@@ -19,4 +19,4 @@ deployments:
       per_mill_tokens: '12500000000000000000'
     output_tokens:
       per_mill_tokens: '60000000000000000000'
-  retirementDate: null
+  deprecationDate: null

@@ -192,7 +192,7 @@ function same(left, right) {
 	return stableJson(left) === stableJson(right);
 }
 
-function validRetirementDate(value) {
+function validDeprecationDate(value) {
 	if (value === null) return true;
 	const parsed = new Date(`${value}T00:00:00.000Z`);
 	return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
@@ -425,8 +425,8 @@ function buildCatalogs(source) {
 		if (!deployment.upstream?.model || !deployment.upstream?.fixedRequest) {
 			throw new Error(`${deploymentId}: upstream model and fixedRequest are required`);
 		}
-		if (!validRetirementDate(deployment.retirementDate)) {
-			throw new Error(`${deploymentId}: retirementDate is invalid`);
+		if (!validDeprecationDate(deployment.deprecationDate)) {
+			throw new Error(`${deploymentId}: deprecationDate is invalid`);
 		}
 		const selectorKeys = Object.keys(deployment.upstream.fixedRequest).sort();
 		const selectorKeysValid =
@@ -470,7 +470,7 @@ function buildCatalogs(source) {
 			capabilities,
 			reasoningEfforts,
 			pricing,
-			retirementDate: deployment.retirementDate,
+			deprecationDate: deployment.deprecationDate,
 			...(deployment.tee ? { tee: deployment.tee } : {}),
 			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};

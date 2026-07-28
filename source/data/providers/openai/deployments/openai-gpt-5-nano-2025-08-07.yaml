@@ -15,4 +15,4 @@ deployments:
       per_mill_tokens: '5000000000000000'
     output_tokens:
       per_mill_tokens: '400000000000000000'
-  retirementDate: 2026-12-11
+  deprecationDate: 2026-12-11

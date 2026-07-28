@@ -19,3 +19,4 @@ models:
   snapshot: 2025-03-11
   releaseDate: 2025-03-11
   knowledgeCutoff: 2023-10-01
+  deprecationDate: 2026-07-23

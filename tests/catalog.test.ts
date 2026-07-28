@@ -60,22 +60,25 @@ describe('compiled catalog v5', () => {
 		expect(runtimeCatalog.graph.providers.openai.aliases).toEqual(['open-ai']);
 	});
 
-	test('uses one nullable provider retirement date and keeps history deterministic', () => {
+	test('uses one nullable deprecation date and keeps history deterministic', () => {
 		expect(
 			publicCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
 		).toMatchObject({
-			retirementDate: '2026-07-23'
+			deprecationDate: '2026-07-23'
 		});
 		expect(
 			runtimeCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
 		).toMatchObject({
-			retirementDate: '2026-07-23'
+			deprecationDate: '2026-07-23'
 		});
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment).toHaveProperty('retirementDate');
+			expect(deployment).toHaveProperty('deprecationDate');
 			expect(deployment).not.toHaveProperty('status');
 			expect(deployment).not.toHaveProperty('deprecatedAt');
 			expect(deployment).not.toHaveProperty('retiredAt');
+		}
+		for (const model of Object.values(publicCatalog.graph.models)) {
+			expect(model).toHaveProperty('deprecationDate');
 		}
 	});
 

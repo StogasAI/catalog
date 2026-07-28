@@ -2,7 +2,7 @@
 providers:
   name: Anthropic
   aliases: []
-  headquartersCountry: US
+  headquarteredCountry: US
   dataHandling:
     processingRegions: [multi-region]
     storageRegions: []

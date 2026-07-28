@@ -31,4 +31,5 @@ package catalog
 	snapshot:        #MaybeDate
 	releaseDate:     #MaybeDate
 	knowledgeCutoff: #MaybeDate
+	deprecationDate: #MaybeDate
 })
