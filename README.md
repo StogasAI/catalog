@@ -2,10 +2,11 @@
 
 The signed fact catalog used by the Stogas gateway and public model directory.
 
-The graph has five node types: author, model, provider, route, and deployment. Each deployment
-lists its accepted aliases directly. The compiler emits flattened runtime and public bundles.
-Provider request conversion, credentials, endpoint hosts, and executable routing behavior remain
-in the gateway.
+The graph has five node types: author, model, provider, route, and deployment. Models and
+deployments list their accepted aliases directly; authors and providers use only canonical IDs.
+The compiler resolves provider/route/model inheritance and emits flattened runtime and public
+bundles. Provider request conversion, credentials, executable endpoint allowlists, and routing
+behavior remain in the gateway.
 
 Deployments keep provider selection literal under a closed `upstream` block. The compiler permits
 only provider selectors already implemented by the gateway; it never accepts arbitrary request

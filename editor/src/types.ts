@@ -11,7 +11,7 @@ export type CatalogGraph = {
 };
 
 export type Catalog = {
-	schema: 'stogas.catalog.public.v3';
+	schema: 'stogas.catalog.public.v5';
 	graph: CatalogGraph;
 };
 

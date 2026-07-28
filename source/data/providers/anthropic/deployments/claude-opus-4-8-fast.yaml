@@ -8,7 +8,8 @@ deployments:
       speed: fast
       inference_geo: global
       service_tier: standard_only
-  aliases: [claude-opus-4-8-fast]
+  default: false
+  aliases: []
   pricing:
     input_tokens:
       per_mill_tokens: '10000000000000000000'
@@ -20,4 +21,4 @@ deployments:
       per_mill_tokens: '20000000000000000000'
     output_tokens:
       per_mill_tokens: '50000000000000000000'
-  status: active
+  retirementDate: null

@@ -1,20 +1,17 @@
 ---
 routes:
   providerId: openai
+  endpoint: https://api.openai.com/v1/chat/completions
   interfaces: [chat_completions]
   capabilities:
     streaming: true
+    cancellation: true
     functionCalling: true
+    parallelFunctionCalling: true
     promptCaching: true
+    structuredOutputs: true
     systemMessages: true
     toolChoice: true
     webSearch: true
-  dataHandling:
-    processingRegions: [multi-region]
-    storageRegions: []
-    retentionDays: 30
-    trainingUse: no
-    zeroDataRetention: contractual
-  moderation:
-    input: provider
-    output: provider
+    urlContext: false
+    pdfInput: false

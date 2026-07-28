@@ -6,7 +6,8 @@ deployments:
     model: gpt-4o-mini-search-preview-2025-03-11
     fixedRequest:
       service_tier: default
-  aliases: [gpt-4o-mini-search-preview-2025-03-11, gpt-4o-mini-search-preview]
+  default: true
+  aliases: []
   pricing:
     input_tokens:
       per_mill_tokens: '150000000000000000'
@@ -14,10 +15,8 @@ deployments:
       per_mill_tokens: '75000000000000000'
     output_tokens:
       per_mill_tokens: '600000000000000000'
-    # GPT-4o mini search-preview query pricing varies by web_search_options.search_context_size;
-    # omitted size is treated as medium by the Go pricing path.
     openai_chat_completion_search_preview_model_calls:
       per_1k_search_context_low_calls: '25000000000000000000'
       per_1k_search_context_medium_calls: '27500000000000000000'
       per_1k_search_context_high_calls: '30000000000000000000'
-  status: active
+  retirementDate: 2026-07-23

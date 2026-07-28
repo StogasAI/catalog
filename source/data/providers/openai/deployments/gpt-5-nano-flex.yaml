@@ -6,7 +6,8 @@ deployments:
     model: gpt-5-nano-2025-08-07
     fixedRequest:
       service_tier: flex
-  aliases: [gpt-5-nano-2025-08-07-flex, gpt-5-nano-flex]
+  default: false
+  aliases: [gpt-5-nano-2025-08-07-flex]
   pricing:
     input_tokens:
       per_mill_tokens: '25000000000000000'
@@ -14,4 +15,4 @@ deployments:
       per_mill_tokens: '2500000000000000'
     output_tokens:
       per_mill_tokens: '200000000000000000'
-  status: active
+  retirementDate: 2026-12-11

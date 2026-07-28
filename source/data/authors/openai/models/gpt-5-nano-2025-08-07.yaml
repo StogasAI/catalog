@@ -2,17 +2,17 @@
 models:
   authorId: openai
   name: GPT-5 Nano
+  aliases: [gpt-5-nano]
   family: GPT
   series: GPT-5
-  snapshot: 2025-08-07
-  derivedFrom: []
-  flavors: [base]
+  flavors: []
   limits:
-    contextTokens: 272000
+    contextTokens: 400000
     outputTokens: 128000
   capabilities:
     inputModalities: [text, image]
     outputModalities: [text]
   reasoningEfforts: [minimal, low, medium, high]
+  snapshot: 2025-08-07
   releaseDate: 2025-08-07
   knowledgeCutoff: 2024-05-31

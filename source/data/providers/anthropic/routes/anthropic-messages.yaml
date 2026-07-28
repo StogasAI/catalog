@@ -1,23 +1,17 @@
 ---
 routes:
   providerId: anthropic
+  endpoint: https://api.anthropic.com/v1/messages
   interfaces: [chat_completions, responses]
   capabilities:
     streaming: true
+    cancellation: true
     functionCalling: true
+    parallelFunctionCalling: true
     promptCaching: true
+    structuredOutputs: true
     systemMessages: true
     toolChoice: true
     webSearch: true
-  dataHandling:
-    processingRegions: [multi-region]
-    storageRegions: []
-    retentionDays: 30
-    trainingUse: no
-    zeroDataRetention: contractual
-  moderation:
-    input: provider
-    output: provider
-  pricing:
-    anthropic_web_search_calls:
-      per_1k_calls: '10000000000000000000'
+    urlContext: false
+    pdfInput: false

@@ -5,15 +5,16 @@ deployments:
   upstream:
     model: gpt-5-search-api-2025-10-14
     fixedRequest:
-      service_tier: priority
-  aliases: [gpt-5-search-api-2025-10-14-priority, gpt-5-search-api-priority]
+      service_tier: default
+  default: true
+  aliases: []
   pricing:
     input_tokens:
-      per_mill_tokens: '3125000000000000000'
+      per_mill_tokens: '1250000000000000000'
     cached_input_tokens:
-      per_mill_tokens: '312500000000000000'
+      per_mill_tokens: '125000000000000000'
     output_tokens:
-      per_mill_tokens: '25000000000000000000'
+      per_mill_tokens: '10000000000000000000'
     openai_chat_completion_search_model_calls:
       per_1k_calls: '10000000000000000000'
-  status: active
+  retirementDate: null

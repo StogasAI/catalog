@@ -5,13 +5,14 @@ deployments:
   upstream:
     model: gpt-5-nano-2025-08-07
     fixedRequest:
-      service_tier: priority
-  aliases: [gpt-5-nano-2025-08-07-priority, gpt-5-nano-priority]
+      service_tier: default
+  default: true
+  aliases: []
   pricing:
     input_tokens:
-      per_mill_tokens: '2500000000000000000'
+      per_mill_tokens: '50000000000000000'
     cached_input_tokens:
       per_mill_tokens: '5000000000000000'
     output_tokens:
       per_mill_tokens: '400000000000000000'
-  status: active
+  retirementDate: 2026-12-11

@@ -1,12 +1,11 @@
 package catalog
 
 #Provider: close({
-	name:        string & !=""
-	slugs:       #Slugs
-	description: string
-	headquarters?: close({
-		countryCode: #CountryCode
-		locality?:   string
-	})
+	name:                 string & !=""
+	aliases:              [...#Slug]
+	headquartersCountry?: #CountryCode
+	capabilities?:        #RouteCapabilityOverrides
+	dataHandling?:        #DataHandlingOverride
+	moderation?:          #ModerationOverride
+	pricing?:             #Pricing
 })
-

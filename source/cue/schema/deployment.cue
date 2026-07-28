@@ -1,14 +1,5 @@
 package catalog
 
-#DeploymentCapabilityOverrides: close({
-	streaming?:       bool
-	functionCalling?: bool
-	promptCaching?:   bool
-	systemMessages?:  bool
-	toolChoice?:      bool
-	webSearch?:       bool
-})
-
 #OpenAIUpstream: close({
 	model: #UpstreamId
 	fixedRequest: close({
@@ -19,8 +10,8 @@ package catalog
 #AnthropicUpstream: close({
 	model: #UpstreamId
 	fixedRequest: close({
-		speed:         "standard" | "fast"
-		inference_geo: "global" | "us"
+		speed?:         "standard" | "fast"
+		inference_geo?: "global" | "us"
 		service_tier:  "standard_only"
 	})
 })
@@ -31,21 +22,23 @@ package catalog
 	modelId:  #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
-	aliases: [#Slug, ...#Slug]
+	default: bool
+	aliases: [...#Slug]
 	limits?: close({
 		contextTokens?: int & >0
 		outputTokens?:  int & >0
 	})
-	capabilities?: #DeploymentCapabilityOverrides
+	capabilities?: #RouteCapabilityOverrides
 	reasoningEfforts?: [...#ReasoningEffort]
 	dataHandling?: #DataHandlingOverride
 	moderation?:   #ModerationOverride
+	weightPrecision?: #WeightPrecision
 	tee?: close({
-		status:    #TeeStatus
-		mechanism: #TeeMechanism
+		status:                #TeeStatus
+		mechanism:             #TeeMechanism
+		evidenceUri?:          string & !=""
+		attestationStatusUri?: string & !=""
 	})
 	pricing: #Pricing
-	status:        #LifecycleStatus
-	deprecatedAt?: #Date
-	retiredAt?:    #Date
+	retirementDate: #MaybeDate
 })

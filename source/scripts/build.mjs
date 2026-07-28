@@ -192,6 +192,28 @@ function same(left, right) {
 	return stableJson(left) === stableJson(right);
 }
 
+function validRetirementDate(value) {
+	if (value === null) return true;
+	const parsed = new Date(`${value}T00:00:00.000Z`);
+	return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isPlainObject(value) {
+	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Missing values inherit, objects merge recursively, and every present scalar,
+// array, or null replaces the inherited value.
+function mergeFacts(base, override) {
+	if (override === undefined) return structuredClone(base);
+	if (!isPlainObject(base) || !isPlainObject(override)) return structuredClone(override);
+	const merged = structuredClone(base);
+	for (const [key, value] of Object.entries(override)) {
+		merged[key] = mergeFacts(base[key], value);
+	}
+	return merged;
+}
+
 function requireNode(nodes, id, owner) {
 	const node = nodes?.[id];
 	if (!node) throw new Error(`${owner}: missing referenced node ${id}`);
@@ -232,13 +254,7 @@ function mergePricing(graph, deploymentId, deployment) {
 			pricing[meter] = structuredClone(rates);
 		}
 	}
-	for (const [meter, rates] of Object.entries(deployment.pricing)) {
-		if (pricing[meter]) {
-			throw new Error(`${deploymentId}: deployment pricing shadows route meter ${meter}`);
-		}
-		pricing[meter] = structuredClone(rates);
-	}
-	return pricing;
+	return mergeFacts(pricing, deployment.pricing);
 }
 
 function effectiveLimits(deploymentId, model, deployment) {
@@ -254,9 +270,22 @@ function effectiveLimits(deploymentId, model, deployment) {
 
 function effectiveCapabilities(graph, deploymentId, model, deployment) {
 	const routeCapabilities = oneRouteFact(graph, deploymentId, deployment, 'capabilities');
-	for (const [name, value] of Object.entries(deployment.capabilities ?? {})) {
+	const routeSupport = structuredClone(routeCapabilities);
+	const modelCapabilities = new Map();
+	for (const [name, value] of Object.entries(model.capabilities)) {
+		if (name === 'inputModalities' || name === 'outputModalities') continue;
 		if (value && !routeCapabilities[name]) {
+			throw new Error(`${deploymentId}: model requires route-unsupported capability ${name}`);
+		}
+		modelCapabilities.set(name, value);
+		routeCapabilities[name] = value;
+	}
+	for (const [name, value] of Object.entries(deployment.capabilities ?? {})) {
+		if (value && !routeSupport[name]) {
 			throw new Error(`${deploymentId}: cannot enable route-unsupported capability ${name}`);
+		}
+		if (value && modelCapabilities.get(name) === false) {
+			throw new Error(`${deploymentId}: cannot enable model-unsupported capability ${name}`);
 		}
 		routeCapabilities[name] = value;
 	}
@@ -283,38 +312,114 @@ function effectiveReasoning(deploymentId, model, deployment) {
 
 function effectiveDataHandling(graph, deploymentId, deployment) {
 	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'dataHandling');
-	const override = deployment.dataHandling ?? {};
+	const value = mergeFacts(routeValue, deployment.dataHandling ?? {});
 	return {
-		processingRegions: [...(override.processingRegions ?? routeValue.processingRegions)],
-		storageRegions: [...(override.storageRegions ?? routeValue.storageRegions)],
-		retentionDays: override.retentionDays ?? routeValue.retentionDays,
-		trainingUse: override.trainingUse ?? routeValue.trainingUse,
-		zeroDataRetention: override.zeroDataRetention ?? routeValue.zeroDataRetention
+		processingRegions: [...value.processingRegions],
+		storageRegions: [...value.storageRegions],
+		retentionDays: value.retentionDays,
+		trainingUse: value.trainingUse,
+		zeroDataRetention: value.zeroDataRetention
 	};
 }
 
 function effectiveModeration(graph, deploymentId, deployment) {
 	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'moderation');
-	const override = deployment.moderation ?? {};
+	const value = mergeFacts(routeValue, deployment.moderation ?? {});
 	return {
-		input: override.input ?? routeValue.input,
-		output: override.output ?? routeValue.output
+		input: value.input,
+		output: value.output
 	};
 }
 
 function buildCatalogs(source) {
-	const graph = source.graph;
-	const aliases = new Set();
+	const sourceGraph = source.graph;
+	const graph = {
+		...sourceGraph,
+		routes: Object.fromEntries(
+			Object.entries(sourceGraph.routes).map(([routeId, route]) => {
+				const provider = requireNode(sourceGraph.providers, route.providerId, routeId);
+				const capabilities = mergeFacts(provider.capabilities ?? {}, route.capabilities ?? {});
+				const capabilityNames = [
+					'streaming',
+					'cancellation',
+					'functionCalling',
+					'parallelFunctionCalling',
+					'promptCaching',
+					'structuredOutputs',
+					'systemMessages',
+					'toolChoice',
+					'webSearch',
+					'urlContext',
+					'pdfInput'
+				];
+				for (const capability of capabilityNames) {
+					if (typeof capabilities[capability] !== 'boolean') capabilities[capability] = false;
+				}
+				const dataHandling = mergeFacts(provider.dataHandling ?? {}, route.dataHandling ?? {});
+				for (const field of [
+					'processingRegions',
+					'storageRegions',
+					'retentionDays',
+					'trainingUse',
+					'zeroDataRetention'
+				]) {
+					if (!(field in dataHandling)) {
+						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
+					}
+				}
+				const moderation = mergeFacts(provider.moderation ?? {}, route.moderation ?? {});
+				if (!moderation.input || !moderation.output) {
+					throw new Error(`${routeId}: moderation is unresolved`);
+				}
+				return [
+					routeId,
+					{
+						...route,
+						capabilities,
+						dataHandling,
+						moderation,
+						pricing: mergeFacts(provider.pricing ?? {}, route.pricing ?? {})
+					}
+				];
+			})
+		)
+	};
+	const selectors = new Map();
 	const runtimeDeployments = {};
 	const publicDeployments = {};
-	const providerSlugOwners = new Map();
+	const defaults = new Map();
 
-	for (const [providerId, provider] of Object.entries(graph.providers)) {
-		for (const slug of provider.slugs) {
-			const owner = providerSlugOwners.get(slug);
-			if (owner) throw new Error(`provider slug ${slug} is shared by ${owner} and ${providerId}`);
-			providerSlugOwners.set(slug, providerId);
+	function validateQualifierAliases(nodes, kind) {
+		const qualifiers = new Map();
+		for (const [id, node] of Object.entries(nodes)) {
+			for (const qualifier of [id, ...node.aliases]) {
+				if (qualifier.trim() !== qualifier || qualifier.includes('/')) {
+					throw new Error(`${kind} ${id}: qualifier ${qualifier} is not canonical`);
+				}
+				const owner = qualifiers.get(qualifier);
+				if (owner) {
+					throw new Error(`${kind} qualifier ${qualifier} belongs to both ${owner} and ${id}`);
+				}
+				qualifiers.set(qualifier, id);
+			}
 		}
+	}
+
+	function addSelector(selector, kind, id) {
+		if (selector.trim() !== selector || selector.includes('/')) {
+			throw new Error(`${kind} ${id}: selector ${selector} is not canonical`);
+		}
+		const owner = selectors.get(selector);
+		if (owner) throw new Error(`${selector} selects both ${owner} and ${kind}:${id}`);
+		selectors.set(selector, `${kind}:${id}`);
+	}
+
+	validateQualifierAliases(graph.authors, 'author');
+	validateQualifierAliases(graph.providers, 'provider');
+
+	for (const [modelId, model] of Object.entries(graph.models)) {
+		addSelector(modelId, 'model', modelId);
+		for (const alias of model.aliases) addSelector(alias, 'model', modelId);
 	}
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
@@ -324,14 +429,17 @@ function buildCatalogs(source) {
 		if (!deployment.upstream?.model || !deployment.upstream?.fixedRequest) {
 			throw new Error(`${deploymentId}: upstream model and fixedRequest are required`);
 		}
+		if (!validRetirementDate(deployment.retirementDate)) {
+			throw new Error(`${deploymentId}: retirementDate is invalid`);
+		}
 		const selectorKeys = Object.keys(deployment.upstream.fixedRequest).sort();
-		const expectedKeys =
-			providerId === 'openai'
-				? ['service_tier']
-				: providerId === 'anthropic'
-					? ['inference_geo', 'service_tier', 'speed']
-					: null;
-		if (!expectedKeys || JSON.stringify(selectorKeys) !== JSON.stringify(expectedKeys)) {
+		const selectorKeysValid =
+			(providerId === 'openai' &&
+				JSON.stringify(selectorKeys) === JSON.stringify(['service_tier'])) ||
+			(providerId === 'anthropic' &&
+				selectorKeys.includes('service_tier') &&
+				selectorKeys.every((key) => ['inference_geo', 'service_tier', 'speed'].includes(key)));
+		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
 		const limits = effectiveLimits(deploymentId, model, deployment);
@@ -341,16 +449,24 @@ function buildCatalogs(source) {
 		const dataHandling = effectiveDataHandling(graph, deploymentId, deployment);
 		const moderation = effectiveModeration(graph, deploymentId, deployment);
 
-		for (const alias of deployment.aliases) {
-			if (alias.trim() !== alias || alias.includes('/')) {
-				throw new Error(`${deploymentId}: alias ${alias} is not canonical`);
+		addSelector(deploymentId, 'deployment', deploymentId);
+		for (const alias of deployment.aliases) addSelector(alias, 'deployment', deploymentId);
+		if (deployment.default) {
+			for (const routeId of deployment.routeIds) {
+				const key = `${deployment.modelId}\0${routeId}`;
+				const owner = defaults.get(key);
+				if (owner) {
+					throw new Error(
+						`${deploymentId}: default conflicts with ${owner} for ${deployment.modelId}/${routeId}`
+					);
+				}
+				defaults.set(key, deploymentId);
 			}
-			if (aliases.has(alias)) throw new Error(`${deploymentId}: alias ${alias} is duplicated`);
-			aliases.add(alias);
 		}
 
 		const common = {
 			aliases: [...deployment.aliases],
+			default: deployment.default,
 			modelId: deployment.modelId,
 			routeIds: [...deployment.routeIds].sort(),
 			upstream: deployment.upstream,
@@ -358,19 +474,29 @@ function buildCatalogs(source) {
 			capabilities,
 			reasoningEfforts,
 			pricing,
-			status: deployment.status,
-			...(deployment.deprecatedAt ? { deprecatedAt: deployment.deprecatedAt } : {}),
-			...(deployment.retiredAt ? { retiredAt: deployment.retiredAt } : {}),
-			...(deployment.tee ? { tee: deployment.tee } : {})
+			retirementDate: deployment.retirementDate,
+			...(deployment.tee ? { tee: deployment.tee } : {}),
+			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};
-		runtimeDeployments[deploymentId] = common;
 		publicDeployments[deploymentId] = {
 			...common,
 			dataHandling,
 			moderation
 		};
+		runtimeDeployments[deploymentId] = common;
 
 		requireNode(graph.providers, providerId, deploymentId);
+	}
+
+	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
+		for (const routeId of deployment.routeIds) {
+			const key = `${deployment.modelId}\0${routeId}`;
+			if (!defaults.has(key)) {
+				throw new Error(
+					`${deploymentId}: ${deployment.modelId}/${routeId} has no default deployment`
+				);
+			}
+		}
 	}
 
 	const runtimeRoutes = Object.fromEntries(
@@ -382,32 +508,38 @@ function buildCatalogs(source) {
 			}
 		])
 	);
+	const runtimeModelIds = new Set(
+		Object.values(runtimeDeployments).map((deployment) => deployment.modelId)
+	);
 	const runtimeModels = Object.fromEntries(
-		Object.entries(graph.models).map(([id, model]) => [
-			id,
-			{
-				authorId: model.authorId,
-				name: model.name,
-				releaseDate: model.releaseDate
-			}
-		])
+		Object.entries(graph.models)
+			.filter(([id]) => runtimeModelIds.has(id))
+			.map(([id, model]) => [
+				id,
+				{
+					authorId: model.authorId,
+					aliases: model.aliases,
+					name: model.name,
+					releaseDate: model.releaseDate
+				}
+			])
 	);
 	const runtimeAuthors = Object.fromEntries(
 		Object.entries(graph.authors).map(([id, author]) => [
 			id,
-			{ name: author.name, slugs: author.slugs }
+			{ aliases: author.aliases, name: author.name }
 		])
 	);
 	const runtimeProviders = Object.fromEntries(
 		Object.entries(graph.providers).map(([id, provider]) => [
 			id,
-			{ name: provider.name, slugs: provider.slugs }
+			{ aliases: provider.aliases, name: provider.name }
 		])
 	);
 
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v3',
+			schema: 'stogas.catalog.runtime.v5',
 			graph: {
 				authors: runtimeAuthors,
 				models: runtimeModels,
@@ -417,7 +549,7 @@ function buildCatalogs(source) {
 			}
 		},
 		public: {
-			schema: 'stogas.catalog.public.v3',
+			schema: 'stogas.catalog.public.v5',
 			graph: {
 				authors: graph.authors,
 				models: graph.models,

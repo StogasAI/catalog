@@ -6,7 +6,8 @@ deployments:
     model: gpt-5.5-2026-04-23
     fixedRequest:
       service_tier: priority
-  aliases: [gpt-5.5-2026-04-23-priority, gpt-5.5-priority]
+  default: false
+  aliases: [gpt-5.5-2026-04-23-priority]
   limits:
     contextTokens: 272000
   pricing:
@@ -16,4 +17,4 @@ deployments:
       per_mill_tokens: '1250000000000000000'
     output_tokens:
       per_mill_tokens: '75000000000000000000'
-  status: active
+  retirementDate: null

@@ -6,7 +6,7 @@ const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments
 const moderationActors = new Set(['provider', 'stogas', 'both', 'none', 'unknown']);
 const canonicalEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
-describe('compiled catalog v3', () => {
+describe('compiled catalog v5', () => {
 	test('contains exactly the five useful graph primitives', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -35,18 +35,60 @@ describe('compiled catalog v3', () => {
 		}
 	});
 
-	test('keeps aliases directly on deployments and unique', () => {
-		const aliases = new Set<string>();
-		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment.aliases.length).toBeGreaterThan(0);
-			for (const alias of deployment.aliases) {
-				expect(alias).not.toContain('/');
-				expect(aliases.has(alias)).toBe(false);
-				aliases.add(alias);
+	test('keeps aliases inline, selectors explicit, and globally unique', () => {
+		const selectors = new Set<string>();
+		for (const [modelId, model] of Object.entries(runtimeCatalog.graph.models)) {
+			for (const selector of [modelId, ...model.aliases]) {
+				expect(selector).not.toContain('/');
+				expect(selectors.has(selector)).toBe(false);
+				selectors.add(selector);
 			}
 		}
-		expect(aliases.size).toBe(36);
+		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
+			for (const alias of deployment.aliases) {
+				expect(alias).not.toContain('/');
+				expect(selectors.has(alias)).toBe(false);
+				selectors.add(alias);
+			}
+		}
+		for (const deploymentId of Object.keys(runtimeCatalog.graph.deployments)) {
+			expect(selectors.has(deploymentId)).toBe(false);
+			selectors.add(deploymentId);
+		}
+		expect(selectors.size).toBeGreaterThan(50);
 		expect(runtimeCatalog).not.toHaveProperty('aliases');
+		expect(runtimeCatalog.graph.authors.openai.aliases).toEqual(['open-ai']);
+		expect(runtimeCatalog.graph.providers.openai.aliases).toEqual(['open-ai']);
+	});
+
+	test('uses one nullable provider retirement date and keeps history deterministic', () => {
+		expect(publicCatalog.graph.deployments['gpt-4o-search-preview-standard']).toMatchObject({
+			retirementDate: '2026-07-23'
+		});
+		expect(runtimeCatalog.graph.deployments['gpt-4o-search-preview-standard']).toMatchObject({
+			retirementDate: '2026-07-23'
+		});
+		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
+			expect(deployment).toHaveProperty('retirementDate');
+			expect(deployment).not.toHaveProperty('status');
+			expect(deployment).not.toHaveProperty('deprecatedAt');
+			expect(deployment).not.toHaveProperty('retiredAt');
+		}
+	});
+
+	test('materializes one default deployment for every model and route', () => {
+		for (const [routeId] of Object.entries(runtimeCatalog.graph.routes)) {
+			const deployments = Object.entries(runtimeCatalog.graph.deployments).filter(
+				([, deployment]) => deployment.routeIds.includes(routeId)
+			);
+			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
+				expect(
+					deployments.filter(
+						([, deployment]) => deployment.modelId === modelId && deployment.default
+					)
+				).toHaveLength(1);
+			}
+		}
 	});
 
 	test('materializes runtime admission and billing facts', () => {
@@ -92,7 +134,7 @@ describe('compiled catalog v3', () => {
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v3');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v3');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v5');
 	});
 });

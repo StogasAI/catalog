@@ -8,7 +8,8 @@ deployments:
       speed: fast
       inference_geo: us
       service_tier: standard_only
-  aliases: [claude-opus-4-8-fast-us]
+  default: false
+  aliases: []
   dataHandling:
     processingRegions: [us]
   pricing:
@@ -22,4 +23,4 @@ deployments:
       per_mill_tokens: '22000000000000000000'
     output_tokens:
       per_mill_tokens: '55000000000000000000'
-  status: active
+  retirementDate: null

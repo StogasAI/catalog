@@ -1,8 +1,17 @@
 ---
 providers:
   name: Anthropic
-  slugs: [anthropic]
-  description: AI safety and research company operating the Claude API.
-  headquarters:
-    countryCode: US
-    locality: San Francisco
+  aliases: []
+  headquartersCountry: US
+  dataHandling:
+    processingRegions: [multi-region]
+    storageRegions: []
+    retentionDays: 30
+    trainingUse: no
+    zeroDataRetention: contractual
+  moderation:
+    input: provider
+    output: provider
+  pricing:
+    anthropic_web_search_calls:
+      per_1k_calls: '10000000000000000000'

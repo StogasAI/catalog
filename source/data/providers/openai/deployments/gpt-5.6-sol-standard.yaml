@@ -1,0 +1,24 @@
+---
+deployments:
+  modelId: gpt-5.6-sol
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-5.6-sol
+    fixedRequest:
+      service_tier: default
+  default: true
+  aliases: []
+  pricing:
+    input_tokens:
+      per_mill_context_lte_272k: '5000000000000000000'
+      per_mill_context_gt_272k: '10000000000000000000'
+    cached_input_tokens:
+      per_mill_context_lte_272k: '500000000000000000'
+      per_mill_context_gt_272k: '1000000000000000000'
+    cache_write_input_tokens:
+      per_mill_context_lte_272k: '6250000000000000000'
+      per_mill_context_gt_272k: '12500000000000000000'
+    output_tokens:
+      per_mill_context_lte_272k: '30000000000000000000'
+      per_mill_context_gt_272k: '45000000000000000000'
+  retirementDate: null

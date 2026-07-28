@@ -6,7 +6,8 @@ deployments:
     model: gpt-5.5-2026-04-23
     fixedRequest:
       service_tier: default
-  aliases: [gpt-5.5-2026-04-23, gpt-5.5, gpt-5.5-2026-04-23-standard, gpt-5.5-standard]
+  default: true
+  aliases: []
   pricing:
     input_tokens:
       per_mill_context_lte_272k: '5000000000000000000'
@@ -17,4 +18,4 @@ deployments:
     output_tokens:
       per_mill_context_lte_272k: '30000000000000000000'
       per_mill_context_gt_272k: '45000000000000000000'
-  status: active
+  retirementDate: null

@@ -37,11 +37,4 @@ deployments: [#Id]: #Deployment
 		}
 	}
 
-	_providerSlugUniqueness: {
-		for id, provider in providers {
-			for slug in provider.slugs {
-				(slug): id
-			}
-		}
-	}
 }

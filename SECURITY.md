@@ -5,5 +5,6 @@ issues in public issues.
 
 Catalog releases are data, never executable configuration. The gateway verifies the release
 signature, content digest, monotonically increasing sequence, bounded response size, and semantic
-invariants before atomic activation. Network endpoint hosts, credentials, authentication, and
-request transformations are deliberately outside this repository.
+invariants before atomic activation. The public bundle may describe route endpoints, but the
+runtime bundle cannot configure network hosts, credentials, authentication, or request
+transformations.

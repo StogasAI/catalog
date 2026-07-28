@@ -15,7 +15,7 @@ mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
 const manifest = {
-	catalogSchema: 3,
+	catalogSchema: 5,
 	public: publicCatalog.digest,
 	runtime: runtime.digest,
 	schema: 'stogas.catalog.release.v2',
