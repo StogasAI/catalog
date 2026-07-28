@@ -6,12 +6,10 @@ providers:
   dataHandling:
     processingRegions: [multi-region]
     storageRegions: []
-    retentionDays: 30
-    trainingUse: no
-    zeroDataRetention: contractual
-  moderation:
-    input: provider
-    output: provider
+    retentionDays: 0
+    trainingUse: false
+    zeroDataRetention: false
+  moderated: true
   pricing:
     anthropic_web_search_calls:
       per_1k_calls: '10000000000000000000'

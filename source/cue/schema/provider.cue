@@ -6,6 +6,6 @@ package catalog
 	headquartersCountry?: #CountryCode
 	capabilities?:        #RouteCapabilityOverrides
 	dataHandling?:        #DataHandlingOverride
-	moderation?:          #ModerationOverride
+	moderated:            bool
 	pricing?:             #Pricing
 })

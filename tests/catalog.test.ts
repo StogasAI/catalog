@@ -3,7 +3,6 @@ import publicCatalog from '../generated/catalog.public.json';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
-const moderationActors = new Set(['provider', 'stogas', 'both', 'none', 'unknown']);
 const canonicalEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 describe('compiled catalog v5', () => {
@@ -62,10 +61,14 @@ describe('compiled catalog v5', () => {
 	});
 
 	test('uses one nullable provider retirement date and keeps history deterministic', () => {
-		expect(publicCatalog.graph.deployments['gpt-4o-search-preview-standard']).toMatchObject({
+		expect(
+			publicCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
+		).toMatchObject({
 			retirementDate: '2026-07-23'
 		});
-		expect(runtimeCatalog.graph.deployments['gpt-4o-search-preview-standard']).toMatchObject({
+		expect(
+			runtimeCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
+		).toMatchObject({
 			retirementDate: '2026-07-23'
 		});
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
@@ -99,16 +102,17 @@ describe('compiled catalog v5', () => {
 				expect(canonicalEfforts.has(effort)).toBe(true);
 			}
 			expect(deployment).not.toHaveProperty('dataHandling');
-			expect(deployment).not.toHaveProperty('moderation');
+			expect(deployment).not.toHaveProperty('moderated');
 		}
 	});
 
 	test('materializes public privacy and moderation facts', () => {
 		for (const deployment of Object.values(publicCatalog.graph.deployments)) {
-			expect(moderationActors.has(deployment.moderation.input)).toBe(true);
-			expect(moderationActors.has(deployment.moderation.output)).toBe(true);
+			expect(typeof deployment.moderated).toBe('boolean');
 			expect(deployment.dataHandling).toHaveProperty('processingRegions');
 			expect(deployment.dataHandling).toHaveProperty('storageRegions');
+			expect(typeof deployment.dataHandling.trainingUse).toBe('boolean');
+			expect(typeof deployment.dataHandling.zeroDataRetention).toBe('boolean');
 			expect(deployment.dataHandling).not.toHaveProperty('gdpr');
 			expect(deployment).not.toHaveProperty('provenance');
 		}
@@ -116,7 +120,7 @@ describe('compiled catalog v5', () => {
 	});
 
 	test('keeps Anthropic selection literal and its guarantee normalized', () => {
-		const deployment = runtimeCatalog.graph.deployments['claude-opus-4-8-fast-us'];
+		const deployment = runtimeCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'];
 		expect(deployment.routeIds).toEqual(['anthropic-messages']);
 		expect(deployment.upstream).toEqual({
 			model: 'claude-opus-4-8',
@@ -127,7 +131,8 @@ describe('compiled catalog v5', () => {
 			}
 		});
 		expect(
-			publicCatalog.graph.deployments['claude-opus-4-8-fast-us'].dataHandling.processingRegions
+			publicCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].dataHandling
+				.processingRegions
 		).toEqual(['us']);
 	});
 

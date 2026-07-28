@@ -322,13 +322,9 @@ function effectiveDataHandling(graph, deploymentId, deployment) {
 	};
 }
 
-function effectiveModeration(graph, deploymentId, deployment) {
-	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'moderation');
-	const value = mergeFacts(routeValue, deployment.moderation ?? {});
-	return {
-		input: value.input,
-		output: value.output
-	};
+function effectiveModerated(graph, deploymentId, deployment) {
+	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'moderated');
+	return deployment.moderated ?? routeValue;
 }
 
 function buildCatalogs(source) {
@@ -367,9 +363,9 @@ function buildCatalogs(source) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
 				}
-				const moderation = mergeFacts(provider.moderation ?? {}, route.moderation ?? {});
-				if (!moderation.input || !moderation.output) {
-					throw new Error(`${routeId}: moderation is unresolved`);
+				const moderated = route.moderated ?? provider.moderated;
+				if (typeof moderated !== 'boolean') {
+					throw new Error(`${routeId}: moderated is unresolved`);
 				}
 				return [
 					routeId,
@@ -377,7 +373,7 @@ function buildCatalogs(source) {
 						...route,
 						capabilities,
 						dataHandling,
-						moderation,
+						moderated,
 						pricing: mergeFacts(provider.pricing ?? {}, route.pricing ?? {})
 					}
 				];
@@ -447,7 +443,7 @@ function buildCatalogs(source) {
 		const reasoningEfforts = effectiveReasoning(deploymentId, model, deployment);
 		const pricing = mergePricing(graph, deploymentId, deployment);
 		const dataHandling = effectiveDataHandling(graph, deploymentId, deployment);
-		const moderation = effectiveModeration(graph, deploymentId, deployment);
+		const moderated = effectiveModerated(graph, deploymentId, deployment);
 
 		addSelector(deploymentId, 'deployment', deploymentId);
 		for (const alias of deployment.aliases) addSelector(alias, 'deployment', deploymentId);
@@ -481,7 +477,7 @@ function buildCatalogs(source) {
 		publicDeployments[deploymentId] = {
 			...common,
 			dataHandling,
-			moderation
+			moderated
 		};
 		runtimeDeployments[deploymentId] = common;
 

@@ -34,6 +34,6 @@ package catalog
 	interfaces:    [#Interface, ...#Interface]
 	capabilities?: #RouteCapabilityOverrides
 	dataHandling?: #DataHandlingOverride
-	moderation?:   #ModerationOverride
+	moderated?:    bool
 	pricing?:      #Pricing
 })

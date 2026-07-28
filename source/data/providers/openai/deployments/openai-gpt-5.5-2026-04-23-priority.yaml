@@ -7,7 +7,7 @@ deployments:
     fixedRequest:
       service_tier: priority
   default: false
-  aliases: [gpt-5.5-2026-04-23-priority]
+  aliases: []
   limits:
     contextTokens: 272000
   pricing:

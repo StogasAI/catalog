@@ -4,24 +4,14 @@ package catalog
 	processingRegions:  [...#Id]
 	storageRegions:     [...#Id]
 	retentionDays:      null | (int & >=0)
-	trainingUse:       #TrainingUse
-	zeroDataRetention: #ZDRAvailability
+	trainingUse:        bool
+	zeroDataRetention:  bool
 })
 
 #DataHandlingOverride: close({
 	processingRegions?:  [...#Id]
 	storageRegions?:     [...#Id]
 	retentionDays?:      null | (int & >=0)
-	trainingUse?:       #TrainingUse
-	zeroDataRetention?: #ZDRAvailability
-})
-
-#Moderation: close({
-	input:  #Moderator
-	output: #Moderator
-})
-
-#ModerationOverride: close({
-	input?:  #Moderator
-	output?: #Moderator
+	trainingUse?:        bool
+	zeroDataRetention?:  bool
 })

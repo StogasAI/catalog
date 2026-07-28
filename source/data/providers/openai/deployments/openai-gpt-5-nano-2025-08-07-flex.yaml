@@ -7,7 +7,7 @@ deployments:
     fixedRequest:
       service_tier: flex
   default: false
-  aliases: [gpt-5-nano-2025-08-07-flex]
+  aliases: []
   pricing:
     input_tokens:
       per_mill_tokens: '25000000000000000'

@@ -31,7 +31,7 @@ package catalog
 	capabilities?: #RouteCapabilityOverrides
 	reasoningEfforts?: [...#ReasoningEffort]
 	dataHandling?: #DataHandlingOverride
-	moderation?:   #ModerationOverride
+	moderated?:    bool
 	weightPrecision?: #WeightPrecision
 	tee?: close({
 		status:                #TeeStatus

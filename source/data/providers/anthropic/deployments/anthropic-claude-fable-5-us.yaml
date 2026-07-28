@@ -6,21 +6,22 @@ deployments:
     model: claude-fable-5
     fixedRequest:
       speed: standard
-      inference_geo: global
+      inference_geo: us
       service_tier: standard_only
-  default: true
+  default: false
   aliases: []
   dataHandling:
-    zeroDataRetention: unsupported
+    processingRegions: [us]
+    retentionDays: 30
   pricing:
     input_tokens:
-      per_mill_tokens: '10000000000000000000'
+      per_mill_tokens: '11000000000000000000'
     cached_input_tokens:
-      per_mill_tokens: '1000000000000000000'
+      per_mill_tokens: '1100000000000000000'
     cache_write_5m_input_tokens:
-      per_mill_tokens: '12500000000000000000'
+      per_mill_tokens: '13750000000000000000'
     cache_write_1h_input_tokens:
-      per_mill_tokens: '20000000000000000000'
+      per_mill_tokens: '22000000000000000000'
     output_tokens:
-      per_mill_tokens: '50000000000000000000'
+      per_mill_tokens: '55000000000000000000'
   retirementDate: null
