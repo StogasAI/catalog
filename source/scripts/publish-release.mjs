@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { getS3Object, putS3Object } from './aws-s3.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
@@ -11,16 +12,31 @@ const targetBucket = process.argv[3]?.trim();
 const tag = `catalog-v${sequence}`;
 const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 const releaseRoot = join(workRoot, 'release');
+const latestCacheControl = 'public, max-age=0, s-maxage=30, stale-if-error=300, no-transform';
+const immutableCacheControl = 'public, max-age=31536000, immutable, no-transform';
+const destinations = [
+	{
+		get: getR2Object,
+		name: 'R2',
+		put: putR2Object
+	},
+	{
+		get: getS3Object,
+		name: 'S3',
+		put: putS3Object
+	}
+];
 
 try {
 	requireCommands();
-	requireCleanPublishedSource();
 	const latest = await readLatest();
 	if (latest.envelope && latest.envelope.manifest.sequence > sequence) {
 		throw new Error(
 			`Catalog latest is already sequence ${latest.envelope.manifest.sequence}; ${sequence} would roll it back.`
 		);
 	}
+	const repairsExistingRelease = latest.envelope?.manifest.sequence === sequence;
+	if (!repairsExistingRelease) requireCleanPublishedSource();
 
 	run('bun', ['install', '--frozen-lockfile']);
 	run('bun', ['run', 'check']);
@@ -34,6 +50,7 @@ try {
 		if (!readFileSync(releasePath).equals(latest.bytes)) {
 			throw new Error(`Catalog sequence ${sequence} is already bound to different content.`);
 		}
+		console.log(`Repairing catalog ${sequence} from its existing signed release.`);
 	}
 
 	for (const path of [...artifactPaths(releaseRoot), releasePath]) {
@@ -54,7 +71,11 @@ function requireCommands() {
 		'CATALOG_SIGNING_KEY_ID',
 		'CATALOG_SIGNING_PRIVATE_KEY_PEM',
 		'CLOUDFLARE_ACCOUNT_ID',
-		'CLOUDFLARE_API_TOKEN'
+		'CLOUDFLARE_API_TOKEN',
+		'AWS_ACCESS_KEY_ID',
+		'AWS_BUCKET',
+		'AWS_REGION',
+		'AWS_SECRET_ACCESS_KEY'
 	]) {
 		requiredEnvironment(name);
 	}
@@ -123,18 +144,31 @@ function artifactPaths(root) {
 
 async function publishImmutable(path, root) {
 	const key = objectKey(path.slice(root.length + 1));
-	const existing = await getObject(key);
-	if (existing) {
-		if (!readFileSync(path).equals(existing.bytes)) {
-			throw new Error(`Refusing to overwrite immutable catalog object ${key}.`);
-		}
-		return;
-	}
-	await putObject(key, readFileSync(path));
-	const published = await getObject(key);
-	if (!published || !readFileSync(path).equals(published.bytes)) {
-		throw new Error(`Catalog object ${key} failed post-publication verification.`);
-	}
+	const bytes = readFileSync(path);
+	await Promise.all(
+		destinations.map(async (destination) => {
+			const existing = await destination.get(key);
+			if (existing) {
+				if (!bytes.equals(existing.bytes)) {
+					throw new Error(
+						`Refusing to overwrite immutable catalog object ${key} in ${destination.name}.`
+					);
+				}
+				return;
+			}
+			await destination.put(key, bytes, {
+				cacheControl: immutableCacheControl,
+				ifNoneMatch: '*',
+				immutable: true
+			});
+			const published = await destination.get(key);
+			if (!published || !bytes.equals(published.bytes)) {
+				throw new Error(
+					`Catalog object ${key} failed ${destination.name} post-publication verification.`
+				);
+			}
+		})
+	);
 }
 
 function publishGitHubRelease(envelope) {
@@ -178,29 +212,82 @@ function publishGitHubRelease(envelope) {
 async function readLatest() {
 	const path = join(workRoot, 'latest.json');
 	const key = objectKey('latest.json');
-	const current = await getObject(key);
-	if (!current) return { envelope: null, path };
-	const envelope = JSON.parse(current.bytes.toString('utf8'));
+	const states = await Promise.all(
+		destinations.map(async (destination) => {
+			const current = await destination.get(key);
+			if (!current) return { current: null, destination, envelope: null };
+			return {
+				current,
+				destination,
+				envelope: parsePublishedEnvelope(current.bytes, destination.name)
+			};
+		})
+	);
+	const published = states.filter((state) => state.envelope);
+	for (let left = 0; left < published.length; left++) {
+		for (let right = left + 1; right < published.length; right++) {
+			if (
+				published[left].envelope.manifest.sequence ===
+					published[right].envelope.manifest.sequence &&
+				!published[left].current.bytes.equals(published[right].current.bytes)
+			) {
+				throw new Error(
+					`Catalog sequence ${published[left].envelope.manifest.sequence} is bound to different bytes in ${published[left].destination.name} and ${published[right].destination.name}.`
+				);
+			}
+		}
+	}
+	published.sort(
+		(left, right) => right.envelope.manifest.sequence - left.envelope.manifest.sequence
+	);
+	return {
+		bytes: published[0]?.current.bytes,
+		envelope: published[0]?.envelope ?? null,
+		path,
+		states
+	};
+}
+
+async function activateLatest(latest, path) {
+	const bytes = readFileSync(path);
+	const key = objectKey('latest.json');
+	await Promise.all(
+		latest.states.map(async ({ current, destination, envelope }) => {
+			if (envelope?.manifest.sequence === sequence) {
+				if (!bytes.equals(current.bytes)) {
+					throw new Error(
+						`Catalog sequence ${sequence} is already bound to different content in ${destination.name}.`
+					);
+				}
+				return;
+			}
+			await destination.put(key, bytes, {
+				cacheControl: latestCacheControl,
+				ifMatch: current?.etag ?? undefined,
+				ifNoneMatch: current ? undefined : '*'
+			});
+			const published = await destination.get(key);
+			if (!published || !bytes.equals(published.bytes)) {
+				throw new Error(
+					`Catalog latest.json failed ${destination.name} post-publication verification.`
+				);
+			}
+		})
+	);
+}
+
+function parsePublishedEnvelope(bytes, destination) {
+	const envelope = JSON.parse(bytes.toString('utf8'));
 	if (
 		envelope?.schema !== 'stogas.catalog.signed.v2' ||
 		!Number.isSafeInteger(envelope.manifest?.sequence)
 	) {
-		throw new Error('Published catalog latest.json is invalid.');
+		throw new Error(`Published catalog latest.json in ${destination} is invalid.`);
 	}
-	return { bytes: current.bytes, envelope, path };
+	return envelope;
 }
 
-async function activateLatest(latest, path) {
-	if (latest.envelope?.manifest.sequence === sequence) return;
-	const bytes = readFileSync(path);
-	await putObject(objectKey('latest.json'), bytes);
-	const published = await getObject(objectKey('latest.json'));
-	if (!published || !bytes.equals(published.bytes)) {
-		throw new Error('Catalog latest.json failed post-publication verification.');
-	}
-}
-
-async function getObject(key) {
+async function getR2Object(key) {
 	const response = await fetch(objectUrl(key), {
 		headers: { authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}` }
 	});
@@ -209,15 +296,17 @@ async function getObject(key) {
 		throw new Error(`R2 GET ${key} failed (${response.status}): ${await response.text()}`);
 	}
 	return {
-		bytes: Buffer.from(await response.arrayBuffer())
+		bytes: Buffer.from(await response.arrayBuffer()),
+		etag: response.headers.get('etag')
 	};
 }
 
-async function putObject(key, bytes) {
+async function putR2Object(key, bytes, options = {}) {
 	const response = await fetch(objectUrl(key), {
 		body: bytes,
 		headers: {
 			authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}`,
+			'cache-control': options.cacheControl,
 			'content-type': 'application/json'
 		},
 		method: 'PUT'
