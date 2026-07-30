@@ -12,11 +12,11 @@ deployments:
     contextTokens: 272000
   pricing:
     input_tokens:
-      per_mill_tokens: '5000000000000000000'
+      per_mill_tokens: '4000000000000000000'
     cached_input_tokens:
-      per_mill_tokens: '500000000000000000'
+      per_mill_tokens: '400000000000000000'
     cache_write_input_tokens:
-      per_mill_tokens: '6250000000000000000'
+      per_mill_tokens: '5000000000000000000'
     output_tokens:
-      per_mill_tokens: '30000000000000000000'
+      per_mill_tokens: '24000000000000000000'
   deprecationDate: null

@@ -10,15 +10,15 @@ deployments:
   aliases: []
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '500000000000000000'
-      per_mill_context_gt_272k: '1000000000000000000'
+      per_mill_context_lte_272k: '100000000000000000'
+      per_mill_context_gt_272k: '200000000000000000'
     cached_input_tokens:
-      per_mill_context_lte_272k: '50000000000000000'
-      per_mill_context_gt_272k: '100000000000000000'
+      per_mill_context_lte_272k: '10000000000000000'
+      per_mill_context_gt_272k: '20000000000000000'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '625000000000000000'
-      per_mill_context_gt_272k: '1250000000000000000'
+      per_mill_context_lte_272k: '125000000000000000'
+      per_mill_context_gt_272k: '250000000000000000'
     output_tokens:
-      per_mill_context_lte_272k: '3000000000000000000'
-      per_mill_context_gt_272k: '4500000000000000000'
+      per_mill_context_lte_272k: '600000000000000000'
+      per_mill_context_gt_272k: '900000000000000000'
   deprecationDate: null

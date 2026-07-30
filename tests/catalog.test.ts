@@ -139,6 +139,114 @@ describe('compiled catalog v5', () => {
 		).toEqual(['us']);
 	});
 
+	test('publishes OpenAI Fast naming and current GPT-5.6 prices', () => {
+		const deployments = runtimeCatalog.graph.deployments;
+		for (const fastId of [
+			'openai-gpt-5.5-2026-04-23-fast',
+			'openai-gpt-5.6-luna-fast',
+			'openai-gpt-5.6-sol-fast',
+			'openai-gpt-5.6-terra-fast'
+		] as const) {
+			expect(deployments[fastId]).toMatchObject({
+				upstream: { fixedRequest: { service_tier: 'priority' } }
+			});
+		}
+		for (const retiredId of [
+			'openai-gpt-5.5-2026-04-23-priority',
+			'openai-gpt-5.6-luna-priority',
+			'openai-gpt-5.6-sol-priority',
+			'openai-gpt-5.6-terra-priority'
+		]) {
+			expect(Object.keys(deployments)).not.toContain(retiredId);
+		}
+
+		expect(deployments['openai-gpt-5.6-luna'].pricing).toMatchObject({
+			input_tokens: {
+				per_mill_context_lte_272k: '200000000000000000',
+				per_mill_context_gt_272k: '400000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '20000000000000000',
+				per_mill_context_gt_272k: '40000000000000000'
+			},
+			cache_write_input_tokens: {
+				per_mill_context_lte_272k: '250000000000000000',
+				per_mill_context_gt_272k: '500000000000000000'
+			},
+			output_tokens: {
+				per_mill_context_lte_272k: '1200000000000000000',
+				per_mill_context_gt_272k: '1800000000000000000'
+			}
+		});
+		expect(deployments['openai-gpt-5.6-luna-flex'].pricing).toMatchObject({
+			input_tokens: {
+				per_mill_context_lte_272k: '100000000000000000',
+				per_mill_context_gt_272k: '200000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '10000000000000000',
+				per_mill_context_gt_272k: '20000000000000000'
+			},
+			cache_write_input_tokens: {
+				per_mill_context_lte_272k: '125000000000000000',
+				per_mill_context_gt_272k: '250000000000000000'
+			},
+			output_tokens: {
+				per_mill_context_lte_272k: '600000000000000000',
+				per_mill_context_gt_272k: '900000000000000000'
+			}
+		});
+		expect(deployments['openai-gpt-5.6-luna-fast'].pricing).toMatchObject({
+			input_tokens: { per_mill_tokens: '400000000000000000' },
+			cached_input_tokens: { per_mill_tokens: '40000000000000000' },
+			cache_write_input_tokens: { per_mill_tokens: '500000000000000000' },
+			output_tokens: { per_mill_tokens: '2400000000000000000' }
+		});
+
+		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({
+			input_tokens: {
+				per_mill_context_lte_272k: '2000000000000000000',
+				per_mill_context_gt_272k: '4000000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '200000000000000000',
+				per_mill_context_gt_272k: '400000000000000000'
+			},
+			cache_write_input_tokens: {
+				per_mill_context_lte_272k: '2500000000000000000',
+				per_mill_context_gt_272k: '5000000000000000000'
+			},
+			output_tokens: {
+				per_mill_context_lte_272k: '12000000000000000000',
+				per_mill_context_gt_272k: '18000000000000000000'
+			}
+		});
+		expect(deployments['openai-gpt-5.6-terra-flex'].pricing).toMatchObject({
+			input_tokens: {
+				per_mill_context_lte_272k: '1000000000000000000',
+				per_mill_context_gt_272k: '2000000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '100000000000000000',
+				per_mill_context_gt_272k: '200000000000000000'
+			},
+			cache_write_input_tokens: {
+				per_mill_context_lte_272k: '1250000000000000000',
+				per_mill_context_gt_272k: '2500000000000000000'
+			},
+			output_tokens: {
+				per_mill_context_lte_272k: '6000000000000000000',
+				per_mill_context_gt_272k: '9000000000000000000'
+			}
+		});
+		expect(deployments['openai-gpt-5.6-terra-fast'].pricing).toMatchObject({
+			input_tokens: { per_mill_tokens: '4000000000000000000' },
+			cached_input_tokens: { per_mill_tokens: '400000000000000000' },
+			cache_write_input_tokens: { per_mill_tokens: '5000000000000000000' },
+			output_tokens: { per_mill_tokens: '24000000000000000000' }
+		});
+	});
+
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);

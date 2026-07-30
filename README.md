@@ -10,8 +10,10 @@ behavior remain in the gateway.
 
 Deployments keep provider selection literal under a closed `upstream` block. The compiler permits
 only provider selectors already implemented by the gateway; it never accepts arbitrary request
-patches or treats provider labels such as fast, priority, and turbo as one abstraction. Reasoning
-lists are admission facts, while Bifrost owns provider wire conversion.
+patches or invents equivalence between provider labels. OpenAI Fast deployments retain the
+provider's documented `priority` wire value while their public IDs use `-fast`; the gateway accepts
+both official request spellings. Reasoning lists are admission facts, while Bifrost owns the
+remaining provider wire conversion.
 
 ## Development
 
