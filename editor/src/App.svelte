@@ -24,9 +24,12 @@
 		nodeKey,
 		parseNodeKey
 	} from './catalog';
+	import { readBoundedResponseText } from './http';
 	import type { Catalog, LineageNode, NodeType, SourcePayload } from './types';
 
 	const catalog = catalogJson as Catalog;
+	const MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024;
+	const REQUEST_TIMEOUT_MS = 30_000;
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
 	const nodeTypeOptions: NodeType[] = ['author', 'model', 'deployment', 'route', 'provider'];
 	type UiTheme = 'dark' | 'light';
@@ -96,8 +99,7 @@
 	});
 
 	$effect(() => {
-		fetch('/api/catalog/sources')
-			.then((response) => response.json())
+		requestJson<SourcePayload>('/api/catalog/sources')
 			.then((payload: SourcePayload) => {
 				sources = payload;
 			})
@@ -196,32 +198,60 @@
 
 	async function buildCatalog() {
 		buildStatus = 'Building...';
-		const response = await fetch('/api/catalog/build', { method: 'POST' });
-		const payload = (await response.json()) as { ok: boolean; output: string };
-		buildStatus = payload.ok ? 'Build passed' : payload.output;
+		try {
+			const payload = await requestJson<{ ok: boolean; output: string }>('/api/catalog/build', {
+				method: 'POST'
+			});
+			buildStatus = payload.ok ? 'Build passed' : payload.output;
+		} catch (error) {
+			buildStatus = error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	async function saveSource() {
 		if (!activePath) return;
 		sourceStatus = 'Saving...';
-		const response = await fetch('/api/catalog/source', {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ path: activePath, content: draft })
+		try {
+			await requestJson('/api/catalog/source', {
+				body: JSON.stringify({ path: activePath, content: draft }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PUT'
+			});
+			if (sources) {
+				sources = {
+					...sources,
+					files: sources.files.map((file) =>
+						file.path === activePath ? { ...file, content: draft } : file
+					)
+				};
+			}
+			sourceStatus = 'Saved';
+		} catch (error) {
+			sourceStatus = error instanceof Error ? error.message : String(error);
+		}
+	}
+
+	async function requestJson<T = unknown>(input: string, init: RequestInit = {}): Promise<T> {
+		const response = await fetch(input, {
+			...init,
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 		});
+		const text = await readBoundedResponseText(response, MAX_API_RESPONSE_BYTES);
 		if (!response.ok) {
-			sourceStatus = await response.text();
-			return;
+			let message = text;
+			try {
+				const payload = JSON.parse(text) as { error?: unknown };
+				if (typeof payload.error === 'string') message = payload.error;
+			} catch {
+				// Preserve the response text when the server did not return JSON.
+			}
+			throw new Error(message || `Request failed with HTTP ${response.status}`);
 		}
-		if (sources) {
-			sources = {
-				...sources,
-				files: sources.files.map((file) =>
-					file.path === activePath ? { ...file, content: draft } : file
-				)
-			};
+		try {
+			return JSON.parse(text) as T;
+		} catch {
+			throw new Error('Catalog editor API returned invalid JSON');
 		}
-		sourceStatus = 'Saved';
 	}
 
 	function attributeLabel(value: string) {

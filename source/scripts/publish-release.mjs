@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
+import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
@@ -14,6 +15,9 @@ const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 const releaseRoot = join(workRoot, 'release');
 const latestCacheControl = 'public, max-age=0, s-maxage=30, stale-if-error=300, no-transform';
 const immutableCacheControl = 'public, max-age=31536000, immutable, no-transform';
+const requestTimeoutMs = 30_000;
+const maxObjectBytes = 128 * 1024 * 1024;
+const maxErrorBytes = 64 * 1024;
 const destinations = [
 	{
 		get: getR2Object,
@@ -289,14 +293,16 @@ function parsePublishedEnvelope(bytes, destination) {
 
 async function getR2Object(key) {
 	const response = await fetch(objectUrl(key), {
-		headers: { authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}` }
+		headers: { authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}` },
+		signal: AbortSignal.timeout(requestTimeoutMs)
 	});
 	if (response.status === 404) return null;
 	if (!response.ok) {
-		throw new Error(`R2 GET ${key} failed (${response.status}): ${await response.text()}`);
+		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
+		throw new Error(`R2 GET ${key} failed (${response.status}): ${body}`);
 	}
 	return {
-		bytes: Buffer.from(await response.arrayBuffer()),
+		bytes: await readBoundedResponseBuffer(response, maxObjectBytes),
 		etag: response.headers.get('etag')
 	};
 }
@@ -309,10 +315,12 @@ async function putR2Object(key, bytes, options = {}) {
 			'cache-control': options.cacheControl,
 			'content-type': 'application/json'
 		},
-		method: 'PUT'
+		method: 'PUT',
+		signal: AbortSignal.timeout(requestTimeoutMs)
 	});
 	if (!response.ok) {
-		throw new Error(`R2 PUT ${key} failed (${response.status}): ${await response.text()}`);
+		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
+		throw new Error(`R2 PUT ${key} failed (${response.status}): ${body}`);
 	}
 }
 

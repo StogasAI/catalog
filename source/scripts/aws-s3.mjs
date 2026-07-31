@@ -1,7 +1,11 @@
 import { createHash, createHmac } from 'node:crypto';
+import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 
 const RETRYABLE_STATUS = new Set([409, 429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_OBJECT_BYTES = 128 * 1024 * 1024;
+const MAX_ERROR_BYTES = 64 * 1024;
 
 export async function getS3Object(key) {
 	const response = await request('GET', key);
@@ -17,7 +21,7 @@ export async function getS3Object(key) {
 		throw await responseError(response, `S3 GET ${key}`);
 	}
 	return {
-		bytes: Buffer.from(await response.arrayBuffer()),
+		bytes: await readBoundedResponseBuffer(response, MAX_OBJECT_BYTES),
 		etag: response.headers.get('etag')
 	};
 }
@@ -52,7 +56,8 @@ async function request(method, key, body, extraHeaders = {}) {
 			const response = await fetch(signed.url, {
 				body,
 				headers: signed.headers,
-				method
+				method,
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 			});
 			if (response.redirected) {
 				await response.body?.cancel();
@@ -147,7 +152,7 @@ function hmac(key, value) {
 }
 
 async function responseError(response, operation) {
-	const body = await response.text().catch(() => '');
+	const body = await readBoundedResponseText(response, MAX_ERROR_BYTES).catch(() => '');
 	const code = body.match(/<Code>([A-Za-z0-9]+)<\/Code>/)?.[1];
 	return new Error(`${operation} failed (${response.status})${code ? ` (${code})` : ''}`);
 }
