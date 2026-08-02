@@ -1,0 +1,119 @@
+name: Catalog Release
+
+on:
+  push:
+    tags:
+      - 'catalog-v*'
+
+concurrency:
+  group: catalog-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate tag
+        run: '[[ "$GITHUB_REF_NAME" =~ ^catalog-v[1-9][0-9]*$ ]]'
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+
+      - name: Build and check catalog
+        run: |
+          set -euo pipefail
+          sequence="${GITHUB_REF_NAME#catalog-v}"
+          test "$(git rev-list -n1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
+          bun install --frozen-lockfile
+          bun run check
+          node source/scripts/create-proposal.mjs "$sequence" "dist/catalog/$GITHUB_REF_NAME"
+          cd "dist/catalog/$GITHUB_REF_NAME"
+          sha256sum -c SHA256SUMS
+          head -n 2 SHA256SUMS > ATTESTATION-SHA256SUMS
+
+      - name: Generate GitHub artifact attestation
+        id: attest
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4
+        with:
+          subject-checksums: dist/catalog/${{ github.ref_name }}/ATTESTATION-SHA256SUMS
+
+      - name: Collect GitHub attestation
+        run: |
+          set -euo pipefail
+          release_dir="dist/catalog/$GITHUB_REF_NAME"
+          cp "${{ steps.attest.outputs.bundle-path }}" "$release_dir/github-attestation.jsonl"
+          cd "$release_dir"
+          sha256sum github-attestation.jsonl >> SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: catalog-release-${{ github.ref_name }}
+          path: dist/catalog/${{ github.ref_name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish Draft Release
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: catalog-release-${{ github.ref_name }}
+          path: dist/catalog/${{ github.ref_name }}
+
+      - name: Create or replace draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          release_dir="dist/catalog/$tag"
+          cd "$release_dir"
+          sha256sum -c SHA256SUMS
+          cd - >/dev/null
+          assets=(
+            "$release_dir/catalog.runtime.json"
+            "$release_dir/catalog.public.json"
+            "$release_dir/catalog-release.json"
+            "$release_dir/github-attestation.jsonl"
+            "$release_dir/SHA256SUMS"
+          )
+          if gh release view "$tag" >/dev/null 2>&1; then
+            test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "true" || {
+              echo "Catalog release $tag is final and cannot be changed." >&2
+              exit 1
+            }
+            gh release upload "$tag" "${assets[@]}" --clobber
+            gh release edit "$tag" --draft=true --target "$(git rev-parse HEAD)"
+          else
+            gh release create "$tag" "${assets[@]}" --draft --verify-tag \
+              --target "$(git rev-parse HEAD)" --title "Catalog ${tag#catalog-v}"
+          fi

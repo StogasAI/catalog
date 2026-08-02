@@ -1,7 +1,15 @@
-import { createHash, createPrivateKey, sign } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createPrivateKey, sign } from 'node:crypto';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+	catalogArtifact,
+	catalogManifest,
+	canonicalJson,
+	parseSequence,
+	sha256,
+	stableJson
+} from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
@@ -14,13 +22,7 @@ mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
-const manifest = {
-	catalogSchema: 5,
-	public: publicCatalog.digest,
-	runtime: runtime.digest,
-	schema: 'stogas.catalog.release.v2',
-	sequence
-};
+const manifest = catalogManifest(repositoryRoot, sequence);
 const manifestBytes = canonicalJson(manifest);
 const privateKey = createPrivateKey(signingPrivateKey);
 if (privateKey.asymmetricKeyType !== 'ed25519') {
@@ -29,15 +31,15 @@ if (privateKey.asymmetricKeyType !== 'ed25519') {
 const signature = sign(
 	null,
 	Buffer.concat([
-		Buffer.from('stogas catalog release v2\n', 'utf8'),
+		Buffer.from('stogas catalog release v3\n', 'utf8'),
 		Buffer.from(manifestBytes, 'utf8')
 	]),
 	privateKey
-).toString('base64');
+).toString('base64url');
 const envelope = {
 	keyId: signingKeyId,
 	manifest,
-	schema: 'stogas.catalog.signed.v2',
+	schema: 'stogas.catalog.signed.v3',
 	signature
 };
 
@@ -54,9 +56,9 @@ writeFileSync(
 );
 
 function addBlob(filename) {
-	const sourcePath = join(repositoryRoot, 'generated', filename);
-	const bytes = readFileSync(sourcePath);
-	const digest = sha256(bytes);
+	const artifact = catalogArtifact(repositoryRoot, filename);
+	const { bytes } = artifact;
+	const digest = artifact.digest.slice('sha256:'.length);
 	const extension = filename.endsWith('.json') ? '.json' : '';
 	const relativePath = `blobs/sha256/${digest}${extension}`;
 	writeFileSync(join(outputRoot, relativePath), bytes);
@@ -66,40 +68,8 @@ function addBlob(filename) {
 	};
 }
 
-function parseSequence(value) {
-	if (!/^[1-9][0-9]*$/.test(value ?? '')) {
-		throw new Error('Release sequence must be a positive decimal integer.');
-	}
-	const parsed = Number(value);
-	if (!Number.isSafeInteger(parsed))
-		throw new Error('Release sequence exceeds the safe integer range.');
-	return parsed;
-}
-
 function requiredEnvironment(name) {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`${name} is required.`);
 	return value;
-}
-
-function sha256(value) {
-	return createHash('sha256').update(value).digest('hex');
-}
-
-function stableJson(value) {
-	return `${canonicalJson(value)}\n`;
-}
-
-function canonicalJson(value) {
-	return JSON.stringify(stableValue(value));
-}
-
-function stableValue(value) {
-	if (Array.isArray(value)) return value.map(stableValue);
-	if (!value || typeof value !== 'object') return value;
-	return Object.fromEntries(
-		Object.keys(value)
-			.sort()
-			.map((key) => [key, stableValue(value[key])])
-	);
 }

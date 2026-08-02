@@ -24,20 +24,24 @@ describe('catalog release metadata', () => {
 			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(envelope.schema).toBe('stogas.catalog.signed.v2');
+			expect(envelope.schema).toBe('stogas.catalog.signed.v3');
 			expect(envelope.keyId).toBe('test-key');
-			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v2');
+			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v3');
 			expect(envelope.manifest.catalogSchema).toBe(5);
 			expect(envelope.manifest.sequence).toBe(7);
 			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
 			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);
+			expect(envelope.manifest.source).toMatchObject({
+				repository: 'https://github.com/StogasAI/catalog',
+				tag: 'catalog-v7'
+			});
 			expect(readFileSync(join(output, 'latest.json'))).toEqual(envelopeBytes);
 			expect(
 				verify(
 					null,
-					Buffer.from(`stogas catalog release v2\n${canonicalJson(envelope.manifest)}`),
+					Buffer.from(`stogas catalog release v3\n${canonicalJson(envelope.manifest)}`),
 					publicKey,
-					Buffer.from(envelope.signature, 'base64')
+					Buffer.from(envelope.signature, 'base64url')
 				)
 			).toBe(true);
 		} finally {

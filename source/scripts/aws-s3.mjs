@@ -22,6 +22,7 @@ export async function getS3Object(key) {
 	}
 	return {
 		bytes: await readBoundedResponseBuffer(response, MAX_OBJECT_BYTES),
+		cacheControl: response.headers.get('cache-control'),
 		etag: response.headers.get('etag')
 	};
 }
