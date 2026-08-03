@@ -1,0 +1,22 @@
+deployments:
+  modelId: glm-5.1
+  routeIds: [chutes-chat-completions]
+  upstream:
+    model: zai-org/GLM-5.1-TEE
+    chuteId: b048fe26-0352-5c46-acf7-335e527e7f3d
+  release:
+    chuteVersion: 418df640-eb81-5e55-9827-9816fb4f98b9
+    modelRevision: f396cf805182f4ca10fa675e1a99815b3ca384db
+    imageId: ae476f71-ed8f-562e-b1af-49d49c948d6f
+    imageName: sglang
+    imageTag: nightly-2026032100
+    runtimeVersion: 0.6.6
+  aliases: [glm-5.1-tee]
+  weightPrecision: fp8
+  pricing:
+    input_tokens:
+      per_mill_tokens: '980000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '490000000000000000'
+    output_tokens:
+      per_mill_tokens: '3080000000000000000'

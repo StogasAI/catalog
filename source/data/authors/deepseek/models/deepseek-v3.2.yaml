@@ -1,0 +1,10 @@
+models:
+  authorId: deepseek
+  name: DeepSeek V3.2
+  family: DeepSeek
+  series: DeepSeek V3
+  flavors: [instruct]
+  contextWindowTokens: 131072
+  maxOutputTokens: 65536
+  inputModalities: [text]
+  outputModalities: [text]

@@ -1,0 +1,10 @@
+models:
+  authorId: qwen
+  name: Qwen3 32B
+  family: Qwen
+  series: Qwen3
+  flavors: [instruct]
+  contextWindowTokens: 40960
+  maxOutputTokens: 40960
+  inputModalities: [text]
+  outputModalities: [text]

@@ -1,0 +1,14 @@
+models:
+  authorId: mistral-ai
+  name: Mistral Nemo Instruct 2407
+  family: Mistral Nemo
+  series: Mistral Nemo
+  flavors: [instruct]
+  contextWindowTokens: 131072
+  maxOutputTokens: 131072
+  inputModalities: [text]
+  outputModalities: [text]
+  capabilities:
+    structuredOutputs: false
+  snapshot: 2024-07-01
+  releaseDate: 2024-07-18

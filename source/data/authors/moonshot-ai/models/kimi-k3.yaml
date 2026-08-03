@@ -1,0 +1,10 @@
+models:
+  authorId: moonshot-ai
+  name: Kimi K3
+  family: Kimi
+  series: Kimi K3
+  flavors: [instruct]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 65535
+  inputModalities: [text, image, video]
+  outputModalities: [text]

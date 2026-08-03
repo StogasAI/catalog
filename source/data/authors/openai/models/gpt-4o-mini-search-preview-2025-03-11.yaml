@@ -1,4 +1,3 @@
----
 models:
   authorId: openai
   name: GPT-4o mini Search Preview
@@ -6,16 +5,14 @@ models:
   family: GPT
   series: GPT-4o mini
   flavors: [search]
-  limits:
-    contextTokens: 128000
-    outputTokens: 16384
+  contextWindowTokens: 128000
+  maxOutputTokens: 16384
+  inputModalities: [text]
+  outputModalities: [text]
   capabilities:
-    inputModalities: [text]
-    outputModalities: [text]
     functionCalling: false
     parallelFunctionCalling: false
     promptCaching: false
-  reasoningEfforts: []
   snapshot: 2025-03-11
   releaseDate: 2025-03-11
   knowledgeCutoff: 2023-10-01

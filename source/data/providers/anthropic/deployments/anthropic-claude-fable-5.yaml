@@ -1,17 +1,14 @@
----
 deployments:
   modelId: claude-fable-5
   routeIds: [anthropic-messages]
   upstream:
     model: claude-fable-5
-    fixedRequest:
-      speed: standard
-      inference_geo: global
-      service_tier: standard_only
-  default: true
-  aliases: []
-  dataHandling:
-    retentionDays: 30
+    speed: standard
+    inferenceGeo: global
+    serviceTier: standard_only
+  overrides:
+    dataHandling:
+      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '10000000000000000000'
@@ -23,4 +20,3 @@ deployments:
       per_mill_tokens: '20000000000000000000'
     output_tokens:
       per_mill_tokens: '50000000000000000000'
-  deprecationDate: null

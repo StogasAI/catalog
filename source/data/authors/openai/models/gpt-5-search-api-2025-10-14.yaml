@@ -1,4 +1,3 @@
----
 models:
   authorId: openai
   name: GPT-5 Search API
@@ -6,14 +5,10 @@ models:
   family: GPT
   series: GPT-5
   flavors: [search]
-  limits:
-    contextTokens: 200000
-    outputTokens: 128000
-  capabilities:
-    inputModalities: [text, image]
-    outputModalities: [text]
-  reasoningEfforts: []
+  contextWindowTokens: 200000
+  maxOutputTokens: 128000
+  inputModalities: [text, image]
+  outputModalities: [text]
   snapshot: 2025-10-14
   releaseDate: 2025-10-14
   knowledgeCutoff: 2024-09-30
-  deprecationDate: null

@@ -1,0 +1,22 @@
+deployments:
+  modelId: qwen3-32b
+  routeIds: [chutes-chat-completions]
+  upstream:
+    model: Qwen/Qwen3-32B-TEE
+    chuteId: ac059e33-eb27-541c-b9a9-24b214036475
+  release:
+    chuteVersion: d2573964-caf0-54cb-b8f6-0897ca370da9
+    modelRevision: aa55da1ecc13d006e8b8e4f54579b1ea8c3db2df
+    imageId: a3028618-6f8f-5afc-9a51-8eff25f2e5c8
+    imageName: sglang
+    imageTag: 0.5.13-post1c
+    runtimeVersion: 0.6.11.rc2
+  aliases: [qwen3-32b-tee]
+  weightPrecision: fp8
+  pricing:
+    input_tokens:
+      per_mill_tokens: '104000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '52000000000000000'
+    output_tokens:
+      per_mill_tokens: '416000000000000000'

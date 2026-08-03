@@ -1,0 +1,10 @@
+models:
+  authorId: google
+  name: Gemma 4 31B Turbo
+  family: Gemma
+  series: Gemma 4
+  flavors: [instruct]
+  contextWindowTokens: 131072
+  maxOutputTokens: 65536
+  inputModalities: [text, image]
+  outputModalities: [text]

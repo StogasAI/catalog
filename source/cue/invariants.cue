@@ -1,9 +1,9 @@
 package catalog
 
-authors:     [#Id]: #Author
-models:      [#Id]: #Model
-providers:   [#Id]: #Provider
-routes:      [#Id]: #Route
+authors: [#Id]:     #Author
+models: [#Id]:      #Model
+providers: [#Id]:   #Provider
+routes: [#Id]:      #Route
 deployments: [#Id]: #Deployment
 
 #Catalog: {
@@ -32,6 +32,10 @@ deployments: [#Id]: #Deployment
 				}
 				if routes[routeId].providerId == "anthropic" {
 					"\(id):anthropicUpstream:\(routeId)": deployment.upstream & #AnthropicUpstream
+				}
+				if routes[routeId].providerId == "chutes" {
+					"\(id):chutesUpstream:\(routeId)": deployment.upstream & #ChutesUpstream
+					"\(id):chutesRelease:\(routeId)": deployment & {release: #ChutesRelease}
 				}
 			}
 		}

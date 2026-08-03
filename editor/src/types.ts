@@ -11,7 +11,7 @@ export type CatalogGraph = {
 };
 
 export type Catalog = {
-	schema: 'stogas.catalog.public.v5';
+	schema: 'stogas.catalog.public.v1';
 	graph: CatalogGraph;
 };
 
@@ -32,6 +32,15 @@ export type LineageNode = {
 	type: NodeType;
 	id: string;
 	value: Record<string, unknown>;
+};
+
+export type EffectiveFact = {
+	origin: {
+		type: NodeType;
+		id: string;
+	};
+	path: string;
+	value: unknown;
 };
 
 export type CatalogFlow = {

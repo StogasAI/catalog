@@ -1,6 +1,39 @@
 package catalog
 
-#Pricing: [#Id]: close({
-	[#Id]: #AtomUSD
+#FlatTokenRate: close({
+	per_mill_tokens: #AtomUSD
 })
 
+#ContextTokenRate: close({
+	per_mill_context_lte_272k: #AtomUSD
+	per_mill_context_gt_272k:  #AtomUSD
+})
+
+#TokenRate: #FlatTokenRate | #ContextTokenRate
+
+#CallRate: close({
+	per_1k_calls: #AtomUSD
+})
+
+#SearchContextCallRate: close({
+	per_1k_search_context_low_calls:    #AtomUSD
+	per_1k_search_context_medium_calls: #AtomUSD
+	per_1k_search_context_high_calls:   #AtomUSD
+})
+
+#Pricing: close({
+	input_tokens?:             #TokenRate
+	cached_input_tokens?:      #TokenRate
+	cache_write_input_tokens?: #TokenRate
+	cache_write_5m_input_tokens?: #TokenRate
+	cache_write_1h_input_tokens?: #TokenRate
+	output_tokens?:            #TokenRate
+	reasoning_tokens?:         #TokenRate
+
+	anthropic_web_search_calls?:                              #CallRate
+	openai_chat_completion_search_model_calls?:               #CallRate
+	openai_chat_completion_search_preview_model_calls?:       #SearchContextCallRate
+	openai_responses_web_search_calls?:                       #CallRate
+	openai_responses_web_search_preview_calls?:               #CallRate
+	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
+})

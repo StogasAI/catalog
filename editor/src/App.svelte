@@ -18,6 +18,7 @@
 		completeUnambiguousGraphSelection,
 		concreteGraphChains,
 		decorateFlow,
+		effectiveDeploymentFacts,
 		extendGraphSelection,
 		filterFlow,
 		lineageForSelection,
@@ -67,6 +68,15 @@
 		})
 	);
 	const visibleLineage = $derived(dedupedVisibleLineage(lineage));
+	const effectiveFacts = $derived(
+		effectiveDeploymentFacts(catalog, contextDeploymentId, contextRouteId)
+	);
+	const effectiveRouteRequired = $derived(
+		contextDeploymentId !== '' &&
+		!contextRouteId &&
+		Array.isArray(catalog.graph.deployments[contextDeploymentId]?.routeIds) &&
+		catalog.graph.deployments[contextDeploymentId].routeIds.length > 1
+	);
 	const decoratedFlow = $derived(
 		decorateFlow(flow, selectedKey, selectedEdgeId, selectedGraphKeys, graphChains)
 	);
@@ -265,6 +275,10 @@
 		return attributeLabel(type);
 	}
 
+	function factValue(value: unknown) {
+		return typeof value === 'string' ? value : JSON.stringify(value);
+	}
+
 	function dedupedVisibleLineage(nodes: LineageNode[]) {
 		const seen = new SvelteSet<string>();
 		const visible: LineageNode[] = [];
@@ -418,6 +432,42 @@
 				{/each}
 			</div>
 		</section>
+
+		{#if contextDeploymentId}
+			<section class="effective-card" aria-label="Effective deployment attributes">
+				<div class="section-head">
+					<div>
+						<span>Effective deployment</span>
+						<strong
+							>{effectiveRouteRequired
+								? 'Select one route'
+								: `${effectiveFacts.length} attributes with owners`}</strong
+						>
+					</div>
+				</div>
+				{#if effectiveRouteRequired}
+					<p class="empty">Select a compatible route in the graph.</p>
+				{:else}
+					<div class="effective-table">
+						{#each effectiveFacts as fact (fact.path)}
+							<div class="effective-row">
+								<code>{fact.path}</code>
+								<output>{factValue(fact.value)}</output>
+								<button
+									type="button"
+									class="origin-badge"
+									data-type={fact.origin.type}
+									title={`${fact.origin.type}: ${fact.origin.id}`}
+									onclick={() => selectChainNode(fact.origin.type, fact.origin.id)}
+								>
+									{fact.origin.type}
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
 
 		<section class="source-card" aria-label="Raw source file">
 			<div class="source-head">

@@ -1,0 +1,22 @@
+deployments:
+  modelId: mistral-nemo-instruct-2407
+  routeIds: [chutes-chat-completions]
+  upstream:
+    model: unsloth/Mistral-Nemo-Instruct-2407-TEE
+    chuteId: 7725a31d-28df-5bb7-9d29-c23b49df5472
+  release:
+    chuteVersion: 3fe0aeb0-9da2-58cf-9e2d-4e6ec72288b1
+    modelRevision: e9976040f42d8a5590ed58cefe973061b3f973b5
+    imageId: e8a097de-bebd-5dfe-b69f-532a6c06a57e
+    imageName: sglang
+    imageTag: nightly-2026050600
+    runtimeVersion: 0.6.8
+  aliases: [mistral-nemo-instruct-2407-tee]
+  weightPrecision: bf16
+  pricing:
+    input_tokens:
+      per_mill_tokens: '24500000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '12250000000000000'
+    output_tokens:
+      per_mill_tokens: '97800000000000000'

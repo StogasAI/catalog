@@ -1,44 +1,71 @@
 package catalog
 
 #OpenAIUpstream: close({
-	model: #UpstreamId
-	fixedRequest: close({
-		service_tier: "default" | "flex" | "priority"
-	})
+	model:       #UpstreamId
+	serviceTier: "default" | "flex" | "priority"
 })
 
 #AnthropicUpstream: close({
-	model: #UpstreamId
-	fixedRequest: close({
-		speed?:         "standard" | "fast"
-		inference_geo?: "global" | "us"
-		service_tier:  "standard_only"
-	})
+	model:        #UpstreamId
+	serviceTier:  "standard_only"
+	speed?:       "standard" | "fast"
+	inferenceGeo?: "global" | "us"
 })
 
-#Upstream: #OpenAIUpstream | #AnthropicUpstream
+#ChutesUpstream: close({
+	model:   #UpstreamId
+	chuteId: #Uuid
+})
+
+#ChutesRelease: close({
+	chuteVersion:   #Uuid
+	modelRevision:  #GitRevision
+	imageId:        #Uuid
+	imageName:      string & !=""
+	imageTag:       string & !=""
+	runtimeVersion: string & !=""
+})
+
+#Upstream: close({
+	model:         #UpstreamId
+	chuteId?:      #Uuid
+	serviceTier?:  "default" | "flex" | "priority" | "standard_only"
+	speed?:        "standard" | "fast"
+	inferenceGeo?: "global" | "us"
+})
+
+#DeploymentCapabilityOverrides: close({
+	streaming?:               bool
+	cancellation?:            bool
+	functionCalling?:         bool
+	parallelFunctionCalling?: bool
+	promptCaching?:           bool
+	structuredOutputs?:       bool
+	systemMessages?:          bool
+	toolChoice?:              bool
+	webSearch?:               bool
+	urlContext?:              bool
+	pdfInput?:                bool
+})
 
 #Deployment: close({
-	modelId:  #Id
+	modelId: #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
-	default: bool
-	aliases: [...#Slug]
-	limits?: close({
-		contextTokens?: int & >0
-		outputTokens?:  int & >0
-	})
-	capabilities?: #RouteCapabilityOverrides
-	reasoningEfforts?: [...#ReasoningEffort]
-	dataHandling?: #DataHandlingOverride
-	moderated?:    bool
+	release?: #ChutesRelease
+	aliases?: [...#Slug]
 	weightPrecision?: #WeightPrecision
-	tee?: close({
-		status:                #TeeStatus
-		mechanism:             #TeeMechanism
-		evidenceUri?:          string & !=""
-		attestationStatusUri?: string & !=""
+	overrides?: close({
+		contextWindowTokens?: int & >0
+		maxOutputTokens?:     int & >0
+		inputModalities?: [#Modality, ...#Modality]
+		outputModalities?: [#Modality, ...#Modality]
+		capabilities?: #DeploymentCapabilityOverrides
+		reasoningEfforts?: [...#ReasoningEffort]
+		dataHandling?:    #DataHandlingOverride
+		moderated?:       bool
+		tee?:             #TeeOverride
+		deprecationDate?: #MaybeDate
 	})
 	pricing: #Pricing
-	deprecationDate: #MaybeDate
 })

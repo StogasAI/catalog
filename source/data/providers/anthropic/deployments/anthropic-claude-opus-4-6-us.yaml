@@ -1,17 +1,14 @@
----
 deployments:
   modelId: claude-opus-4-6
   routeIds: [anthropic-messages]
   upstream:
     model: claude-opus-4-6
-    fixedRequest:
-      speed: standard
-      inference_geo: us
-      service_tier: standard_only
-  default: false
-  aliases: []
-  dataHandling:
-    processingRegions: [us]
+    speed: standard
+    inferenceGeo: us
+    serviceTier: standard_only
+  overrides:
+    dataHandling:
+      processingRegions: [us]
   pricing:
     input_tokens:
       per_mill_tokens: '5500000000000000000'
@@ -23,4 +20,3 @@ deployments:
       per_mill_tokens: '11000000000000000000'
     output_tokens:
       per_mill_tokens: '27500000000000000000'
-  deprecationDate: null

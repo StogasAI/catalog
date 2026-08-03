@@ -1,0 +1,12 @@
+models:
+  authorId: nvidia
+  name: Nemotron 3 Nano Omni 30B
+  family: Nemotron
+  series: Nemotron 3
+  flavors: [instruct]
+  contextWindowTokens: 131072
+  maxOutputTokens: 131072
+  inputModalities: [text, image, audio, video]
+  outputModalities: [text]
+  capabilities:
+    structuredOutputs: false

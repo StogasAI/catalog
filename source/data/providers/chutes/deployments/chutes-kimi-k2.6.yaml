@@ -1,0 +1,22 @@
+deployments:
+  modelId: kimi-k2.6
+  routeIds: [chutes-chat-completions]
+  upstream:
+    model: moonshotai/Kimi-K2.6-TEE
+    chuteId: aac09863-35b4-5d9b-9b67-6e6a9d54273a
+  release:
+    chuteVersion: ce8c3085-6e7a-5bf0-8556-b0741b89ec7e
+    modelRevision: d9cb81bc88b9bd2dc89877599f23c614ded72b9c
+    imageId: 5bbb13bc-c050-518d-bb55-79994b540ec2
+    imageName: vllm
+    imageTag: nightly-2026031400
+    runtimeVersion: 0.6.6
+  aliases: [kimi-k2.6-tee]
+  weightPrecision: int4
+  pricing:
+    input_tokens:
+      per_mill_tokens: '660000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '330000000000000000'
+    output_tokens:
+      per_mill_tokens: '3500000000000000000'

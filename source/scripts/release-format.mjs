@@ -12,10 +12,10 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 		tree: git(repositoryRoot, ['rev-parse', 'HEAD^{tree}'])
 	};
 	return {
-		catalogSchema: 5,
+		catalogSchema: 1,
 		public: catalogArtifact(repositoryRoot, 'catalog.public.json').digest,
 		runtime: catalogArtifact(repositoryRoot, 'catalog.runtime.json').digest,
-		schema: 'stogas.catalog.release.v3',
+		schema: 'stogas.catalog.release.v1',
 		sequence,
 		source
 	};

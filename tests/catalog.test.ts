@@ -5,7 +5,7 @@ import runtimeCatalog from '../generated/catalog.runtime.json';
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
 const canonicalEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
-describe('compiled catalog v5', () => {
+describe('compiled catalog v1', () => {
 	test('contains exactly the five useful graph primitives', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -82,25 +82,34 @@ describe('compiled catalog v5', () => {
 		}
 	});
 
-	test('materializes one default deployment for every model and route', () => {
-		for (const [routeId] of Object.entries(runtimeCatalog.graph.routes)) {
+	test('derives one canonical base deployment without a default flag', () => {
+		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
+			expect(deployment).not.toHaveProperty('default');
+		}
+		for (const [routeId, route] of Object.entries(runtimeCatalog.graph.routes)) {
 			const deployments = Object.entries(runtimeCatalog.graph.deployments).filter(
 				([, deployment]) => deployment.routeIds.includes(routeId)
 			);
 			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
-				expect(
-					deployments.filter(
-						([, deployment]) => deployment.modelId === modelId && deployment.default
-					)
-				).toHaveLength(1);
+				const matchingIds = deployments
+					.filter(([, deployment]) => deployment.modelId === modelId)
+					.map(([deploymentId]) => deploymentId);
+				if (matchingIds.length > 1) {
+					expect(matchingIds).toContain(`${route.providerId}-${modelId}`);
+				}
 			}
 		}
 	});
 
 	test('materializes runtime admission and billing facts', () => {
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment.limits.contextTokens).toBeGreaterThan(0);
-			expect(deployment.limits.outputTokens).toBeGreaterThan(0);
+			expect(deployment.contextWindowTokens).toBeGreaterThan(0);
+			expect(deployment.maxOutputTokens).toBeGreaterThan(0);
+			expect(deployment.maxOutputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
+			expect(deployment.inputModalities.length).toBeGreaterThan(0);
+			expect(deployment.outputModalities.length).toBeGreaterThan(0);
+			expect(deployment.capabilities).not.toHaveProperty('inputModalities');
+			expect(deployment.capabilities).not.toHaveProperty('outputModalities');
 			for (const effort of deployment.reasoningEfforts) {
 				expect(canonicalEfforts.has(effort)).toBe(true);
 			}
@@ -126,12 +135,10 @@ describe('compiled catalog v5', () => {
 		const deployment = runtimeCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'];
 		expect(deployment.routeIds).toEqual(['anthropic-messages']);
 		expect(deployment.upstream).toEqual({
+			inferenceGeo: 'us',
 			model: 'claude-opus-4-8',
-			fixedRequest: {
-				inference_geo: 'us',
-				service_tier: 'standard_only',
-				speed: 'fast'
-			}
+			serviceTier: 'standard_only',
+			speed: 'fast'
 		});
 		expect(
 			publicCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].dataHandling
@@ -148,7 +155,7 @@ describe('compiled catalog v5', () => {
 			'openai-gpt-5.6-terra-fast'
 		] as const) {
 			expect(deployments[fastId]).toMatchObject({
-				upstream: { fixedRequest: { service_tier: 'priority' } }
+				upstream: { serviceTier: 'priority' }
 			});
 		}
 		for (const retiredId of [
@@ -250,7 +257,7 @@ describe('compiled catalog v5', () => {
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v5');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v1');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v1');
 	});
 });

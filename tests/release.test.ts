@@ -24,10 +24,10 @@ describe('catalog release metadata', () => {
 			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(envelope.schema).toBe('stogas.catalog.signed.v3');
+			expect(envelope.schema).toBe('stogas.catalog.signed.v1');
 			expect(envelope.keyId).toBe('test-key');
-			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v3');
-			expect(envelope.manifest.catalogSchema).toBe(5);
+			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v1');
+			expect(envelope.manifest.catalogSchema).toBe(1);
 			expect(envelope.manifest.sequence).toBe(7);
 			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
 			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -39,7 +39,7 @@ describe('catalog release metadata', () => {
 			expect(
 				verify(
 					null,
-					Buffer.from(`stogas catalog release v3\n${canonicalJson(envelope.manifest)}`),
+					Buffer.from(`stogas catalog release v1\n${canonicalJson(envelope.manifest)}`),
 					publicKey,
 					Buffer.from(envelope.signature, 'base64url')
 				)

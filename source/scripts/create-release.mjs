@@ -31,7 +31,7 @@ if (privateKey.asymmetricKeyType !== 'ed25519') {
 const signature = sign(
 	null,
 	Buffer.concat([
-		Buffer.from('stogas catalog release v3\n', 'utf8'),
+		Buffer.from('stogas catalog release v1\n', 'utf8'),
 		Buffer.from(manifestBytes, 'utf8')
 	]),
 	privateKey
@@ -39,7 +39,7 @@ const signature = sign(
 const envelope = {
 	keyId: signingKeyId,
 	manifest,
-	schema: 'stogas.catalog.signed.v3',
+	schema: 'stogas.catalog.signed.v1',
 	signature
 };
 

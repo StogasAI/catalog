@@ -1,8 +1,19 @@
----
 providers:
   name: OpenAI
   aliases: [open-ai]
   headquarteredCountry: US
+  capabilities:
+    streaming: true
+    cancellation: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    promptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+    webSearch: true
+    urlContext: false
+    pdfInput: false
   dataHandling:
     processingRegions: [multi-region]
     storageRegions: []
@@ -10,10 +21,3 @@ providers:
     trainingUse: false
     zeroDataRetention: false
   moderated: true
-  pricing:
-    openai_responses_web_search_calls:
-      per_1k_calls: '10000000000000000000'
-    openai_responses_web_search_preview_calls:
-      per_1k_calls: '10000000000000000000'
-    openai_responses_web_search_preview_non_reasoning_calls:
-      per_1k_calls: '25000000000000000000'

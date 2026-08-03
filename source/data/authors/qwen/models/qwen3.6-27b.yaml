@@ -1,0 +1,10 @@
+models:
+  authorId: qwen
+  name: Qwen3.6 27B
+  family: Qwen
+  series: Qwen3.6
+  flavors: [instruct]
+  contextWindowTokens: 262144
+  maxOutputTokens: 65536
+  inputModalities: [text, image]
+  outputModalities: [text]

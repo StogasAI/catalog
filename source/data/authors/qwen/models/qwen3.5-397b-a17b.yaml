@@ -1,0 +1,10 @@
+models:
+  authorId: qwen
+  name: Qwen3.5 397B A17B
+  family: Qwen
+  series: Qwen3.5
+  flavors: [instruct]
+  contextWindowTokens: 262144
+  maxOutputTokens: 65536
+  inputModalities: [text, image]
+  outputModalities: [text]

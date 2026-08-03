@@ -6,6 +6,7 @@ const MAX_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_OBJECT_BYTES = 128 * 1024 * 1024;
 const MAX_ERROR_BYTES = 64 * 1024;
+const CATALOG_RETENTION_YEARS = 100;
 
 export async function getS3Object(key) {
 	const response = await request('GET', key);
@@ -36,17 +37,28 @@ export async function putS3Object(key, bytes, options = {}) {
 		'x-amz-checksum-sha256': createHash('sha256').update(bytes).digest('base64'),
 		'x-amz-sdk-checksum-algorithm': 'SHA256'
 	};
-	if (options.immutable) {
+	if (options.immutable && objectLockEnabled()) {
 		headers['x-amz-object-lock-mode'] = 'GOVERNANCE';
-		headers['x-amz-object-lock-retain-until-date'] = new Date(
-			Date.now() + 30 * 24 * 60 * 60 * 1000
-		).toISOString();
+		headers['x-amz-object-lock-retain-until-date'] = catalogRetentionUntil().toISOString();
 	}
 	const response = await request('PUT', key, bytes, headers);
 	if (!response.ok) {
 		throw await responseError(response, `S3 PUT ${key}`);
 	}
 	return { etag: response.headers.get('etag') };
+}
+
+function catalogRetentionUntil(now = new Date()) {
+	const value = new Date(now);
+	value.setUTCFullYear(value.getUTCFullYear() + CATALOG_RETENTION_YEARS);
+	return value;
+}
+
+function objectLockEnabled() {
+	const configured = process.env.AWS_OBJECT_LOCK_ENABLED?.trim().toLowerCase();
+	if (!configured || configured === 'true') return true;
+	if (configured === 'false') return false;
+	throw new Error('AWS_OBJECT_LOCK_ENABLED must be true or false');
 }
 
 async function request(method, key, body, extraHeaders = {}) {

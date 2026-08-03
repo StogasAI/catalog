@@ -3,6 +3,7 @@ import type {
 	Catalog,
 	CatalogFlow,
 	CatalogGraph,
+	EffectiveFact,
 	GraphChain,
 	GraphNodeData,
 	LineageNode,
@@ -394,6 +395,165 @@ export function lineageForSelection(
 			catalog.graph[`${selected.type}s` as keyof CatalogGraph][selected.id] ?? {}
 		)
 	];
+}
+
+export function effectiveDeploymentFacts(
+	catalog: Catalog,
+	deploymentId: string,
+	preferredRouteId = ''
+): EffectiveFact[] {
+	const deployment = catalog.graph.deployments[deploymentId];
+	if (!deployment) return [];
+	const modelId = String(deployment.modelId ?? '');
+	const model = catalog.graph.models[modelId] ?? {};
+	const deploymentRouteIds = routeIds(deployment);
+	if (deploymentRouteIds.length > 1 && !deploymentRouteIds.includes(preferredRouteId)) return [];
+	const routeId = preferredRouteId || deploymentRouteIds[0] || '';
+	const route = catalog.graph.routes[routeId] ?? {};
+	const providerId = String(route.providerId ?? '');
+	const provider = catalog.graph.providers[providerId] ?? {};
+
+	return flattenFacts(deployment)
+		.map(({ path, value }) => ({
+			path: path.join('.'),
+			value,
+			origin: factOrigin({
+				catalog,
+				deploymentId,
+				deploymentRouteIds,
+				model,
+				modelId,
+				path,
+				provider,
+				providerId,
+				route,
+				routeId,
+				value
+			})
+		}))
+		.filter(
+			(fact) =>
+				fact.origin.type !== 'route' || fact.origin.id === routeId || fact.path === 'routeIds'
+		)
+		.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function factOrigin(input: {
+	catalog: Catalog;
+	deploymentId: string;
+	deploymentRouteIds: string[];
+	model: Record<string, unknown>;
+	modelId: string;
+	path: string[];
+	provider: Record<string, unknown>;
+	providerId: string;
+	route: Record<string, unknown>;
+	routeId: string;
+	value: unknown;
+}): EffectiveFact['origin'] {
+	const deploymentOrigin = { type: 'deployment' as const, id: input.deploymentId };
+	const modelOrigin = { type: 'model' as const, id: input.modelId };
+	const [root, ...rest] = input.path;
+	if (!root) return deploymentOrigin;
+
+	if (
+		[
+			'contextWindowTokens',
+			'deprecationDate',
+			'inputModalities',
+			'maxOutputTokens',
+			'outputModalities',
+			'reasoningEfforts'
+		].includes(root)
+	) {
+		return sameValue(input.value, valueAt(input.model, input.path))
+			? modelOrigin
+			: deploymentOrigin;
+	}
+
+	if (root === 'capabilities') {
+		const modelCapabilities = objectAt(input.model, ['capabilities']);
+		const routeCapabilities = objectAt(input.route, ['capabilities']);
+		const capability = rest[0] ?? '';
+		const modelOwnsCapability = Object.prototype.hasOwnProperty.call(modelCapabilities, capability);
+		const expected = modelOwnsCapability
+			? valueAt(modelCapabilities, rest)
+			: valueAt(routeCapabilities, rest);
+		if (!sameValue(input.value, expected)) return deploymentOrigin;
+		if (modelOwnsCapability) return modelOrigin;
+		return routeFactOrigin(input, input.path);
+	}
+
+	if (root === 'dataHandling' || root === 'moderated' || root === 'tee') {
+		if (!sameValue(input.value, valueAt(input.route, input.path))) return deploymentOrigin;
+		return routeFactOrigin(input, input.path);
+	}
+
+	if (root === 'pricing') {
+		const candidateRouteIds = [
+			input.routeId,
+			...input.deploymentRouteIds.filter((candidate) => candidate !== input.routeId)
+		];
+		for (const candidateRouteId of candidateRouteIds) {
+			const candidateRoute = input.catalog.graph.routes[candidateRouteId] ?? {};
+			const candidateValue = valueAt(candidateRoute, input.path);
+			if (candidateValue !== undefined && sameValue(input.value, candidateValue)) {
+				return { type: 'route', id: candidateRouteId };
+			}
+		}
+	}
+
+	return deploymentOrigin;
+}
+
+function routeFactOrigin(
+	input: {
+		provider: Record<string, unknown>;
+		providerId: string;
+		routeId: string;
+		value: unknown;
+	},
+	path: string[]
+): EffectiveFact['origin'] {
+	if (sameValue(input.value, valueAt(input.provider, path))) {
+		return { type: 'provider', id: input.providerId };
+	}
+	return { type: 'route', id: input.routeId };
+}
+
+function flattenFacts(value: Record<string, unknown>, prefix: string[] = []) {
+	const facts: { path: string[]; value: unknown }[] = [];
+	for (const [key, child] of Object.entries(value)) {
+		const path = [...prefix, key];
+		if (child && typeof child === 'object' && !Array.isArray(child)) {
+			const nested = flattenFacts(child as Record<string, unknown>, path);
+			if (nested.length) facts.push(...nested);
+			else facts.push({ path, value: child });
+		} else {
+			facts.push({ path, value: child });
+		}
+	}
+	return facts;
+}
+
+function valueAt(value: Record<string, unknown>, path: string[]): unknown {
+	let current: unknown = value;
+	for (const key of path) {
+		if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+		current = (current as Record<string, unknown>)[key];
+	}
+	return current;
+}
+
+function objectAt(value: Record<string, unknown>, path: string[]) {
+	const result = valueAt(value, path);
+	return result && typeof result === 'object' && !Array.isArray(result)
+		? (result as Record<string, unknown>)
+		: {};
+}
+
+function sameValue(left: unknown, right: unknown) {
+	return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function deploymentLineage(catalog: Catalog, deploymentId: string, preferredRouteId?: string) {

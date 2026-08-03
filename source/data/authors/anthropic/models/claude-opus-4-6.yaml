@@ -1,19 +1,12 @@
----
 models:
   authorId: anthropic
   name: Claude Opus 4.6
-  aliases: []
   family: Claude
   series: Claude Opus
-  flavors: []
-  limits:
-    contextTokens: 1000000
-    outputTokens: 128000
-  capabilities:
-    inputModalities: [text, image]
-    outputModalities: [text]
+  contextWindowTokens: 1000000
+  maxOutputTokens: 128000
+  inputModalities: [text, image]
+  outputModalities: [text]
   reasoningEfforts: [none, low, medium, high, max]
-  snapshot: null
   releaseDate: 2026-02-05
   knowledgeCutoff: 2025-05-01
-  deprecationDate: null

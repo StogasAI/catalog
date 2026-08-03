@@ -3,18 +3,18 @@ package catalog
 #Model: close({
 	authorId: #Id
 	name:     string & !=""
-	aliases:  [...#Slug]
-	family:   string
-	series:   string
+	aliases?: [...#Slug]
+	family: string
+	series: string
 	derivedFrom?: [...#Id]
-	flavors: [...#Flavor]
-	limits: close({
-		contextTokens: int & >0
-		outputTokens:  int & >0
-	})
-	capabilities: close({
-		inputModalities:  [#Modality, ...#Modality]
-		outputModalities: [#Modality, ...#Modality]
+	flavors?: [...#Flavor]
+	// Maximum active sequence for one generation: provider-counted input plus output.
+	contextWindowTokens: int & >0
+	// Maximum generated output inside contextWindowTokens; it does not extend the window.
+	maxOutputTokens: int & >0
+	inputModalities: [#Modality, ...#Modality]
+	outputModalities: [#Modality, ...#Modality]
+	capabilities?: close({
 		streaming?:               bool
 		cancellation?:            bool
 		functionCalling?:         bool
@@ -27,9 +27,9 @@ package catalog
 		urlContext?:              bool
 		pdfInput?:                bool
 	})
-	reasoningEfforts: [...#ReasoningEffort]
-	snapshot:        #MaybeDate
-	releaseDate:     #MaybeDate
-	knowledgeCutoff: #MaybeDate
-	deprecationDate: #MaybeDate
+	reasoningEfforts?: [...#ReasoningEffort]
+	snapshot?:        #MaybeDate
+	releaseDate?:     #MaybeDate
+	knowledgeCutoff?: #MaybeDate
+	deprecationDate?: #MaybeDate
 })

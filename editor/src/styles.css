@@ -471,6 +471,7 @@ input {
 }
 
 .chain-card,
+.effective-card,
 .source-card {
 	background: #111821;
 	border: 1px solid #253346;
@@ -482,6 +483,75 @@ input {
 	display: grid;
 	gap: 0.65rem;
 	min-height: 0;
+}
+
+.effective-card {
+	display: grid;
+	gap: 0.55rem;
+}
+
+.effective-table {
+	display: grid;
+	max-height: min(52vh, 38rem);
+	overflow: auto;
+}
+
+.effective-row {
+	align-items: start;
+	border-bottom: 1px solid var(--border);
+	display: grid;
+	gap: 0.25rem 0.55rem;
+	grid-template-columns: minmax(8rem, 0.9fr) minmax(10rem, 1.25fr) auto;
+	padding: 0.42rem 0;
+}
+
+.effective-row:last-child {
+	border-bottom: 0;
+}
+
+.effective-row code,
+.effective-row output {
+	font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+	font-size: 0.7rem;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.effective-row code {
+	color: var(--muted-strong);
+}
+
+.effective-row output {
+	color: var(--text);
+}
+
+.origin-badge {
+	border: 0;
+	border-radius: 999px;
+	color: #fff;
+	font-size: 0.58rem;
+	font-weight: 850;
+	line-height: 1;
+	min-height: 1.25rem;
+	padding: 0.2rem 0.42rem;
+	text-transform: uppercase;
+}
+
+.origin-badge[data-type='model'] {
+	background: #166534;
+}
+
+.origin-badge[data-type='provider'] {
+	background: #f59e0b;
+	color: #111827;
+}
+
+.origin-badge[data-type='route'] {
+	background: #7c3aed;
+}
+
+.origin-badge[data-type='deployment'] {
+	background: #e11d48;
 }
 
 .source-card textarea {
@@ -913,6 +983,7 @@ button.secondary {
 }
 
 .shell .chain-card,
+.shell .effective-card,
 .shell .source-card {
 	background: var(--surface);
 	border-color: var(--border);

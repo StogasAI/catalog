@@ -29,11 +29,14 @@ package catalog
 })
 
 #Route: close({
-	providerId:    #Id
-	endpoint:      string & =~"^https://"
-	interfaces:    [#Interface, ...#Interface]
-	capabilities?: #RouteCapabilityOverrides
-	dataHandling?: #DataHandlingOverride
-	moderated?:    bool
-	pricing?:      #Pricing
+	providerId: #Id
+	endpoint:   string & =~"^https://"
+	interfaces: [#Interface, ...#Interface]
+	pricing?: #Pricing
+	tee?: #Tee
+	overrides?: close({
+		capabilities?: #RouteCapabilityOverrides
+		dataHandling?: #DataHandlingOverride
+		moderated?:    bool
+	})
 })

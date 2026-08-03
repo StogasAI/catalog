@@ -23,14 +23,25 @@ const sequence = parseSequence(process.argv[3]);
 const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
 const targetBucket = process.argv[5]?.trim();
-const latestCacheControl = 'public, max-age=0, s-maxage=5, must-revalidate, stale-if-error=0';
+const latestBrowserCacheControl = 'public, max-age=0, must-revalidate, stale-if-error=0';
+const latestEdgeCacheControl = 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0';
 const immutableCacheControl = 'public, max-age=31536000, immutable';
 const requestTimeoutMs = 30_000;
 const maxObjectBytes = 128 * 1024 * 1024;
 const maxErrorBytes = 64 * 1024;
 const destinations = [
-	{ get: getR2Object, name: 'R2', put: putR2Object },
-	{ get: getS3Object, name: 'S3', put: putS3Object }
+	{
+		get: getR2Object,
+		latestCacheControl: latestBrowserCacheControl,
+		name: 'R2',
+		put: putR2Object
+	},
+	{
+		get: getS3Object,
+		latestCacheControl: latestEdgeCacheControl,
+		name: 'S3',
+		put: putS3Object
+	}
 ];
 
 if (action === 'prepare') {
@@ -255,8 +266,8 @@ function verifyIndependentBuild(proposalRoot) {
 function parseEnvelope(path) {
 	const envelope = parseJsonFile(path);
 	if (
-		envelope?.schema !== 'stogas.catalog.signed.v3' ||
-		envelope.manifest?.schema !== 'stogas.catalog.release.v3' ||
+		envelope?.schema !== 'stogas.catalog.signed.v1' ||
+		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
 		envelope.manifest.sequence !== sequence
 	) {
 		throw new Error('Generated catalog release is invalid.');
@@ -478,10 +489,10 @@ async function activateLatest(latest, path) {
 						`Catalog sequence ${sequence} is already bound to different content in ${destination.name}.`
 					);
 				}
-				if (current.cacheControl === latestCacheControl) return;
+				if (current.cacheControl === destination.latestCacheControl) return;
 			}
 			await destination.put(key, bytes, {
-				cacheControl: latestCacheControl,
+				cacheControl: destination.latestCacheControl,
 				ifMatch: current?.etag ?? undefined,
 				ifNoneMatch: current ? undefined : '*'
 			});
@@ -498,8 +509,8 @@ async function activateLatest(latest, path) {
 function parsePublishedEnvelope(bytes, destination) {
 	const envelope = JSON.parse(bytes.toString('utf8'));
 	if (
-		envelope?.schema !== 'stogas.catalog.signed.v3' ||
-		envelope.manifest?.schema !== 'stogas.catalog.release.v3' ||
+		envelope?.schema !== 'stogas.catalog.signed.v1' ||
+		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
 		!Number.isSafeInteger(envelope.manifest?.sequence)
 	) {
 		throw new Error(`Published catalog latest.json in ${destination} is invalid.`);
