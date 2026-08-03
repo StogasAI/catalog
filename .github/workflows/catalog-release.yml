@@ -51,6 +51,7 @@ jobs:
         id: attest
         uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4
         with:
+          create-storage-record: false
           subject-checksums: dist/catalog/${{ github.ref_name }}/ATTESTATION-SHA256SUMS
 
       - name: Collect GitHub attestation
