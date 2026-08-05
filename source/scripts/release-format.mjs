@@ -26,6 +26,23 @@ export function catalogArtifact(repositoryRoot, filename) {
 	return { bytes, digest: `sha256:${sha256(bytes)}` };
 }
 
+export function stagingDevelopmentProvenance(manifest) {
+	const runtime = manifest?.runtime?.match(/^sha256:([0-9a-f]{64})$/)?.[1];
+	const publicCatalog = manifest?.public?.match(/^sha256:([0-9a-f]{64})$/)?.[1];
+	if (!runtime || !publicCatalog) {
+		throw new Error('Catalog development provenance requires valid runtime and public digests.');
+	}
+	return {
+		_type: 'https://in-toto.io/Statement/v1',
+		predicate: { environment: 'staging' },
+		predicateType: 'https://stogas.ai/attestations/staging-development/v1',
+		subject: [
+			{ digest: { sha256: runtime }, name: 'catalog.runtime.json' },
+			{ digest: { sha256: publicCatalog }, name: 'catalog.public.json' }
+		]
+	};
+}
+
 export function parseSequence(value) {
 	if (!/^[1-9][0-9]*$/.test(value ?? '')) {
 		throw new Error('Release sequence must be a positive decimal integer.');

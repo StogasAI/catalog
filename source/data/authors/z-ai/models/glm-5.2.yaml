@@ -8,4 +8,6 @@ models:
   maxOutputTokens: 65535
   inputModalities: [text]
   outputModalities: [text]
-  reasoningEfforts: [none, minimal, low, medium, high, xhigh, max]
+  reasoningAvailability: optional
+  reasoningEfforts: [high, max]
+  reasoningMaxTokens: null

@@ -4,19 +4,17 @@ deployments:
   upstream:
     model: Qwen/Qwen3-235B-A22B-Thinking-2507-TEE
     chuteId: 21d129e5-8426-5c29-a6be-844e0f5f5e30
-  release:
-    chuteVersion: f62fb4b6-54ee-5eaf-81c2-a6429df9c4a2
-    modelRevision: 4cd68849b2a0fadb84866c703b133aa8c8636130
-    imageId: d4708900-a2b1-5f8d-bd7b-a260a72606ba
-    imageName: vllm
-    imageTag: nightly-2026030502
-    runtimeVersion: 0.5.17
+    gpuCount: 8
   aliases: [qwen3-235b-a22b-thinking-2507-tee]
   weightPrecision: bf16
+  tee:
+    status: claimed
+    mechanism: tdx
+    externalNetworkEgress: blocked
   pricing:
     input_tokens:
       per_mill_tokens: '298900000000000000'
     cached_input_tokens:
-      per_mill_tokens: '149450000000000000'
+      per_mill_tokens: '29890000000000000'
     output_tokens:
       per_mill_tokens: '1195700000000000000'

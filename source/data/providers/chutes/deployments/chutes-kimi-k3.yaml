@@ -4,19 +4,17 @@ deployments:
   upstream:
     model: moonshotai/Kimi-K3-TEE
     chuteId: 0bb5d4c2-b5da-587d-b88e-62b4839028ec
-  release:
-    chuteVersion: 005ad26b-6994-54e3-a70b-49521b0d4e8b
-    modelRevision: 301be1b88c89c0d3a763da6301352cb8fe399e90
-    imageId: aa5068c9-72cf-5af6-9045-d7e52193e36f
-    imageName: sglang
-    imageTag: 0.5.16-k3a
-    runtimeVersion: 0.6.11.rc2
+    gpuCount: 8
   aliases: [kimi-k3-tee]
   weightPrecision: mxfp4
+  tee:
+    status: claimed
+    mechanism: tdx
+    externalNetworkEgress: blocked
   pricing:
     input_tokens:
       per_mill_tokens: '3000000000000000000'
     cached_input_tokens:
-      per_mill_tokens: '1500000000000000000'
+      per_mill_tokens: '300000000000000000'
     output_tokens:
       per_mill_tokens: '15000000000000000000'

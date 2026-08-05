@@ -8,7 +8,11 @@ models:
   maxOutputTokens: 64000
   inputModalities: [text, image]
   outputModalities: [text]
-  reasoningEfforts: [none, low, medium, high]
+  reasoningAvailability: optional
+  reasoningEfforts: [low, medium, high]
+  reasoningMaxTokens:
+    minimum: 1024
+    maximum: 63999
   snapshot: 2025-11-01
   releaseDate: 2025-11-24
   knowledgeCutoff: 2025-05-01

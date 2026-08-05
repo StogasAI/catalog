@@ -1,4 +1,4 @@
-import { createHash, createPublicKey } from 'node:crypto';
+import { createHash, createHmac, createPublicKey } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -15,7 +15,14 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
-import { catalogArtifact, catalogManifest, canonicalJson, stableJson } from './release-format.mjs';
+import { r2WriteConditionETag } from './r2-etag.mjs';
+import {
+	catalogArtifact,
+	catalogManifest,
+	canonicalJson,
+	stableJson,
+	stagingDevelopmentProvenance
+} from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const action = process.argv[2];
@@ -29,6 +36,8 @@ const immutableCacheControl = 'public, max-age=31536000, immutable';
 const requestTimeoutMs = 30_000;
 const maxObjectBytes = 128 * 1024 * 1024;
 const maxErrorBytes = 64 * 1024;
+const retryableObjectStoreStatus = new Set([409, 429, 500, 502, 503, 504]);
+let r2CredentialsPromise;
 const destinations = [
 	{
 		get: getR2Object,
@@ -46,12 +55,47 @@ const destinations = [
 
 if (action === 'prepare') {
 	await prepareRelease();
+} else if (action === 'prepare-development') {
+	await prepareDevelopmentRelease();
 } else if (action === 'activate') {
 	await activateRelease();
 } else {
 	throw new Error(
-		'Use: publish-release.mjs <prepare|activate> <sequence> <release-output-dir> [r2-bucket]'
+		'Use: publish-release.mjs <prepare|prepare-development|activate> <sequence> <release-output-dir> [r2-bucket]'
 	);
+}
+
+async function prepareDevelopmentRelease() {
+	requireCommands(['bun', 'git']);
+	requireStorageEnvironment();
+	for (const name of ['CATALOG_SIGNING_KEY_ID', 'CATALOG_SIGNING_PRIVATE_KEY_PEM']) {
+		requiredEnvironment(name);
+	}
+	if (process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim() !== 'staging') {
+		throw new Error('Development catalog publication is accepted only for staging.');
+	}
+
+	run('bun', ['install', '--frozen-lockfile']);
+	run('bun', ['run', 'build']);
+	run('bun', ['run', 'check'], catalogCheckEnvironment());
+	verifySigningKey();
+	run(process.execPath, ['source/scripts/create-release.mjs', String(sequence), outputRoot]);
+	verifyChecksums(outputRoot);
+	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
+	const envelope = parseEnvelope(releasePath);
+	const approval = {
+		github_in_toto: [stagingDevelopmentProvenance(envelope.manifest)],
+		signed_release: envelope
+	};
+	const approvalPath = writeApproval(approval);
+
+	const latest = await readLatest();
+	assertMayPublishSequence(latest, readFileSync(releasePath));
+	for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
+		await publishImmutable(path, outputRoot);
+	}
+	console.log(`Prepared staging development catalog ${sequence}.`);
+	console.log(`  approval ${approvalPath}`);
 }
 
 async function prepareRelease() {
@@ -65,7 +109,7 @@ async function prepareRelease() {
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 	try {
 		run('bun', ['install', '--frozen-lockfile']);
-		run('bun', ['run', 'check']);
+		run('bun', ['run', 'check'], catalogCheckEnvironment());
 		verifySigningKey();
 
 		const proposalRoot = join(workRoot, 'github-proposal');
@@ -85,12 +129,7 @@ async function prepareRelease() {
 			github_in_toto: [readSingleAttestation(join(proposalRoot, 'github-attestation.jsonl'))],
 			signed_release: envelope
 		};
-		const approvalPath = join(outputRoot, 'approvals', `${sequence}.json`);
-		mkdirSync(join(outputRoot, 'approvals'), { recursive: true });
-		writeFileSync(approvalPath, stableJson(approval));
-		writeFileSync(join(outputRoot, 'catalog-approval.json'), stableJson(approval));
-		appendChecksum(outputRoot, approvalPath);
-		verifyChecksums(outputRoot);
+		const approvalPath = writeApproval(approval);
 
 		const latest = await readLatest();
 		assertMayPublishSequence(latest, readFileSync(releasePath));
@@ -103,6 +142,16 @@ async function prepareRelease() {
 	} finally {
 		rmSync(workRoot, { force: true, recursive: true });
 	}
+}
+
+function writeApproval(approval) {
+	const approvalPath = join(outputRoot, 'approvals', `${sequence}.json`);
+	mkdirSync(join(outputRoot, 'approvals'), { recursive: true });
+	writeFileSync(approvalPath, stableJson(approval));
+	writeFileSync(join(outputRoot, 'catalog-approval.json'), stableJson(approval));
+	appendChecksum(outputRoot, approvalPath);
+	verifyChecksums(outputRoot);
+	return approvalPath;
 }
 
 async function activateRelease() {
@@ -131,6 +180,12 @@ async function activateRelease() {
 
 function requireCommands(commands) {
 	for (const command of commands) run(command, ['--version'], process.env, { stdout: 'ignore' });
+}
+
+function catalogCheckEnvironment() {
+	const environment = { ...process.env };
+	delete environment.AWS_OBJECT_LOCK_ENABLED;
+	return environment;
 }
 
 function requireStorageEnvironment() {
@@ -519,10 +574,7 @@ function parsePublishedEnvelope(bytes, destination) {
 }
 
 async function getR2Object(key) {
-	const response = await fetch(objectUrl(key), {
-		headers: { authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}` },
-		signal: AbortSignal.timeout(requestTimeoutMs)
-	});
+	const response = await r2Request('GET', key);
 	if (response.status === 404) return null;
 	if (!response.ok) {
 		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
@@ -531,24 +583,18 @@ async function getR2Object(key) {
 	return {
 		bytes: await readBoundedResponseBuffer(response, maxObjectBytes),
 		cacheControl: response.headers.get('cache-control'),
-		etag: response.headers.get('etag')
+		etag: r2WriteConditionETag(response.headers.get('etag'))
 	};
 }
 
 async function putR2Object(key, bytes, options = {}) {
 	const headers = {
-		authorization: `Bearer ${requiredEnvironment('CLOUDFLARE_API_TOKEN')}`,
 		'cache-control': options.cacheControl,
 		'content-type': 'application/json'
 	};
 	if (options.ifMatch) headers['if-match'] = options.ifMatch;
 	if (options.ifNoneMatch) headers['if-none-match'] = options.ifNoneMatch;
-	const response = await fetch(objectUrl(key), {
-		body: bytes,
-		headers,
-		method: 'PUT',
-		signal: AbortSignal.timeout(requestTimeoutMs)
-	});
+	const response = await r2Request('PUT', key, bytes, headers);
 	if (!response.ok) {
 		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
 		throw new Error(`R2 PUT ${key} failed (${response.status}): ${body}`);
@@ -559,14 +605,125 @@ function bucket() {
 	return targetBucket || requiredEnvironment('R2_BUCKET');
 }
 
-function objectUrl(key) {
-	const account = encodeURIComponent(requiredEnvironment('CLOUDFLARE_ACCOUNT_ID'));
-	const bucketName = encodeURIComponent(bucket());
-	const safeKey = key
-		.split('/')
-		.map((segment) => encodeURIComponent(segment))
-		.join('/');
-	return `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucketName}/objects/${safeKey}`;
+async function r2Request(method, key, body, extraHeaders = {}) {
+	let lastError;
+	for (let attempt = 1; attempt <= 3; attempt += 1) {
+		try {
+			const signed = await signedR2Request(method, key, body, extraHeaders);
+			const response = await fetch(signed.url, {
+				body,
+				headers: signed.headers,
+				method,
+				signal: AbortSignal.timeout(requestTimeoutMs)
+			});
+			if (response.redirected) {
+				await response.body?.cancel();
+				throw new Error(`R2 ${method} ${key} redirected unexpectedly`);
+			}
+			if (!retryableObjectStoreStatus.has(response.status) || attempt === 3) return response;
+			await response.body?.cancel();
+			lastError = new Error(`R2 returned retryable HTTP ${response.status}`);
+		} catch (error) {
+			lastError = error;
+			if (attempt === 3) throw error;
+		}
+		await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+	}
+	throw lastError;
+}
+
+async function signedR2Request(method, key, body, extraHeaders) {
+	const credentials = await r2Credentials();
+	const account = requiredEnvironment('CLOUDFLARE_ACCOUNT_ID');
+	if (!/^[0-9a-f]{32}$/.test(account)) throw new Error('CLOUDFLARE_ACCOUNT_ID is invalid.');
+	const host = `${account}.r2.cloudflarestorage.com`;
+	const canonicalUri = `/${encodeRfc3986(bucket())}/${key.split('/').map(encodeRfc3986).join('/')}`;
+	const now = new Date();
+	const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+	const date = amzDate.slice(0, 8);
+	const payloadHash = sha256(body ?? '');
+	const headers = {
+		host,
+		'x-amz-content-sha256': payloadHash,
+		'x-amz-date': amzDate,
+		...definedHeaders(extraHeaders)
+	};
+	const headerNames = Object.keys(headers).sort();
+	const canonicalHeaders = headerNames
+		.map((name) => `${name}:${String(headers[name]).trim().replace(/\s+/g, ' ')}\n`)
+		.join('');
+	const signedHeaders = headerNames.join(';');
+	const canonicalRequest = [
+		method,
+		canonicalUri,
+		'',
+		canonicalHeaders,
+		signedHeaders,
+		payloadHash
+	].join('\n');
+	const scope = `${date}/auto/s3/aws4_request`;
+	const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256(canonicalRequest)].join('\n');
+	const dateKey = hmac(`AWS4${credentials.secretAccessKey}`, date);
+	const regionKey = hmac(dateKey, 'auto');
+	const serviceKey = hmac(regionKey, 's3');
+	const signingKey = hmac(serviceKey, 'aws4_request');
+	const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+	headers.authorization =
+		`AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${scope}, ` +
+		`SignedHeaders=${signedHeaders}, Signature=${signature}`;
+	return { headers, url: `https://${host}${canonicalUri}` };
+}
+
+function r2Credentials() {
+	if (!r2CredentialsPromise) r2CredentialsPromise = resolveR2Credentials();
+	return r2CredentialsPromise;
+}
+
+async function resolveR2Credentials() {
+	const account = requiredEnvironment('CLOUDFLARE_ACCOUNT_ID');
+	const apiToken = requiredEnvironment('CLOUDFLARE_API_TOKEN');
+	const response = await fetch(
+		`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/tokens/verify`,
+		{
+			headers: { authorization: `Bearer ${apiToken}` },
+			signal: AbortSignal.timeout(requestTimeoutMs)
+		}
+	);
+	const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
+	if (!response.ok) {
+		throw new Error(`R2 token verification failed (${response.status}): ${body}`);
+	}
+	let verified;
+	try {
+		verified = JSON.parse(body);
+	} catch {
+		throw new Error('R2 token verification returned invalid JSON.');
+	}
+	const accessKeyId = verified?.result?.id;
+	if (verified?.success !== true || verified?.result?.status !== 'active' || !accessKeyId) {
+		throw new Error('R2 API token is not active.');
+	}
+	return {
+		accessKeyId,
+		secretAccessKey: sha256(apiToken)
+	};
+}
+
+function definedHeaders(headers) {
+	return Object.fromEntries(
+		Object.entries(headers).filter(([, value]) => value !== undefined && value !== null)
+	);
+}
+
+function encodeRfc3986(value) {
+	return encodeURIComponent(value).replace(
+		/[!'()*]/g,
+		(character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+	);
+}
+
+function hmac(key, value) {
+	return createHmac('sha256', key).update(value).digest();
 }
 
 function objectKey(path) {

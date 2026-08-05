@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { putS3Object } from '../source/scripts/aws-s3.mjs';
+import { r2WriteConditionETag } from '../source/scripts/r2-etag.mjs';
 
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
@@ -19,9 +20,16 @@ afterEach(() => {
 });
 
 describe('catalog S3 publication', () => {
+	test('uses the strong R2 object validator for conditional writes', () => {
+		expect(r2WriteConditionETag('W/"abc123"')).toBe('"abc123"');
+		expect(r2WriteConditionETag('"abc123"')).toBe('"abc123"');
+		expect(r2WriteConditionETag(null)).toBeNull();
+	});
+
 	test('locks immutable catalog objects for 100 years and leaves aliases unlocked', async () => {
 		process.env.AWS_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
 		process.env.AWS_BUCKET = 'stogas-catalog-test';
+		delete process.env.AWS_OBJECT_LOCK_ENABLED;
 		process.env.AWS_REGION = 'us-east-1';
 		process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
 		const requests: Request[] = [];

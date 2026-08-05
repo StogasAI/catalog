@@ -12,7 +12,11 @@ models:
   capabilities:
     functionCalling: false
     parallelFunctionCalling: false
-    promptCaching: false
+    implicitPromptCaching: false
+    explicitPromptCaching: false
+  reasoningAvailability: unsupported
+  reasoningEfforts: []
+  reasoningMaxTokens: null
   snapshot: 2025-03-11
   releaseDate: 2025-03-11
   knowledgeCutoff: 2023-10-01

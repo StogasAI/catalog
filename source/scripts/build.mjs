@@ -24,7 +24,11 @@ const cueVersion = 'v0.16.1';
 const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
 const cachedCue = join(toolCacheDir, process.platform === 'win32' ? 'cue.exe' : 'cue');
 const args = new Set(process.argv.slice(2));
-const canonicalEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const canonicalEfforts = new Set(canonicalEffortOrder);
+const canonicalEffortRanks = new Map(canonicalEffortOrder.map((effort, index) => [effort, index]));
+const reasoningAvailabilities = new Set(['unsupported', 'optional', 'required']);
+const canonicalCredentialModes = new Set(['managed', 'byok']);
 const runtimeSizeLimit = 16 * 1024 * 1024;
 const publicSizeLimit = 64 * 1024 * 1024;
 let tempBuildDir = null;
@@ -243,7 +247,9 @@ function normalizeSourceGraph(sourceGraph) {
 					deprecationDate: model.deprecationDate ?? null,
 					flavors: [...(model.flavors ?? [])],
 					knowledgeCutoff: model.knowledgeCutoff ?? null,
-					reasoningEfforts: [...(model.reasoningEfforts ?? [])],
+					reasoningAvailability: model.reasoningAvailability,
+					reasoningEfforts: [...model.reasoningEfforts],
+					reasoningMaxTokens: model.reasoningMaxTokens,
 					releaseDate: model.releaseDate ?? null,
 					snapshot: model.snapshot ?? null
 				}
@@ -252,7 +258,11 @@ function normalizeSourceGraph(sourceGraph) {
 		providers: Object.fromEntries(
 			Object.entries(sourceGraph.providers).map(([id, provider]) => [
 				id,
-				{ ...provider, aliases: [...(provider.aliases ?? [])] }
+				{
+					...provider,
+					aliases: [...(provider.aliases ?? [])],
+					credentialModes: [...provider.credentialModes]
+				}
 			])
 		),
 		routes: sourceGraph.routes,
@@ -341,11 +351,8 @@ function effectiveCapabilities(graph, deploymentId, model, deployment) {
 	const overrides = deployment.overrides ?? {};
 	const deploymentCapabilities = overrides.capabilities ?? {};
 	for (const [name, value] of Object.entries(model.capabilities)) {
-		if (value && !routeCapabilities[name]) {
-			throw new Error(`${deploymentId}: model requires route-unsupported capability ${name}`);
-		}
 		modelCapabilities.set(name, value);
-		routeCapabilities[name] = value;
+		routeCapabilities[name] = Boolean(routeCapabilities[name] && value);
 	}
 	rejectRedundantOverride(
 		routeCapabilities,
@@ -390,6 +397,22 @@ function effectiveCapabilities(graph, deploymentId, model, deployment) {
 }
 
 function effectiveReasoning(deploymentId, model, deployment) {
+	const availabilityOverride = deployment.overrides?.reasoningAvailability;
+	rejectRedundantOverride(
+		model.reasoningAvailability,
+		availabilityOverride,
+		`${deploymentId}.overrides.reasoningAvailability`
+	);
+	const reasoningAvailability = availabilityOverride ?? model.reasoningAvailability;
+	if (!reasoningAvailabilities.has(reasoningAvailability)) {
+		throw new Error(`${deploymentId}: invalid reasoning availability`);
+	}
+	if (model.reasoningAvailability === 'unsupported' && reasoningAvailability !== 'unsupported') {
+		throw new Error(`${deploymentId}: cannot enable model-unsupported reasoning`);
+	}
+	if (model.reasoningAvailability === 'required' && reasoningAvailability !== 'required') {
+		throw new Error(`${deploymentId}: cannot weaken required model reasoning`);
+	}
 	rejectRedundantOverride(
 		model.reasoningEfforts,
 		deployment.overrides?.reasoningEfforts,
@@ -397,15 +420,51 @@ function effectiveReasoning(deploymentId, model, deployment) {
 	);
 	const reasoningEfforts = [...(deployment.overrides?.reasoningEfforts ?? model.reasoningEfforts)];
 	const modelEfforts = new Set(model.reasoningEfforts);
+	let previousEffortRank = -1;
 	for (const effort of reasoningEfforts) {
-		if (!canonicalEfforts.has(effort)) {
+		const effortRank = canonicalEffortRanks.get(effort);
+		if (effortRank === undefined) {
 			throw new Error(`${deploymentId}: invalid reasoning effort ${effort}`);
 		}
+		if (effortRank <= previousEffortRank) {
+			throw new Error(
+				`${deploymentId}: reasoning efforts must use canonical order without repeats`
+			);
+		}
+		previousEffortRank = effortRank;
 		if (!modelEfforts.has(effort)) {
 			throw new Error(`${deploymentId}: reasoning effort ${effort} is absent from the model`);
 		}
 	}
-	return reasoningEfforts;
+	const override = deployment.overrides?.reasoningMaxTokens;
+	rejectRedundantOverride(
+		model.reasoningMaxTokens,
+		override,
+		`${deploymentId}.overrides.reasoningMaxTokens`
+	);
+	if (override && !model.reasoningMaxTokens) {
+		throw new Error(
+			`${deploymentId}: cannot enable a model-unsupported manual reasoning token limit`
+		);
+	}
+	if (override && model.reasoningMaxTokens && override.minimum < model.reasoningMaxTokens.minimum) {
+		throw new Error(`${deploymentId}: cannot lower the model manual reasoning token minimum`);
+	}
+	if (override && model.reasoningMaxTokens && override.maximum > model.reasoningMaxTokens.maximum) {
+		throw new Error(`${deploymentId}: cannot raise the model manual reasoning token maximum`);
+	}
+	const reasoningMaxTokens = override === undefined ? model.reasoningMaxTokens : override;
+	if (
+		reasoningAvailability === 'unsupported' &&
+		(reasoningEfforts.length > 0 || reasoningMaxTokens !== null)
+	) {
+		throw new Error(`${deploymentId}: unsupported reasoning cannot expose controls`);
+	}
+	return {
+		reasoningAvailability,
+		reasoningEfforts,
+		reasoningMaxTokens
+	};
 }
 
 function effectiveDataHandling(graph, deploymentId, deployment) {
@@ -435,13 +494,8 @@ function effectiveModerated(graph, deploymentId, deployment) {
 	return deployment.overrides?.moderated ?? routeValue;
 }
 
-function effectiveTee(graph, deploymentId, deployment) {
-	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'tee');
-	if (!routeValue && deployment.overrides?.tee) {
-		throw new Error(`${deploymentId}: cannot override an absent route TEE policy`);
-	}
-	rejectRedundantOverride(routeValue, deployment.overrides?.tee, `${deploymentId}.overrides.tee`);
-	return routeValue ? mergeFacts(routeValue, deployment.overrides?.tee ?? {}) : undefined;
+function effectiveTee(deployment) {
+	return deployment.tee ? structuredClone(deployment.tee) : undefined;
 }
 
 function effectiveDeprecationDate(deploymentId, model, deployment) {
@@ -485,7 +539,8 @@ function buildCatalogs(source) {
 					'cancellation',
 					'functionCalling',
 					'parallelFunctionCalling',
-					'promptCaching',
+					'implicitPromptCaching',
+					'explicitPromptCaching',
 					'structuredOutputs',
 					'systemMessages',
 					'toolChoice',
@@ -521,8 +576,7 @@ function buildCatalogs(source) {
 						capabilities,
 						dataHandling,
 						moderated,
-						pricing: structuredClone(route.pricing ?? {}),
-						...(route.tee ? { tee: route.tee } : {})
+						pricing: structuredClone(route.pricing ?? {})
 					}
 				];
 			})
@@ -582,8 +636,43 @@ function buildCatalogs(source) {
 
 	validateQualifierAliases(graph.authors, 'author');
 	validateQualifierAliases(graph.providers, 'provider');
+	for (const [providerId, provider] of Object.entries(graph.providers)) {
+		if (
+			provider.credentialModes.length === 0 ||
+			new Set(provider.credentialModes).size !== provider.credentialModes.length ||
+			provider.credentialModes.some((mode) => !canonicalCredentialModes.has(mode))
+		) {
+			throw new Error(`${providerId}: invalid provider credential modes`);
+		}
+	}
 
 	for (const [modelId, model] of Object.entries(graph.models)) {
+		if (!reasoningAvailabilities.has(model.reasoningAvailability)) {
+			throw new Error(`${modelId}: invalid reasoning availability`);
+		}
+		let previousEffortRank = -1;
+		for (const effort of model.reasoningEfforts) {
+			const effortRank = canonicalEffortRanks.get(effort);
+			if (effortRank === undefined)
+				throw new Error(`${modelId}: invalid reasoning effort ${effort}`);
+			if (effortRank <= previousEffortRank) {
+				throw new Error(`${modelId}: reasoning efforts must use canonical order without repeats`);
+			}
+			previousEffortRank = effortRank;
+		}
+		if (
+			model.reasoningAvailability === 'unsupported' &&
+			(model.reasoningEfforts.length > 0 || model.reasoningMaxTokens !== null)
+		) {
+			throw new Error(`${modelId}: unsupported reasoning cannot expose controls`);
+		}
+		if (
+			model.reasoningMaxTokens &&
+			(model.reasoningMaxTokens.minimum > model.reasoningMaxTokens.maximum ||
+				model.reasoningMaxTokens.maximum >= model.maxOutputTokens)
+		) {
+			throw new Error(`${modelId}: invalid manual reasoning token bounds`);
+		}
 		addSelector(modelId, 'model', modelId);
 		for (const alias of model.aliases) addSelector(alias, 'model', modelId);
 	}
@@ -602,7 +691,9 @@ function buildCatalogs(source) {
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
-				JSON.stringify(selectorKeys) === JSON.stringify(['model', 'serviceTier'])) ||
+				selectorKeys.includes('model') &&
+				selectorKeys.includes('serviceTier') &&
+				selectorKeys.every((key) => ['model', 'reasoningMode', 'serviceTier'].includes(key))) ||
 			(providerId === 'anthropic' &&
 				selectorKeys.includes('model') &&
 				selectorKeys.includes('serviceTier') &&
@@ -610,14 +701,27 @@ function buildCatalogs(source) {
 					['inferenceGeo', 'model', 'serviceTier', 'speed'].includes(key)
 				)) ||
 			(providerId === 'chutes' &&
-				Boolean(deployment.upstream.chuteId) &&
-				JSON.stringify(selectorKeys) === JSON.stringify(['chuteId', 'model']) &&
-				Boolean(deployment.release));
+				JSON.stringify(selectorKeys) === JSON.stringify(['chuteId', 'gpuCount', 'model'])) ||
+			(providerId === 'azure' && JSON.stringify(selectorKeys) === JSON.stringify(['model']));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
-		if (providerId !== 'chutes' && deployment.release) {
-			throw new Error(`${deploymentId}: release metadata is only defined for Chutes`);
+		if (providerId === 'azure' && deployment.upstream.model !== deployment.modelId) {
+			throw new Error(`${deploymentId}: Azure upstream model must equal modelId`);
+		}
+		if (providerId === 'chutes' ? !deployment.tee : Boolean(deployment.tee)) {
+			throw new Error(`${deploymentId}: TEE metadata must be present only on Chutes deployments`);
+		}
+		if (
+			deployment.upstream.reasoningMode &&
+			(providerId !== 'openai' ||
+				!deployment.upstream.model.startsWith('gpt-5.6-') ||
+				deployment.routeIds.some((routeId) => {
+					const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
+					return interfaces.length !== 1 || interfaces[0] !== 'responses';
+				}))
+		) {
+			throw new Error(`${deploymentId}: fixed reasoning mode requires OpenAI GPT-5.6 Responses`);
 		}
 		const { contextWindowTokens, maxOutputTokens } = effectiveTokenLimits(
 			deploymentId,
@@ -630,11 +734,23 @@ function buildCatalogs(source) {
 			model,
 			deployment
 		);
-		const reasoningEfforts = effectiveReasoning(deploymentId, model, deployment);
+		const { reasoningAvailability, reasoningEfforts, reasoningMaxTokens } = effectiveReasoning(
+			deploymentId,
+			model,
+			deployment
+		);
+		if (
+			reasoningMaxTokens &&
+			(providerId !== 'anthropic' ||
+				reasoningMaxTokens.minimum > reasoningMaxTokens.maximum ||
+				reasoningMaxTokens.maximum >= maxOutputTokens)
+		) {
+			throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
+		}
 		const pricing = mergePricing(graph, deploymentId, deployment);
 		const dataHandling = effectiveDataHandling(graph, deploymentId, deployment);
 		const moderated = effectiveModerated(graph, deploymentId, deployment);
-		const tee = effectiveTee(graph, deploymentId, deployment);
+		const tee = effectiveTee(deployment);
 		const baseStates = deployment.routeIds.map(
 			(routeId) => baseByModelRoute.get(`${deployment.modelId}\0${routeId}`) === deploymentId
 		);
@@ -644,6 +760,9 @@ function buildCatalogs(source) {
 
 		addSelector(deploymentId, 'deployment', deploymentId);
 		for (const alias of deployment.aliases ?? []) {
+			if (alias === deployment.modelId) {
+				throw new Error(`${deploymentId}: deployment alias duplicates model slug ${alias}`);
+			}
 			addSelector(alias, 'deployment', deploymentId);
 		}
 
@@ -657,7 +776,9 @@ function buildCatalogs(source) {
 			modelId: deployment.modelId,
 			outputModalities: [...outputModalities],
 			pricing,
+			reasoningAvailability,
 			reasoningEfforts,
+			reasoningMaxTokens,
 			routeIds: [...deployment.routeIds].sort(),
 			upstream: deployment.upstream,
 			...(tee ? { tee } : {}),
@@ -666,8 +787,7 @@ function buildCatalogs(source) {
 		publicDeployments[deploymentId] = {
 			...common,
 			dataHandling,
-			moderated,
-			...(deployment.release ? { release: deployment.release } : {})
+			moderated
 		};
 		runtimeDeployments[deploymentId] = common;
 
@@ -694,7 +814,11 @@ function buildCatalogs(source) {
 				{
 					authorId: model.authorId,
 					aliases: model.aliases,
+					maxOutputTokens: model.maxOutputTokens,
 					name: model.name,
+					reasoningAvailability: model.reasoningAvailability,
+					reasoningEfforts: model.reasoningEfforts,
+					reasoningMaxTokens: model.reasoningMaxTokens,
 					releaseDate: model.releaseDate
 				}
 			])
@@ -708,7 +832,11 @@ function buildCatalogs(source) {
 	const runtimeProviders = Object.fromEntries(
 		Object.entries(graph.providers).map(([id, provider]) => [
 			id,
-			{ aliases: provider.aliases, name: provider.name }
+			{
+				aliases: provider.aliases,
+				credentialModes: provider.credentialModes,
+				name: provider.name
+			}
 		])
 	);
 

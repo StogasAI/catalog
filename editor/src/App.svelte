@@ -19,6 +19,7 @@
 		concreteGraphChains,
 		decorateFlow,
 		effectiveDeploymentFacts,
+		effectiveDeploymentValue,
 		extendGraphSelection,
 		filterFlow,
 		lineageForSelection,
@@ -71,6 +72,10 @@
 	const effectiveFacts = $derived(
 		effectiveDeploymentFacts(catalog, contextDeploymentId, contextRouteId)
 	);
+	const effectiveValue = $derived(
+		effectiveDeploymentValue(catalog, contextDeploymentId, contextRouteId)
+	);
+	const effectiveJSON = $derived(effectiveValue ? JSON.stringify(effectiveValue, null, 2) : '');
 	const effectiveRouteRequired = $derived(
 		contextDeploymentId !== '' &&
 		!contextRouteId &&
@@ -275,10 +280,6 @@
 		return attributeLabel(type);
 	}
 
-	function factValue(value: unknown) {
-		return typeof value === 'string' ? value : JSON.stringify(value);
-	}
-
 	function dedupedVisibleLineage(nodes: LineageNode[]) {
 		const seen = new SvelteSet<string>();
 		const visible: LineageNode[] = [];
@@ -441,30 +442,14 @@
 						<strong
 							>{effectiveRouteRequired
 								? 'Select one route'
-								: `${effectiveFacts.length} attributes with owners`}</strong
+								: `${effectiveFacts.length} resolved attributes`}</strong
 						>
 					</div>
 				</div>
 				{#if effectiveRouteRequired}
 					<p class="empty">Select a compatible route in the graph.</p>
 				{:else}
-					<div class="effective-table">
-						{#each effectiveFacts as fact (fact.path)}
-							<div class="effective-row">
-								<code>{fact.path}</code>
-								<output>{factValue(fact.value)}</output>
-								<button
-									type="button"
-									class="origin-badge"
-									data-type={fact.origin.type}
-									title={`${fact.origin.type}: ${fact.origin.id}`}
-									onclick={() => selectChainNode(fact.origin.type, fact.origin.id)}
-								>
-									{fact.origin.type}
-								</button>
-							</div>
-						{/each}
-					</div>
+					<pre class="effective-json"><code>{effectiveJSON}</code></pre>
 				{/if}
 			</section>
 		{/if}

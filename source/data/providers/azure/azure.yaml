@@ -1,0 +1,25 @@
+providers:
+  name: Azure
+  aliases: [azure-ai-foundry, azure-openai]
+  credentialModes: [byok]
+  headquarteredCountry: US
+  capabilities:
+    streaming: true
+    cancellation: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: false
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+    webSearch: false
+    urlContext: false
+    pdfInput: false
+  dataHandling:
+    processingRegions: [multi-region]
+    storageRegions: []
+    retentionDays: 30
+    trainingUse: false
+    zeroDataRetention: false
+  moderated: true

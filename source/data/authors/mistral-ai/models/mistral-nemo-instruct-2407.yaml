@@ -10,5 +10,8 @@ models:
   outputModalities: [text]
   capabilities:
     structuredOutputs: false
+  reasoningAvailability: unsupported
+  reasoningEfforts: []
+  reasoningMaxTokens: null
   snapshot: 2024-07-01
   releaseDate: 2024-07-18

@@ -1,11 +1,13 @@
 providers:
   name: Chutes
+  credentialModes: [managed, byok]
   capabilities:
     streaming: true
     cancellation: true
     functionCalling: true
     parallelFunctionCalling: false
-    promptCaching: true
+    implicitPromptCaching: true
+    explicitPromptCaching: false
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
@@ -15,7 +17,7 @@ providers:
   dataHandling:
     processingRegions: [multi-region]
     storageRegions: []
-    retentionDays: null
+    retentionDays: 0
     trainingUse: false
     zeroDataRetention: false
   moderated: false

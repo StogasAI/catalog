@@ -3,8 +3,31 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
+import { stagingDevelopmentProvenance } from '../source/scripts/release-format.mjs';
 
 describe('catalog release metadata', () => {
+	test('creates exact staging-only provenance for both catalog artifacts', () => {
+		const statement = stagingDevelopmentProvenance({
+			public: `sha256:${'11'.repeat(32)}`,
+			runtime: `sha256:${'22'.repeat(32)}`
+		});
+		expect(statement).toEqual({
+			_type: 'https://in-toto.io/Statement/v1',
+			predicate: { environment: 'staging' },
+			predicateType: 'https://stogas.ai/attestations/staging-development/v1',
+			subject: [
+				{ digest: { sha256: '22'.repeat(32) }, name: 'catalog.runtime.json' },
+				{ digest: { sha256: '11'.repeat(32) }, name: 'catalog.public.json' }
+			]
+		});
+		expect(() =>
+			stagingDevelopmentProvenance({
+				public: `sha256:${'11'.repeat(32)}`,
+				runtime: 'sha256:INVALID'
+			})
+		).toThrow('valid runtime and public digests');
+	});
+
 	test('builds one compact authorization over content-addressed artifacts', () => {
 		const output = mkdtempSync(join(tmpdir(), 'stogas-catalog-release-'));
 		const { privateKey, publicKey } = generateKeyPairSync('ed25519');

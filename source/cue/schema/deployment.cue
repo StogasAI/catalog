@@ -2,6 +2,7 @@ package catalog
 
 #OpenAIUpstream: close({
 	model:       #UpstreamId
+	reasoningMode?: "pro"
 	serviceTier: "default" | "flex" | "priority"
 })
 
@@ -13,25 +14,23 @@ package catalog
 })
 
 #ChutesUpstream: close({
-	model:   #UpstreamId
-	chuteId: #Uuid
+	model:    #UpstreamId
+	chuteId:  #Uuid
+	gpuCount: int & >=1 & <=8
 })
 
-#ChutesRelease: close({
-	chuteVersion:   #Uuid
-	modelRevision:  #GitRevision
-	imageId:        #Uuid
-	imageName:      string & !=""
-	imageTag:       string & !=""
-	runtimeVersion: string & !=""
+#AzureUpstream: close({
+	model: #UpstreamId
 })
 
 #Upstream: close({
 	model:         #UpstreamId
 	chuteId?:      #Uuid
+	gpuCount?:     int & >=1 & <=8
 	serviceTier?:  "default" | "flex" | "priority" | "standard_only"
 	speed?:        "standard" | "fast"
 	inferenceGeo?: "global" | "us"
+	reasoningMode?: "pro"
 })
 
 #DeploymentCapabilityOverrides: close({
@@ -39,7 +38,8 @@ package catalog
 	cancellation?:            bool
 	functionCalling?:         bool
 	parallelFunctionCalling?: bool
-	promptCaching?:           bool
+	implicitPromptCaching?:   bool
+	explicitPromptCaching?:   bool
 	structuredOutputs?:       bool
 	systemMessages?:          bool
 	toolChoice?:              bool
@@ -52,20 +52,21 @@ package catalog
 	modelId: #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
-	release?: #ChutesRelease
 	aliases?: [...#Slug]
 	weightPrecision?: #WeightPrecision
+	tee?: #Tee
 	overrides?: close({
 		contextWindowTokens?: int & >0
 		maxOutputTokens?:     int & >0
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
 		capabilities?: #DeploymentCapabilityOverrides
-		reasoningEfforts?: [...#ReasoningEffort]
-		dataHandling?:    #DataHandlingOverride
-		moderated?:       bool
-		tee?:             #TeeOverride
-		deprecationDate?: #MaybeDate
+		reasoningAvailability?: #ReasoningAvailability
+		reasoningEfforts?:      [...#ReasoningEffort]
+		reasoningMaxTokens?:    null | #ReasoningMaxTokens
+		dataHandling?:          #DataHandlingOverride
+		moderated?:             bool
+		deprecationDate?:       #MaybeDate
 	})
-	pricing: #Pricing
+	pricing: #DeploymentPricing
 })

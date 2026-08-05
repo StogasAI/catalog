@@ -35,7 +35,9 @@ deployments: [#Id]: #Deployment
 				}
 				if routes[routeId].providerId == "chutes" {
 					"\(id):chutesUpstream:\(routeId)": deployment.upstream & #ChutesUpstream
-					"\(id):chutesRelease:\(routeId)": deployment & {release: #ChutesRelease}
+				}
+				if routes[routeId].providerId == "azure" {
+					"\(id):azureUpstream:\(routeId)": deployment.upstream & #AzureUpstream
 				}
 			}
 		}

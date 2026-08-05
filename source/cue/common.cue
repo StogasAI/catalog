@@ -8,12 +8,18 @@ package catalog
 #AtomUSD:     string & =~"^[0-9]+$"
 #CountryCode: string & =~"^[A-Z]{2}$"
 #Uuid:        string & =~"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-#GitRevision: string & =~"^[0-9a-f]{40}$"
 
 #Modality:        "text" | "image" | "audio" | "video"
 #Flavor:          "base" | "instruct" | "chat" | "search" | "code" | "unknown"
-#ReasoningEffort: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+#ReasoningEffort:       "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+#ReasoningAvailability: "unsupported" | "optional" | "required"
+#CredentialMode:  "managed" | "byok"
 #Interface:       "chat_completions" | "responses"
+
+#ReasoningMaxTokens: close({
+	minimum: int & >0
+	maximum: int & >=minimum
+})
 
 #TeeStatus:             "attested" | "claimed" | "unverified" | "unknown"
 #TeeMechanism:          "sev-snp" | "tdx" | "nitro-enclave" | "other" | "unknown"
@@ -24,10 +30,4 @@ package catalog
 	status:                #TeeStatus
 	mechanism:             #TeeMechanism
 	externalNetworkEgress: #ExternalNetworkEgress
-})
-
-#TeeOverride: close({
-	status?:                #TeeStatus
-	mechanism?:             #TeeMechanism
-	externalNetworkEgress?: #ExternalNetworkEgress
 })

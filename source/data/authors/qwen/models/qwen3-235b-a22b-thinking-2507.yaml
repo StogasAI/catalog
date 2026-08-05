@@ -8,4 +8,7 @@ models:
   maxOutputTokens: 262144
   inputModalities: [text]
   outputModalities: [text]
+  reasoningAvailability: required
+  reasoningEfforts: []
+  reasoningMaxTokens: null
   snapshot: 2025-07-25

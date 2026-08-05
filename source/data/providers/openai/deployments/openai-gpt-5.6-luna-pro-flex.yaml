@@ -1,0 +1,21 @@
+deployments:
+  modelId: gpt-5.6-luna
+  routeIds: [openai-responses]
+  aliases: [gpt-5.6-luna-pro-flex]
+  upstream:
+    model: gpt-5.6-luna
+    reasoningMode: pro
+    serviceTier: flex
+  pricing:
+    input_tokens:
+      per_mill_context_lte_272k: '100000000000000000'
+      per_mill_context_gt_272k: '200000000000000000'
+    cached_input_tokens:
+      per_mill_context_lte_272k: '10000000000000000'
+      per_mill_context_gt_272k: '20000000000000000'
+    cache_write_input_tokens:
+      per_mill_context_lte_272k: '125000000000000000'
+      per_mill_context_gt_272k: '250000000000000000'
+    output_tokens:
+      per_mill_context_lte_272k: '600000000000000000'
+      per_mill_context_gt_272k: '900000000000000000'

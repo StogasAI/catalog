@@ -5,7 +5,8 @@ package catalog
 	cancellation:            bool
 	functionCalling:         bool
 	parallelFunctionCalling: bool
-	promptCaching:           bool
+	implicitPromptCaching:   bool
+	explicitPromptCaching:   bool
 	structuredOutputs:       bool
 	systemMessages:          bool
 	toolChoice:              bool
@@ -19,7 +20,8 @@ package catalog
 	cancellation?:            bool
 	functionCalling?:         bool
 	parallelFunctionCalling?: bool
-	promptCaching?:           bool
+	implicitPromptCaching?:   bool
+	explicitPromptCaching?:   bool
 	structuredOutputs?:       bool
 	systemMessages?:          bool
 	toolChoice?:              bool
@@ -30,10 +32,9 @@ package catalog
 
 #Route: close({
 	providerId: #Id
-	endpoint:   string & =~"^https://"
+	endpoint?:  string & =~"^https://"
 	interfaces: [#Interface, ...#Interface]
-	pricing?: #Pricing
-	tee?: #Tee
+	pricing?: #RoutePricing
 	overrides?: close({
 		capabilities?: #RouteCapabilityOverrides
 		dataHandling?: #DataHandlingOverride

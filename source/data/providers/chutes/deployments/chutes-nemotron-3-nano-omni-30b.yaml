@@ -4,22 +4,19 @@ deployments:
   upstream:
     model: Nemotron-3-Nano-Omni-30B-TEE
     chuteId: 761ccdab-2e3d-5268-ab03-55f8ba94a80c
-  release:
-    chuteVersion: 2df88df6-d97c-5270-bf45-777d06e867d6
-    modelRevision: d15962741057ae3a07147df504060e9f0838224e
-    imageId: e41a2e2f-9822-58e6-a330-3d5901115a99
-    imageName: nemotronomni
-    imageTag: 0.2.1
-    runtimeVersion: 0.6.5
+    gpuCount: 1
   aliases: [nemotron-3-nano-omni-30b-tee]
   weightPrecision: bf16
+  tee:
+    status: claimed
+    mechanism: tdx
+    externalNetworkEgress: allowed
   overrides:
-    tee:
-      externalNetworkEgress: allowed
+    reasoningMaxTokens: null
   pricing:
     input_tokens:
       per_mill_tokens: '24500000000000000'
     cached_input_tokens:
-      per_mill_tokens: '12250000000000000'
+      per_mill_tokens: '2450000000000000'
     output_tokens:
       per_mill_tokens: '97800000000000000'

@@ -131,34 +131,65 @@ function groupedLayoutPositions(graph: CatalogGraph) {
 		values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 180;
 	const y = (type: NodeType, id: string) => positions.get(nodeKey(type, id))?.y ?? 180;
 
-	for (const authorId of Object.keys(graph.authors)) {
-		const modelIds = Object.entries(graph.models)
-			.filter(([, model]) => model.authorId === authorId)
-			.map(([id]) => id);
-		positions.set(
-			nodeKey('author', authorId),
-			lanePosition('author', average(modelIds.map((id) => y('model', id))))
-		);
-	}
-	for (const routeId of Object.keys(graph.routes)) {
-		const deploymentIds = Object.entries(graph.deployments)
-			.filter(([, deployment]) => routeIds(deployment).includes(routeId))
-			.map(([id]) => id);
-		positions.set(
-			nodeKey('route', routeId),
-			lanePosition('route', average(deploymentIds.map((id) => y('deployment', id))))
-		);
-	}
-	for (const providerId of Object.keys(graph.providers)) {
-		const routeIdsForProvider = Object.entries(graph.routes)
-			.filter(([, route]) => route.providerId === providerId)
-			.map(([id]) => id);
-		positions.set(
-			nodeKey('provider', providerId),
-			lanePosition('provider', average(routeIdsForProvider.map((id) => y('route', id))))
-		);
-	}
+	placeNonOverlappingLane(
+		positions,
+		'author',
+		Object.keys(graph.authors).map((id) => ({
+			id,
+			y: average(
+				Object.entries(graph.models)
+					.filter(([, model]) => model.authorId === id)
+					.map(([modelId]) => y('model', modelId))
+			)
+		}))
+	);
+	placeNonOverlappingLane(
+		positions,
+		'route',
+		Object.keys(graph.routes).map((id) => ({
+			id,
+			y: average(
+				Object.entries(graph.deployments)
+					.filter(([, deployment]) => routeIds(deployment).includes(id))
+					.map(([deploymentId]) => y('deployment', deploymentId))
+			)
+		}))
+	);
+	placeNonOverlappingLane(
+		positions,
+		'provider',
+		Object.keys(graph.providers).map((id) => ({
+			id,
+			y: average(
+				Object.entries(graph.routes)
+					.filter(([, route]) => route.providerId === id)
+					.map(([routeId]) => y('route', routeId))
+			)
+		}))
+	);
 	return positions;
+}
+
+function placeNonOverlappingLane(
+	positions: Map<string, { x: number; y: number }>,
+	type: NodeType,
+	desired: Array<{ id: string; y: number }>
+) {
+	const spacing = 92;
+	const ordered = desired.sort(
+		(left, right) => left.y - right.y || left.id.localeCompare(right.id)
+	);
+	if (!ordered.length) return;
+	const placed: number[] = [];
+	for (const item of ordered) {
+		placed.push(Math.max(item.y, (placed.at(-1) ?? item.y - spacing) + spacing));
+	}
+	const desiredCenter = ordered.reduce((sum, item) => sum + item.y, 0) / ordered.length;
+	const placedCenter = placed.reduce((sum, value) => sum + value, 0) / placed.length;
+	const shift = Math.max(desiredCenter - placedCenter, 80 - placed[0]);
+	ordered.forEach((item, index) => {
+		positions.set(nodeKey(type, item.id), lanePosition(type, placed[index] + shift));
+	});
 }
 
 function positionFor(positions: Map<string, { x: number; y: number }>, type: NodeType, id: string) {
@@ -438,6 +469,18 @@ export function effectiveDeploymentFacts(
 		.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+export function effectiveDeploymentValue(
+	catalog: Catalog,
+	deploymentId: string,
+	preferredRouteId = ''
+): Record<string, unknown> | null {
+	const facts = effectiveDeploymentFacts(catalog, deploymentId, preferredRouteId);
+	if (facts.length === 0) return null;
+	const result: Record<string, unknown> = {};
+	for (const fact of facts) setValueAt(result, fact.path.split('.'), fact.value);
+	return result;
+}
+
 function factOrigin(input: {
 	catalog: Catalog;
 	deploymentId: string;
@@ -463,7 +506,9 @@ function factOrigin(input: {
 			'inputModalities',
 			'maxOutputTokens',
 			'outputModalities',
-			'reasoningEfforts'
+			'reasoningAvailability',
+			'reasoningEfforts',
+			'reasoningMaxTokens'
 		].includes(root)
 	) {
 		return sameValue(input.value, valueAt(input.model, input.path))
@@ -484,7 +529,9 @@ function factOrigin(input: {
 		return routeFactOrigin(input, input.path);
 	}
 
-	if (root === 'dataHandling' || root === 'moderated' || root === 'tee') {
+	if (root === 'tee') return deploymentOrigin;
+
+	if (root === 'dataHandling' || root === 'moderated') {
 		if (!sameValue(input.value, valueAt(input.route, input.path))) return deploymentOrigin;
 		return routeFactOrigin(input, input.path);
 	}
@@ -543,6 +590,17 @@ function valueAt(value: Record<string, unknown>, path: string[]): unknown {
 		current = (current as Record<string, unknown>)[key];
 	}
 	return current;
+}
+
+function setValueAt(value: Record<string, unknown>, path: string[], child: unknown) {
+	let current = value;
+	for (const key of path.slice(0, -1)) {
+		const next = current[key];
+		if (!next || typeof next !== 'object' || Array.isArray(next)) current[key] = {};
+		current = current[key] as Record<string, unknown>;
+	}
+	const leaf = path.at(-1);
+	if (leaf) current[leaf] = child;
 }
 
 function objectAt(value: Record<string, unknown>, path: string[]) {

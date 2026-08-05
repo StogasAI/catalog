@@ -8,3 +8,6 @@ models:
   maxOutputTokens: 65535
   inputModalities: [text, image, video]
   outputModalities: [text]
+  reasoningAvailability: required
+  reasoningEfforts: [low, high, max]
+  reasoningMaxTokens: null

@@ -1,8 +1,4 @@
 routes:
   providerId: chutes
-  endpoint: https://llm.chutes.ai/v1/chat/completions
+  endpoint: https://api.chutes.ai/e2e/invoke
   interfaces: [chat_completions]
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: blocked

@@ -19,7 +19,8 @@ package catalog
 		cancellation?:            bool
 		functionCalling?:         bool
 		parallelFunctionCalling?: bool
-		promptCaching?:           bool
+		implicitPromptCaching?:   bool
+		explicitPromptCaching?:   bool
 		structuredOutputs?:       bool
 		systemMessages?:          bool
 		toolChoice?:              bool
@@ -27,7 +28,9 @@ package catalog
 		urlContext?:              bool
 		pdfInput?:                bool
 	})
-	reasoningEfforts?: [...#ReasoningEffort]
+	reasoningAvailability: #ReasoningAvailability
+	reasoningEfforts:      [...#ReasoningEffort]
+	reasoningMaxTokens:    null | #ReasoningMaxTokens
 	snapshot?:        #MaybeDate
 	releaseDate?:     #MaybeDate
 	knowledgeCutoff?: #MaybeDate

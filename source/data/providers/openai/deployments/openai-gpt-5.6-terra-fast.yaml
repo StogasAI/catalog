@@ -1,6 +1,7 @@
 deployments:
   modelId: gpt-5.6-terra
   routeIds: [openai-chat-completions, openai-responses]
+  aliases: [gpt-5.6-terra-priority]
   upstream:
     model: gpt-5.6-terra
     serviceTier: priority
