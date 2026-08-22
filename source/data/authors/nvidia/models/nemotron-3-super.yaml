@@ -1,0 +1,14 @@
+models:
+  authorId: nvidia
+  name: NVIDIA Nemotron 3 Super 120B A12B
+  family: Nemotron
+  series: Nemotron 3
+  flavors: [instruct]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 1048576
+  inputModalities: [text]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: [low, high]
+  reasoningMaxTokens: null
+  releaseDate: 2026-03-11

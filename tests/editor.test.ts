@@ -3,13 +3,47 @@ import catalogJson from '../generated/catalog.public.json';
 import {
 	buildFlow,
 	effectiveDeploymentFacts,
-	effectiveDeploymentValue
+	effectiveDeploymentValue,
+	parseNodeKey
 } from '../editor/src/catalog';
-import type { Catalog } from '../editor/src/types';
+import { readBoundedResponseText } from '../editor/src/http';
+import { parseCatalog } from '../editor/src/types';
 
-const catalog = catalogJson as Catalog;
+const catalog = parseCatalog(catalogJson);
 
 describe('effective catalog facts', () => {
+	test('rejects malformed generated catalog collections', () => {
+		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.public.v2' })).toThrow(
+			'authors collection'
+		);
+		expect(() =>
+			parseCatalog({
+				graph: { authors: [], deployments: {}, models: {}, providers: {}, routes: {} },
+				schema: 'stogas.catalog.public.v2'
+			})
+		).toThrow('authors collection');
+	});
+
+	test('rejects incomplete graph node keys', () => {
+		expect(parseNodeKey('model:')).toBeNull();
+		expect(parseNodeKey('unknown:model')).toBeNull();
+		expect(parseNodeKey('model:gpt:variant')).toEqual({ type: 'model', id: 'gpt:variant' });
+	});
+
+	test('cancels oversized editor API responses', async () => {
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream<Uint8Array>({
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ headers: { 'content-length': '9' } }
+		);
+		await expect(readBoundedResponseText(response, 8)).rejects.toThrow('exceeds');
+		expect(cancelled).toBe(true);
+	});
+
 	test('keeps every route node visible when routes serve the same deployments', () => {
 		const flow = buildFlow(catalog.graph);
 		const chat = flow.nodes.find((node) => node.id === 'route:azure-chat-completions');
@@ -34,7 +68,9 @@ describe('effective catalog facts', () => {
 		expect(byPath.get('reasoningAvailability')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningEfforts')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningMaxTokens')?.origin.type).toBe('model');
-		expect(byPath.get('tee.status')?.origin.type).toBe('deployment');
+		expect(byPath.get('dataHandling.endToEndEncrypted')?.origin.type).toBe('route');
+		expect(byPath.get('dataHandling.processingLocation')?.origin.type).toBe('provider');
+		expect(byPath.get('dataHandling.tee.attestation')?.origin.type).toBe('provider');
 		expect(byPath.get('upstream.chuteId')?.origin.type).toBe('deployment');
 		expect(byPath.get('upstream.gpuCount')?.origin.type).toBe('deployment');
 	});
@@ -48,6 +84,19 @@ describe('effective catalog facts', () => {
 		expect(webSearch?.origin).toEqual({ type: 'route', id: 'openai-responses' });
 	});
 
+	test('attributes provider-wide tool pricing to the provider that owns it', () => {
+		const facts = effectiveDeploymentFacts(
+			catalog,
+			'anthropic-claude-opus-5',
+			'anthropic-messages'
+		);
+		const webSearch = facts.find(
+			(fact) => fact.path === 'pricing.anthropic_web_search_calls.per_1k_calls'
+		);
+
+		expect(webSearch?.origin).toEqual({ type: 'provider', id: 'anthropic' });
+	});
+
 	test('requires a concrete route and excludes facts from another route', () => {
 		expect(effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol')).toEqual([]);
 
@@ -56,6 +105,17 @@ describe('effective catalog facts', () => {
 			'openai-gpt-5.6-sol',
 			'openai-chat-completions'
 		);
+		expect(chatFacts.find((fact) => fact.path === 'reasoningEfforts')?.value).toEqual([
+			'low',
+			'medium',
+			'high',
+			'xhigh'
+		]);
+		expect(
+			effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol', 'openai-responses').find(
+				(fact) => fact.path === 'reasoningEfforts'
+			)?.value
+		).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
 		expect(
 			chatFacts.some(
 				(fact) => fact.path === 'pricing.openai_responses_web_search_calls.per_1k_calls'

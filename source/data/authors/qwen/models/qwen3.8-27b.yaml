@@ -1,0 +1,14 @@
+models:
+  authorId: qwen
+  name: Qwen3.8 27B
+  family: Qwen
+  series: Qwen3.8
+  flavors: [instruct]
+  contextWindowTokens: 262144
+  maxOutputTokens: 262144
+  inputModalities: [text, image, video]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: [low, medium, xhigh]
+  reasoningMaxTokens: null
+  releaseDate: 2026-08-13

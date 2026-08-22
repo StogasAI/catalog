@@ -1,0 +1,24 @@
+deployments:
+  modelId: deepseek-v4-pro
+  routeIds: [azure-chat-completions]
+  upstream:
+    model: DeepSeek-V4-Pro
+    modelFormat: DeepSeek
+    modelVersion: '2026-04-23'
+    hosting: azure
+    deploymentType: global_standard
+  overrides:
+    contextWindowTokens: 1000000
+    maxOutputTokens: 128000
+    capabilities:
+      functionCalling: false
+      parallelFunctionCalling: false
+      structuredOutputs: false
+      toolChoice: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1740000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '145000000000000000'
+    output_tokens:
+      per_mill_tokens: '3480000000000000000'

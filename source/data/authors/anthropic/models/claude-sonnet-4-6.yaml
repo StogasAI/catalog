@@ -1,6 +1,7 @@
 models:
   authorId: anthropic
   name: Claude Sonnet 4.6
+  aliases: [claude-sonnet-4.6]
   family: Claude
   series: Claude Sonnet
   contextWindowTokens: 1000000

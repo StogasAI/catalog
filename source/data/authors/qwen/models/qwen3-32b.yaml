@@ -11,3 +11,4 @@ models:
   reasoningAvailability: optional
   reasoningEfforts: []
   reasoningMaxTokens: null
+  releaseDate: 2025-04-29

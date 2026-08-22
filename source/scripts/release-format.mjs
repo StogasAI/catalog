@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+
+export { canonicalJson, stableJson } from './canonical-json.mjs';
+
+const MAX_CATALOG_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
 	const sequence = parseSequence(sequenceInput);
@@ -22,8 +27,30 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 }
 
 export function catalogArtifact(repositoryRoot, filename) {
-	const bytes = readFileSync(join(repositoryRoot, 'generated', filename));
+	const path = join(repositoryRoot, 'generated', filename);
+	const stats = lstatSync(path);
+	if (stats.isSymbolicLink() || !stats.isFile() || stats.size > MAX_CATALOG_ARTIFACT_BYTES) {
+		throw new Error(`${filename} is not a bounded regular catalog artifact.`);
+	}
+	const bytes = readFileSync(path);
 	return { bytes, digest: `sha256:${sha256(bytes)}` };
+}
+
+export function resolveDestructiveOutput(repositoryRoot, value, options) {
+	const candidate = resolve(repositoryRoot, value ?? options.defaultRelative);
+	const repositoryDestination = options.allowedRepositoryRoots.some((root) =>
+		isWithin(resolve(repositoryRoot, root), candidate)
+	);
+	const temporaryRoot = resolve(tmpdir());
+	const temporaryRelative = relative(temporaryRoot, candidate);
+	const temporarySegments = safeRelativeSegments(temporaryRelative);
+	const temporaryDestination =
+		temporarySegments !== null && temporarySegments[0]?.startsWith('stogas-catalog-');
+	if (!repositoryDestination && !temporaryDestination) {
+		throw new Error('Catalog output must be in an approved repository or temporary directory.');
+	}
+	assertNoSymbolicLinks(repositoryDestination ? resolve(repositoryRoot) : temporaryRoot, candidate);
+	return candidate;
 }
 
 export function stagingDevelopmentProvenance(manifest) {
@@ -58,28 +85,58 @@ export function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
-export function stableJson(value) {
-	return `${canonicalJson(value)}\n`;
-}
-
-export function canonicalJson(value) {
-	return JSON.stringify(stableValue(value));
-}
-
-function stableValue(value) {
-	if (Array.isArray(value)) return value.map(stableValue);
-	if (!value || typeof value !== 'object') return value;
-	return Object.fromEntries(
-		Object.keys(value)
-			.sort()
-			.map((key) => [key, stableValue(value[key])])
-	);
-}
-
 function git(repositoryRoot, args) {
 	return execFileSync('git', args, {
 		cwd: repositoryRoot,
 		encoding: 'utf8',
+		env: minimalProcessEnvironment(),
+		maxBuffer: 64 * 1024,
 		stdio: ['ignore', 'pipe', 'inherit']
 	}).trim();
+}
+
+function isWithin(root, candidate) {
+	const path = relative(root, candidate);
+	return path === '' || safeRelativeSegments(path) !== null;
+}
+
+function safeRelativeSegments(path) {
+	if (!path || isAbsolute(path)) return path === '' ? [] : null;
+	const segments = path.split(sep);
+	return segments.some((segment) => !segment || segment === '.' || segment === '..')
+		? null
+		: segments;
+}
+
+function assertNoSymbolicLinks(base, candidate) {
+	const segments = safeRelativeSegments(relative(base, candidate));
+	if (segments === null) throw new Error('Catalog output escaped its approved directory.');
+	let cursor = base;
+	for (const segment of segments) {
+		cursor = join(cursor, segment);
+		if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+			throw new Error('Catalog output path must not contain symbolic links.');
+		}
+	}
+}
+
+function minimalProcessEnvironment() {
+	const environment = {};
+	for (const name of [
+		'HOME',
+		'LANG',
+		'LC_ALL',
+		'PATH',
+		'PATHEXT',
+		'SYSTEMROOT',
+		'TEMP',
+		'TMP',
+		'TMPDIR',
+		'USERPROFILE',
+		'WINDIR',
+		'XDG_CONFIG_HOME'
+	]) {
+		if (process.env[name] !== undefined) environment[name] = process.env[name];
+	}
+	return environment;
 }

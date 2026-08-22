@@ -2,3 +2,5 @@ routes:
   providerId: chutes
   endpoint: https://api.chutes.ai/e2e/invoke
   interfaces: [chat_completions]
+  dataHandling:
+    endToEndEncrypted: true

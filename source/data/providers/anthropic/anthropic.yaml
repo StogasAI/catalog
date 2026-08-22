@@ -12,13 +12,16 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
-    webSearch: true
     urlContext: false
     pdfInput: false
   dataHandling:
-    processingRegions: [multi-region]
-    storageRegions: []
-    retentionDays: 0
+    processingLocation: global
+    storageLocation: unknown
+    retentionDays: 30
     trainingUse: false
     zeroDataRetention: false
+    tee: null
   moderated: true
+  pricing:
+    anthropic_web_search_calls:
+      per_1k_calls: '10000000000000000000'

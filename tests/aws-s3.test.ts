@@ -52,6 +52,7 @@ describe('catalog S3 publication', () => {
 
 		expect(requests).toHaveLength(2);
 		expect(requests[0]!.headers.get('x-amz-object-lock-mode')).toBe('GOVERNANCE');
+		expect(requests.every((request) => request.redirect === 'error')).toBe(true);
 		const retainedUntil = new Date(
 			requests[0]!.headers.get('x-amz-object-lock-retain-until-date')!
 		);
@@ -60,6 +61,28 @@ describe('catalog S3 publication', () => {
 		expect(requests[0]!.headers.get('x-amz-checksum-sha256')).toBeTruthy();
 		expect(requests[1]!.headers.get('x-amz-object-lock-mode')).toBeNull();
 		expect(requests[1]!.headers.get('cache-control')).toContain('stale-while-revalidate=2');
+	});
+
+	test('rejects unsafe S3 virtual-host configuration before sending credentials', async () => {
+		process.env.AWS_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
+		process.env.AWS_OBJECT_LOCK_ENABLED = 'false';
+		process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
+		let requests = 0;
+		globalThis.fetch = async () => {
+			requests += 1;
+			return new Response(null);
+		};
+
+		for (const [bucket, region] of [
+			['bucket.example@attacker.example', 'us-east-1'],
+			['127.0.0.1', 'us-east-1'],
+			['stogas-catalog-test', 'us-east-1.example']
+		]) {
+			process.env.AWS_BUCKET = bucket;
+			process.env.AWS_REGION = region;
+			await expect(putS3Object('catalog/latest.json', Buffer.from('{}'))).rejects.toThrow();
+		}
+		expect(requests).toBe(0);
 	});
 
 	test('leaves staging catalog objects resettable', async () => {

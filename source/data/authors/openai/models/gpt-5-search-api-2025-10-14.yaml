@@ -5,11 +5,13 @@ models:
   family: GPT
   series: GPT-5
   flavors: [search]
-  contextWindowTokens: 200000
+  contextWindowTokens: 400000
   maxOutputTokens: 128000
   inputModalities: [text, image]
   outputModalities: [text]
   capabilities:
+    functionCalling: false
+    parallelFunctionCalling: false
     explicitPromptCaching: false
   reasoningAvailability: unsupported
   reasoningEfforts: []

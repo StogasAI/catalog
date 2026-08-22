@@ -7,10 +7,6 @@ deployments:
     gpuCount: 1
   aliases: [mistral-nemo-instruct-2407-tee]
   weightPrecision: bf16
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: blocked
   pricing:
     input_tokens:
       per_mill_tokens: '24500000000000000'

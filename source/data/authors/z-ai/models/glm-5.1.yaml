@@ -5,9 +5,10 @@ models:
   series: GLM-5
   flavors: [instruct]
   contextWindowTokens: 202752
-  maxOutputTokens: 65535
+  maxOutputTokens: 202752
   inputModalities: [text]
   outputModalities: [text]
   reasoningAvailability: optional
   reasoningEfforts: []
   reasoningMaxTokens: null
+  releaseDate: 2026-04-07

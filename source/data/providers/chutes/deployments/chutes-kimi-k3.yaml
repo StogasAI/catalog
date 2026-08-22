@@ -7,10 +7,8 @@ deployments:
     gpuCount: 8
   aliases: [kimi-k3-tee]
   weightPrecision: mxfp4
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: blocked
+  overrides:
+    maxOutputTokens: 65535
   pricing:
     input_tokens:
       per_mill_tokens: '3000000000000000000'

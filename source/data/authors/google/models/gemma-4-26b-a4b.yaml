@@ -1,0 +1,14 @@
+models:
+  authorId: google
+  name: Gemma 4 26B A4B
+  family: Gemma
+  series: Gemma 4
+  flavors: [instruct]
+  contextWindowTokens: 262144
+  maxOutputTokens: 262144
+  inputModalities: [text, image]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: [minimal, high]
+  reasoningMaxTokens: null
+  releaseDate: 2026-03-31

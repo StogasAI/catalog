@@ -1,6 +1,7 @@
 models:
   authorId: anthropic
   name: Claude Opus 4.8
+  aliases: [claude-opus-4.8]
   family: Claude
   series: Claude Opus
   contextWindowTokens: 1000000

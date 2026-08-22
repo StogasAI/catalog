@@ -13,6 +13,7 @@ export async function readBoundedResponseBuffer(response, maxBytes) {
 	if (contentLength !== null && /^\d+$/.test(contentLength.trim())) {
 		const declaredLength = Number(contentLength);
 		if (!Number.isSafeInteger(declaredLength) || declaredLength > maxBytes) {
+			await response.body?.cancel().catch(() => {});
 			throw new ResponseBodyTooLargeError(maxBytes);
 		}
 	}

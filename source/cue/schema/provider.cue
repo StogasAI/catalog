@@ -6,6 +6,7 @@ package catalog
 	credentialModes: [#CredentialMode, ...#CredentialMode]
 	headquarteredCountry?: #CountryCode
 	capabilities:          #RouteCapabilities
-	dataHandling:          #DataHandling
+	dataHandling:          #ProviderDataHandling
 	moderated:             bool
+	pricing?:              #ProviderPricing
 })

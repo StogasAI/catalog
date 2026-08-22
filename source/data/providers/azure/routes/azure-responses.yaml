@@ -1,3 +1,5 @@
 routes:
   providerId: azure
   interfaces: [responses]
+  dataHandling:
+    endToEndEncrypted: false

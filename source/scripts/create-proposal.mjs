@@ -5,13 +5,17 @@ import {
 	catalogArtifact,
 	catalogManifest,
 	parseSequence,
+	resolveDestructiveOutput,
 	sha256,
 	stableJson
 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
-const outputRoot = process.argv[3] ?? join(repositoryRoot, 'release-proposal');
+const outputRoot = resolveDestructiveOutput(repositoryRoot, process.argv[3], {
+	allowedRepositoryRoots: ['dist/catalog', 'release-proposal'],
+	defaultRelative: 'release-proposal'
+});
 const manifest = catalogManifest(repositoryRoot, sequence);
 const runtime = catalogArtifact(repositoryRoot, 'catalog.runtime.json');
 const publicCatalog = catalogArtifact(repositoryRoot, 'catalog.public.json');

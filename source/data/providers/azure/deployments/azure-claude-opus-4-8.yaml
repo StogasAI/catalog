@@ -1,0 +1,24 @@
+deployments:
+  modelId: claude-opus-4-8
+  routeIds: [azure-anthropic-messages]
+  upstream:
+    model: claude-opus-4-8
+    modelFormat: Anthropic
+    modelVersion: '2'
+    hosting: azure
+    deploymentType: global_standard
+  overrides:
+    dataHandling:
+      retentionDays: 30
+    deprecationDate: 2027-09-01
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5000000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '500000000000000000'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '6250000000000000000'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '10000000000000000000'
+    output_tokens:
+      per_mill_tokens: '25000000000000000000'

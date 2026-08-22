@@ -1,0 +1,27 @@
+deployments:
+  modelId: deepseek-v4-flash-0423
+  routeIds: [azure-chat-completions]
+  upstream:
+    model: DeepSeek-V4-Flash
+    modelFormat: DeepSeek
+    modelVersion: '2026-04-23'
+    hosting: azure
+    deploymentType: data_zone_standard_eu
+  overrides:
+    contextWindowTokens: 1000000
+    maxOutputTokens: 128000
+    capabilities:
+      functionCalling: false
+      parallelFunctionCalling: false
+      structuredOutputs: false
+      toolChoice: false
+    dataHandling:
+      processingLocation: europe
+      storageLocation: europe
+  pricing:
+    input_tokens:
+      per_mill_tokens: '210000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '31000000000000000'
+    output_tokens:
+      per_mill_tokens: '560000000000000000'

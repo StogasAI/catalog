@@ -27,9 +27,9 @@
 		parseNodeKey
 	} from './catalog';
 	import { readBoundedResponseText } from './http';
-	import type { Catalog, LineageNode, NodeType, SourcePayload } from './types';
+	import { parseCatalog, type LineageNode, type NodeType, type SourcePayload } from './types';
 
-	const catalog = catalogJson as Catalog;
+	const catalog = parseCatalog(catalogJson);
 	const MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024;
 	const REQUEST_TIMEOUT_MS = 30_000;
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
@@ -114,9 +114,9 @@
 	});
 
 	$effect(() => {
-		requestJson<SourcePayload>('/api/catalog/sources')
-			.then((payload: SourcePayload) => {
-				sources = payload;
+		requestJson('api/catalog/sources')
+			.then((payload) => {
+				sources = parseSourcePayload(payload);
 			})
 			.catch((error) => {
 				sourceStatus = error instanceof Error ? error.message : String(error);
@@ -214,9 +214,9 @@
 	async function buildCatalog() {
 		buildStatus = 'Building...';
 		try {
-			const payload = await requestJson<{ ok: boolean; output: string }>('/api/catalog/build', {
-				method: 'POST'
-			});
+			const payload = parseBuildResult(
+				await requestJson('api/catalog/build', { method: 'POST' })
+			);
 			buildStatus = payload.ok ? 'Build passed' : payload.output;
 		} catch (error) {
 			buildStatus = error instanceof Error ? error.message : String(error);
@@ -225,10 +225,12 @@
 
 	async function saveSource() {
 		if (!activePath) return;
+		const savedPath = activePath;
+		const savedContent = draft;
 		sourceStatus = 'Saving...';
 		try {
-			await requestJson('/api/catalog/source', {
-				body: JSON.stringify({ path: activePath, content: draft }),
+			await requestJson('api/catalog/source', {
+				body: JSON.stringify({ path: savedPath, content: savedContent }),
 				headers: { 'content-type': 'application/json' },
 				method: 'PUT'
 			});
@@ -236,37 +238,70 @@
 				sources = {
 					...sources,
 					files: sources.files.map((file) =>
-						file.path === activePath ? { ...file, content: draft } : file
+						file.path === savedPath ? { ...file, content: savedContent } : file
 					)
 				};
 			}
-			sourceStatus = 'Saved';
+			if (activePath === savedPath) sourceStatus = 'Saved';
 		} catch (error) {
 			sourceStatus = error instanceof Error ? error.message : String(error);
 		}
 	}
 
-	async function requestJson<T = unknown>(input: string, init: RequestInit = {}): Promise<T> {
+	async function requestJson(input: string, init: RequestInit = {}): Promise<unknown> {
 		const response = await fetch(input, {
 			...init,
+			redirect: 'error',
 			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 		});
 		const text = await readBoundedResponseText(response, MAX_API_RESPONSE_BYTES);
 		if (!response.ok) {
 			let message = text;
 			try {
-				const payload = JSON.parse(text) as { error?: unknown };
-				if (typeof payload.error === 'string') message = payload.error;
+				const payload: unknown = JSON.parse(text);
+				if (isRecord(payload) && typeof payload.error === 'string') message = payload.error;
 			} catch {
 				// Preserve the response text when the server did not return JSON.
 			}
 			throw new Error(message || `Request failed with HTTP ${response.status}`);
 		}
 		try {
-			return JSON.parse(text) as T;
+			const value: unknown = JSON.parse(text);
+			return value;
 		} catch {
 			throw new Error('Catalog editor API returned invalid JSON');
 		}
+	}
+
+	function parseSourcePayload(value: unknown): SourcePayload {
+		if (!isRecord(value) || !Array.isArray(value.files) || !isRecord(value.nodeSources)) {
+			throw new Error('Catalog editor API returned invalid source data');
+		}
+		const files = value.files.map((file) => {
+			if (!isRecord(file) || typeof file.path !== 'string' || typeof file.content !== 'string') {
+				throw new Error('Catalog editor API returned invalid source data');
+			}
+			return { content: file.content, path: file.path };
+		});
+		const nodeSources: Record<string, string[]> = {};
+		for (const [key, paths] of Object.entries(value.nodeSources)) {
+			if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === 'string')) {
+				throw new Error('Catalog editor API returned invalid source data');
+			}
+			nodeSources[key] = paths;
+		}
+		return { files, nodeSources };
+	}
+
+	function parseBuildResult(value: unknown): { ok: boolean; output: string } {
+		if (!isRecord(value) || typeof value.ok !== 'boolean' || typeof value.output !== 'string') {
+			throw new Error('Catalog editor API returned an invalid build result');
+		}
+		return { ok: value.ok, output: value.output };
+	}
+
+	function isRecord(value: unknown): value is Record<string, unknown> {
+		return typeof value === 'object' && value !== null && !Array.isArray(value);
 	}
 
 	function attributeLabel(value: string) {
@@ -293,6 +328,7 @@
 	}
 
 	function startResize(event: PointerEvent) {
+		event.preventDefault();
 		const startX = event.clientX;
 		const startWidth = inspectorWidth;
 		const move = (moveEvent: PointerEvent) => {
@@ -301,9 +337,11 @@
 		const stop = () => {
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', stop);
+			window.removeEventListener('pointercancel', stop);
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', stop);
+		window.addEventListener('pointercancel', stop);
 	}
 </script>
 

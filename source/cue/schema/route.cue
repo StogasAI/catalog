@@ -10,7 +10,6 @@ package catalog
 	structuredOutputs:       bool
 	systemMessages:          bool
 	toolChoice:              bool
-	webSearch:               bool
 	urlContext:              bool
 	pdfInput:                bool
 })
@@ -25,7 +24,6 @@ package catalog
 	structuredOutputs?:       bool
 	systemMessages?:          bool
 	toolChoice?:              bool
-	webSearch?:               bool
 	urlContext?:              bool
 	pdfInput?:                bool
 })
@@ -34,10 +32,10 @@ package catalog
 	providerId: #Id
 	endpoint?:  string & =~"^https://"
 	interfaces: [#Interface, ...#Interface]
+	dataHandling: #RouteDataHandling
 	pricing?: #RoutePricing
 	overrides?: close({
 		capabilities?: #RouteCapabilityOverrides
-		dataHandling?: #DataHandlingOverride
 		moderated?:    bool
 	})
 })

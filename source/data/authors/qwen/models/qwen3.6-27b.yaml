@@ -5,9 +5,10 @@ models:
   series: Qwen3.6
   flavors: [instruct]
   contextWindowTokens: 262144
-  maxOutputTokens: 65536
-  inputModalities: [text, image]
+  maxOutputTokens: 262144
+  inputModalities: [text, image, video]
   outputModalities: [text]
   reasoningAvailability: optional
   reasoningEfforts: []
   reasoningMaxTokens: null
+  releaseDate: 2026-04-22

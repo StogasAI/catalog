@@ -1,3 +1,5 @@
 routes:
   providerId: azure
   interfaces: [chat_completions]
+  dataHandling:
+    endToEndEncrypted: false

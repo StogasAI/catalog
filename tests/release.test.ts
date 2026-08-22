@@ -1,11 +1,44 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { stagingDevelopmentProvenance } from '../source/scripts/release-format.mjs';
+import {
+	resolveDestructiveOutput,
+	stagingDevelopmentProvenance
+} from '../source/scripts/release-format.mjs';
 
 describe('catalog release metadata', () => {
+	test('restricts destructive release output paths', () => {
+		const temporary = mkdtempSync(join(tmpdir(), 'stogas-catalog-output-'));
+		const linked = join(temporary, 'linked');
+		if (process.platform !== 'win32') symlinkSync(tmpdir(), linked, 'dir');
+		try {
+			expect(
+				resolveDestructiveOutput(process.cwd(), temporary, {
+					allowedRepositoryRoots: ['release'],
+					defaultRelative: 'release'
+				})
+			).toBe(resolve(temporary));
+			if (process.platform !== 'win32') {
+				expect(() =>
+					resolveDestructiveOutput(process.cwd(), linked, {
+						allowedRepositoryRoots: ['release'],
+						defaultRelative: 'release'
+					})
+				).toThrow('symbolic links');
+			}
+			expect(() =>
+				resolveDestructiveOutput(process.cwd(), '/', {
+					allowedRepositoryRoots: ['release'],
+					defaultRelative: 'release'
+				})
+			).toThrow('approved');
+		} finally {
+			rmSync(temporary, { force: true, recursive: true });
+		}
+	});
+
 	test('creates exact staging-only provenance for both catalog artifacts', () => {
 		const statement = stagingDevelopmentProvenance({
 			public: `sha256:${'11'.repeat(32)}`,

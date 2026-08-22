@@ -1,0 +1,14 @@
+models:
+  authorId: minimax
+  name: MiniMax M3
+  family: MiniMax
+  series: MiniMax M3
+  flavors: [instruct]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 1048576
+  inputModalities: [text, image, video]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: []
+  reasoningMaxTokens: null
+  releaseDate: 2026-06-01

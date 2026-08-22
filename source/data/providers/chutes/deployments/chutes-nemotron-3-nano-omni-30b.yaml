@@ -7,12 +7,13 @@ deployments:
     gpuCount: 1
   aliases: [nemotron-3-nano-omni-30b-tee]
   weightPrecision: bf16
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: allowed
   overrides:
+    contextWindowTokens: 131072
+    maxOutputTokens: 131072
     reasoningMaxTokens: null
+    dataHandling:
+      tee:
+        externalNetworkEgress: allowed
   pricing:
     input_tokens:
       per_mill_tokens: '24500000000000000'

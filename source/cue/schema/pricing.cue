@@ -22,16 +22,26 @@ package catalog
 })
 
 #TokenPricing: {
-	input_tokens?:             #TokenRate
-	cached_input_tokens?:      #TokenRate
-	cache_write_input_tokens?: #TokenRate
+	input_tokens?:                #TokenRate
+	cached_input_tokens?:         #TokenRate
+	cache_write_input_tokens?:    #TokenRate
 	cache_write_5m_input_tokens?: #TokenRate
 	cache_write_1h_input_tokens?: #TokenRate
-	output_tokens?:            #TokenRate
-	reasoning_tokens?:         #TokenRate
+	output_tokens?:               #TokenRate
+	reasoning_tokens?:            #TokenRate
 }
 
+#ProviderPricing: close({
+	anthropic_web_search_calls?: #CallRate
+})
+
 #RoutePricing: close({
+	openai_responses_web_search_calls?:                       #CallRate
+	openai_responses_web_search_preview_calls?:               #CallRate
+	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
+})
+
+#InheritedPricingOverride: close({
 	anthropic_web_search_calls?:                              #CallRate
 	openai_responses_web_search_calls?:                       #CallRate
 	openai_responses_web_search_preview_calls?:               #CallRate

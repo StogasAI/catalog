@@ -13,13 +13,13 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
-    webSearch: false
     urlContext: false
     pdfInput: false
   dataHandling:
-    processingRegions: [multi-region]
-    storageRegions: []
-    retentionDays: 30
+    processingLocation: global
+    storageLocation: unknown
+    retentionDays: 0
     trainingUse: false
     zeroDataRetention: false
+    tee: null
   moderated: true

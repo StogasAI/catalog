@@ -5,9 +5,11 @@ models:
   series: DeepSeek V4
   flavors: [instruct]
   contextWindowTokens: 1048576
-  maxOutputTokens: 131072
+  maxOutputTokens: 1048576
   inputModalities: [text]
   outputModalities: [text]
   reasoningAvailability: optional
-  reasoningEfforts: [high, max]
+  reasoningEfforts: [low, high, max]
   reasoningMaxTokens: null
+  snapshot: 2026-07-31
+  releaseDate: 2026-07-31

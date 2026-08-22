@@ -11,13 +11,16 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
-    webSearch: false
     urlContext: false
     pdfInput: false
   dataHandling:
-    processingRegions: [multi-region]
-    storageRegions: []
+    processingLocation: global
+    storageLocation: unknown
     retentionDays: 0
     trainingUse: false
     zeroDataRetention: false
+    tee:
+      attestation: provider-claimed
+      technology: intel-tdx
+      externalNetworkEgress: blocked
   moderated: false

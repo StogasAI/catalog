@@ -7,10 +7,9 @@ deployments:
     gpuCount: 8
   aliases: [qwen3.5-397b-a17b-tee]
   weightPrecision: fp8
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: blocked
+  overrides:
+    inputModalities: [text, image]
+    maxOutputTokens: 65536
   pricing:
     input_tokens:
       per_mill_tokens: '450000000000000000'

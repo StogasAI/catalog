@@ -3,12 +3,10 @@ deployments:
   routeIds: [anthropic-messages]
   upstream:
     model: claude-opus-4-7
-    speed: standard
     inferenceGeo: us
-    serviceTier: standard_only
   overrides:
     dataHandling:
-      processingRegions: [us]
+      processingLocation: US
   pricing:
     input_tokens:
       per_mill_tokens: '5500000000000000000'

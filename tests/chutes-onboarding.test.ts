@@ -7,9 +7,9 @@ import {
 } from './provider-onboarding';
 
 const tee = {
+	attestation: 'provider-claimed' as const,
 	externalNetworkEgress: 'blocked' as const,
-	mechanism: 'tdx',
-	status: 'claimed'
+	technology: 'intel-tdx'
 };
 const capabilities = {
 	cancellation: true,
@@ -22,8 +22,7 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	urlContext: false,
-	webSearch: false
+	urlContext: false
 };
 const chuteIds: Record<string, string> = {
 	'chutes-deepseek-v3.2': '398651e1-5f85-5e50-a513-7c5324e8e839',
@@ -35,10 +34,10 @@ const chuteIds: Record<string, string> = {
 	'chutes-kimi-k3': '0bb5d4c2-b5da-587d-b88e-62b4839028ec',
 	'chutes-mistral-nemo-instruct-2407': '7725a31d-28df-5bb7-9d29-c23b49df5472',
 	'chutes-nemotron-3-nano-omni-30b': '761ccdab-2e3d-5268-ab03-55f8ba94a80c',
-	'chutes-qwen3-235b-a22b-thinking-2507': '21d129e5-8426-5c29-a6be-844e0f5f5e30',
 	'chutes-qwen3-32b': 'ac059e33-eb27-541c-b9a9-24b214036475',
 	'chutes-qwen3.5-397b-a17b': '51a4284a-a5a0-5e44-a9cc-6af5a2abfbcf',
-	'chutes-qwen3.6-27b': '7aa5e899-c0ba-5482-af48-d3f31d635c9f'
+	'chutes-qwen3.6-27b': '7aa5e899-c0ba-5482-af48-d3f31d635c9f',
+	'chutes-qwen3.8-27b': '9ecb73cc-909b-5334-9cd8-74985945cff5'
 };
 const gpuCounts: Record<string, number> = {
 	'chutes-deepseek-v3.2': 8,
@@ -50,17 +49,19 @@ const gpuCounts: Record<string, number> = {
 	'chutes-kimi-k3': 8,
 	'chutes-mistral-nemo-instruct-2407': 1,
 	'chutes-nemotron-3-nano-omni-30b': 1,
-	'chutes-qwen3-235b-a22b-thinking-2507': 8,
 	'chutes-qwen3-32b': 8,
 	'chutes-qwen3.5-397b-a17b': 8,
-	'chutes-qwen3.6-27b': 1
+	'chutes-qwen3.6-27b': 1,
+	'chutes-qwen3.8-27b': 1
 };
 const dataHandling = {
-	processingRegions: ['multi-region'],
+	processingLocation: 'global',
+	storageLocation: 'unknown',
+	endToEndEncrypted: true,
 	retentionDays: 0,
-	storageRegions: [],
 	trainingUse: false,
-	zeroDataRetention: false
+	zeroDataRetention: false,
+	tee
 };
 const deployments: ProviderDeploymentContract[] = [
 	deployment(
@@ -91,23 +92,42 @@ const deployments: ProviderDeploymentContract[] = [
 		'3000000000000000000',
 		true,
 		['text', 'image'],
-		'optional'
+		'optional',
+		[],
+		null,
+		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
 	),
-	deployment(
-		'chutes-gemma-4-31b-turbo',
-		'gemma-4-31b-turbo',
-		'google',
-		'google/gemma-4-31B-turbo-TEE',
-		131072,
-		65536,
-		'nvfp4',
-		'120000000000000000',
-		'12000000000000000',
-		'370000000000000000',
-		true,
-		['text', 'image'],
-		'optional'
-	),
+	{
+		...deployment(
+			'chutes-gemma-4-31b-turbo',
+			'gemma-4-31b',
+			'google',
+			'google/gemma-4-31B-turbo-TEE',
+			131072,
+			65536,
+			'nvfp4',
+			'120000000000000000',
+			'12000000000000000',
+			'370000000000000000',
+			true,
+			['text', 'image'],
+			'optional',
+			['minimal', 'high'],
+			null,
+			{
+				contextWindowTokens: 262144,
+				inputModalities: ['text', 'image'],
+				maxOutputTokens: 262144
+			}
+		),
+		aliases: ['gemma-4-31b-turbo-tee'],
+		reasoningEfforts: [],
+		publicOverrides: {
+			contextWindowTokens: 131072,
+			maxOutputTokens: 65536,
+			reasoningEfforts: []
+		}
+	},
 	deployment(
 		'chutes-glm-5.1',
 		'glm-5.1',
@@ -121,7 +141,10 @@ const deployments: ProviderDeploymentContract[] = [
 		'3080000000000000000',
 		true,
 		['text'],
-		'optional'
+		'optional',
+		[],
+		null,
+		{ maxOutputTokens: 202752 }
 	),
 	deployment(
 		'chutes-deepseek-v3.2',
@@ -136,7 +159,10 @@ const deployments: ProviderDeploymentContract[] = [
 		'1000000000000000000',
 		true,
 		['text'],
-		'optional'
+		'optional',
+		[],
+		null,
+		{ contextWindowTokens: 163840, maxOutputTokens: 163840 }
 	),
 	deployment(
 		'chutes-glm-5.2',
@@ -152,7 +178,9 @@ const deployments: ProviderDeploymentContract[] = [
 		true,
 		['text'],
 		'optional',
-		['high', 'max']
+		['high', 'max'],
+		null,
+		{ maxOutputTokens: 1048576 }
 	),
 	deployment(
 		'chutes-qwen3.6-27b',
@@ -167,7 +195,28 @@ const deployments: ProviderDeploymentContract[] = [
 		'2000000000000000000',
 		true,
 		['text', 'image'],
-		'optional'
+		'optional',
+		[],
+		null,
+		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
+	),
+	deployment(
+		'chutes-qwen3.8-27b',
+		'qwen3.8-27b',
+		'qwen',
+		'Qwen/Qwen3.8-27B-TEE',
+		262144,
+		65536,
+		'fp8',
+		'400000000000000000',
+		'40000000000000000',
+		'3000000000000000000',
+		true,
+		['text', 'image'],
+		'optional',
+		['low', 'medium', 'xhigh'],
+		null,
+		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
 	),
 	deployment(
 		'chutes-kimi-k2.6',
@@ -182,22 +231,10 @@ const deployments: ProviderDeploymentContract[] = [
 		'3400000000000000000',
 		true,
 		['text', 'image', 'video'],
-		'optional'
-	),
-	deployment(
-		'chutes-qwen3-235b-a22b-thinking-2507',
-		'qwen3-235b-a22b-thinking-2507',
-		'qwen',
-		'Qwen/Qwen3-235B-A22B-Thinking-2507-TEE',
-		262144,
-		262144,
-		'bf16',
-		'298900000000000000',
-		'29890000000000000',
-		'1195700000000000000',
-		true,
-		['text'],
-		'required'
+		'optional',
+		[],
+		null,
+		{ maxOutputTokens: 262144 }
 	),
 	deployment(
 		'chutes-mistral-nemo-instruct-2407',
@@ -209,8 +246,7 @@ const deployments: ProviderDeploymentContract[] = [
 		'bf16',
 		'24500000000000000',
 		'2450000000000000',
-		'97800000000000000',
-		false
+		'97800000000000000'
 	),
 	deployment(
 		'chutes-kimi-k3',
@@ -226,7 +262,9 @@ const deployments: ProviderDeploymentContract[] = [
 		true,
 		['text', 'image', 'video'],
 		'required',
-		['low', 'high', 'max']
+		['low', 'high', 'max'],
+		null,
+		{ maxOutputTokens: 1048576 }
 	),
 	{
 		...deployment(
@@ -240,31 +278,50 @@ const deployments: ProviderDeploymentContract[] = [
 			'24500000000000000',
 			'2450000000000000',
 			'97800000000000000',
-			false,
+			true,
 			['text', 'image', 'audio', 'video'],
 			'optional',
 			[],
-			{ maximum: 131071, minimum: 1 }
+			{ maximum: 262143, minimum: 1 },
+			{ contextWindowTokens: 262144, maxOutputTokens: 262144 }
 		),
 		reasoningMaxTokens: null,
-		tee: { ...tee, externalNetworkEgress: 'allowed' }
+		publicOverrides: {
+			contextWindowTokens: 131072,
+			maxOutputTokens: 131072,
+			reasoningMaxTokens: null,
+			dataHandling: { tee: { externalNetworkEgress: 'allowed' } }
+		},
+		dataHandling: {
+			...dataHandling,
+			tee: { ...tee, externalNetworkEgress: 'allowed' }
+		}
 	},
-	deployment(
-		'chutes-deepseek-v4-flash-0731',
-		'deepseek-v4-flash-0731',
-		'deepseek',
-		'deepseek-ai/DeepSeek-V4-Flash-0731-TEE',
-		1048576,
-		131072,
-		'fp8',
-		'140000000000000000',
-		'14000000000000000',
-		'280000000000000000',
-		true,
-		['text'],
-		'optional',
-		['high', 'max']
-	)
+	{
+		...deployment(
+			'chutes-deepseek-v4-flash-0731',
+			'deepseek-v4-flash-0731',
+			'deepseek',
+			'deepseek-ai/DeepSeek-V4-Flash-0731-TEE',
+			1048576,
+			131072,
+			'fp8',
+			'140000000000000000',
+			'14000000000000000',
+			'280000000000000000',
+			true,
+			['text'],
+			'optional',
+			['low', 'high', 'max'],
+			null,
+			{ maxOutputTokens: 1048576 }
+		),
+		reasoningEfforts: ['high', 'max'],
+		publicOverrides: {
+			maxOutputTokens: 131072,
+			reasoningEfforts: ['high', 'max']
+		}
+	}
 ];
 
 describe('Chutes provider onboarding contract', () => {
@@ -306,10 +363,28 @@ function deployment(
 	inputModalities = ['text'],
 	modelReasoningAvailability: 'optional' | 'required' | 'unsupported' = 'unsupported',
 	modelReasoningEfforts: string[] = [],
-	modelReasoningMaxTokens: { maximum: number; minimum: number } | null = null
+	modelReasoningMaxTokens: { maximum: number; minimum: number } | null = null,
+	modelFacts: {
+		contextWindowTokens?: number;
+		inputModalities?: string[];
+		maxOutputTokens?: number;
+	} = {}
 ): ProviderDeploymentContract {
 	const chuteId = chuteIds[id];
 	const gpuCount = gpuCounts[id];
+	const publicOverrides = {
+		...(modelFacts.contextWindowTokens !== undefined &&
+		modelFacts.contextWindowTokens !== contextTokens
+			? { contextWindowTokens: contextTokens }
+			: {}),
+		...(modelFacts.maxOutputTokens !== undefined && modelFacts.maxOutputTokens !== outputTokens
+			? { maxOutputTokens: outputTokens }
+			: {}),
+		...(modelFacts.inputModalities &&
+		modelFacts.inputModalities.join(',') !== inputModalities.join(',')
+			? { inputModalities }
+			: {})
+	};
 	return {
 		aliases: [`${modelId}-tee`],
 		authorId,
@@ -319,7 +394,10 @@ function deployment(
 		id,
 		inputModalities,
 		maxOutputTokens: outputTokens,
+		modelContextWindowTokens: modelFacts.contextWindowTokens,
 		modelId,
+		modelInputModalities: modelFacts.inputModalities,
+		modelMaxOutputTokens: modelFacts.maxOutputTokens,
 		modelReasoningAvailability,
 		modelReasoningEfforts,
 		modelReasoningMaxTokens,
@@ -329,8 +407,8 @@ function deployment(
 			input_tokens: { per_mill_tokens: input },
 			output_tokens: { per_mill_tokens: output }
 		},
+		...(Object.keys(publicOverrides).length > 0 ? { publicOverrides } : {}),
 		routeIds: ['chutes-chat-completions'],
-		tee,
 		upstream: { chuteId, gpuCount, model: upstreamModel },
 		weightPrecision
 	};

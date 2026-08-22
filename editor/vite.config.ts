@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -9,43 +9,70 @@ const editorRoot = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = resolve(editorRoot, '../source');
 const dataRoot = join(catalogRoot, 'data');
 const yamlPattern = /\.(ya?ml)$/;
-const MAX_BUILD_OUTPUT_BYTES = 8 * 1024 * 1024;
+const EDITOR_PORT = 5177;
+const MAX_BUILD_OUTPUT_BYTES = 1024 * 1024;
 const MAX_SOURCE_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_SOURCE_FILE_BYTES = 1024 * 1024;
 
-export default defineConfig({
-	root: editorRoot,
-	plugins: [catalogApi(), svelte()],
-	server: {
-		port: 5177,
-		strictPort: false
-	}
+export default defineConfig(({ command }) => {
+	const base = command === 'serve' ? developmentBase() : '/';
+	return {
+		base,
+		root: editorRoot,
+		plugins: [catalogApi(base), svelte()],
+		server: {
+			allowedHosts: ['code.stogas.ai'],
+			port: EDITOR_PORT,
+			strictPort: true
+		}
+	};
 });
 
-function catalogApi(): Plugin {
+function developmentBase() {
+	const proxyUri = process.env.VSCODE_PROXY_URI;
+	if (!proxyUri) return '/';
+	const url = new URL(proxyUri.replace('{{port}}', String(EDITOR_PORT)), 'http://localhost');
+	return url.pathname.replace('/proxy/', '/absproxy/');
+}
+
+function catalogApi(base: string): Plugin {
+	const apiBase = `${base}api/catalog`;
 	return {
 		name: 'stogas-catalog-api',
 		configureServer(server) {
-			server.middlewares.use('/api/catalog/sources', async (_req, res) => {
+			server.middlewares.use(`${apiBase}/sources`, async (req, res) => {
+				if (req.method !== 'GET') {
+					sendJson(res, { error: 'Method not allowed' }, 405);
+					return;
+				}
 				try {
 					sendJson(res, readSources());
 				} catch (error) {
 					sendJson(res, { error: errorMessage(error) }, 500);
 				}
 			});
-			server.middlewares.use('/api/catalog/source', async (req, res) => {
+			server.middlewares.use(`${apiBase}/source`, async (req, res) => {
 				if (req.method !== 'PUT') {
 					sendJson(res, { error: 'Method not allowed' }, 405);
 					return;
 				}
-				let input: { path?: unknown; content?: unknown };
+				if (!sameOriginWriteRequest(req)) {
+					sendJson(res, { error: 'Cross-origin write rejected' }, 403);
+					return;
+				}
+				let input: unknown;
 				try {
-					input = JSON.parse(await readBody(req)) as typeof input;
+					input = JSON.parse(await readBody(req));
 				} catch (error) {
 					sendJson(
 						res,
 						{ error: errorMessage(error) },
 						error instanceof BodyTooLargeError ? 413 : 400
 					);
+					return;
+				}
+				if (!isRecord(input)) {
+					sendJson(res, { error: 'Expected YAML path and content' }, 400);
 					return;
 				}
 				const { path, content } = input;
@@ -58,6 +85,10 @@ function catalogApi(): Plugin {
 					sendJson(res, { error: 'Expected YAML path and content' }, 400);
 					return;
 				}
+				if (Buffer.byteLength(content) > MAX_SOURCE_FILE_BYTES) {
+					sendJson(res, { error: 'Catalog source is too large' }, 413);
+					return;
+				}
 				const absolute = safeCatalogPath(path);
 				if (!absolute) {
 					sendJson(res, { error: 'Path is not an existing catalog data file' }, 400);
@@ -66,9 +97,13 @@ function catalogApi(): Plugin {
 				writeFileSync(absolute, content);
 				sendJson(res, { ok: true });
 			});
-			server.middlewares.use('/api/catalog/build', async (req, res) => {
+			server.middlewares.use(`${apiBase}/build`, async (req, res) => {
 				if (req.method !== 'POST') {
 					sendJson(res, { error: 'Method not allowed' }, 405);
+					return;
+				}
+				if (!sameOriginWriteRequest(req)) {
+					sendJson(res, { error: 'Cross-origin write rejected' }, 403);
 					return;
 				}
 				try {
@@ -84,6 +119,10 @@ function catalogApi(): Plugin {
 			});
 		}
 	};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function readSources() {
@@ -105,8 +144,13 @@ function walk(dir: string): string[] {
 		.flatMap((entry) => {
 			const path = join(dir, entry);
 			const stat = lstatSync(path);
-			if (stat.isSymbolicLink()) return [];
-			return stat.isDirectory() ? walk(path) : [path];
+			if (stat.isSymbolicLink()) throw new Error('Catalog data must not contain symbolic links');
+			if (stat.isDirectory()) return walk(path);
+			if (!stat.isFile()) throw new Error('Catalog data must contain only regular files');
+			if (yamlPattern.test(path) && stat.size > MAX_SOURCE_FILE_BYTES) {
+				throw new Error(`Catalog source exceeds ${MAX_SOURCE_FILE_BYTES} bytes`);
+			}
+			return [path];
 		})
 		.sort();
 }
@@ -163,14 +207,30 @@ function singularNodeType(type: string) {
 }
 
 function pushSource(nodeSources: Record<string, string[]>, key: string, path: string) {
-	nodeSources[key] = [...(nodeSources[key] ?? []), path];
+	const paths = nodeSources[key] ?? [];
+	paths.push(path);
+	nodeSources[key] = paths;
 }
 
 function safeCatalogPath(path: string) {
 	try {
-		const absolute = realpathSync(resolve(catalogRoot, path));
-		const root = `${realpathSync(dataRoot)}${sep}`;
-		return absolute.startsWith(root) && lstatSync(absolute).isFile() ? absolute : null;
+		const absolute = resolve(catalogRoot, path);
+		const pathFromRoot = relative(dataRoot, absolute);
+		if (
+			!pathFromRoot ||
+			pathFromRoot.startsWith(`..${sep}`) ||
+			pathFromRoot === '..' ||
+			resolve(dataRoot, pathFromRoot) !== absolute
+		) {
+			return null;
+		}
+		let cursor = dataRoot;
+		for (const segment of pathFromRoot.split(sep)) {
+			cursor = join(cursor, segment);
+			const stats = lstatSync(cursor);
+			if (stats.isSymbolicLink()) return null;
+		}
+		return lstatSync(absolute).isFile() ? absolute : null;
 	} catch {
 		return null;
 	}
@@ -210,9 +270,27 @@ function errorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
 }
 
+function sameOriginWriteRequest(req: import('node:http').IncomingMessage) {
+	const origin = req.headers.origin;
+	const host = req.headers.host;
+	if (!origin || !host || req.headers['sec-fetch-site'] === 'cross-site') return false;
+	try {
+		const parsedOrigin = new URL(origin);
+		if (req.headers['sec-fetch-site'] === 'same-origin') return true;
+		const forwardedHost = req.headers['x-forwarded-host'];
+		return (
+			parsedOrigin.host === host ||
+			(typeof forwardedHost === 'string' &&
+				parsedOrigin.host === forwardedHost.split(',')[0]?.trim())
+		);
+	} catch {
+		return false;
+	}
+}
+
 function run(command: string[], cwd = catalogRoot) {
 	return new Promise<string>((resolveRun, reject) => {
-		const child = spawn(command[0], command.slice(1), { cwd });
+		const child = spawn(command[0], command.slice(1), { cwd, env: buildEnvironment() });
 		let output = '';
 		let outputBytes = 0;
 		let settled = false;
@@ -246,6 +324,17 @@ function run(command: string[], cwd = catalogRoot) {
 
 function sendJson(res: import('node:http').ServerResponse, value: unknown, status = 200) {
 	res.statusCode = status;
+	res.setHeader('cache-control', 'no-store');
 	res.setHeader('content-type', 'application/json');
 	res.end(JSON.stringify(value));
+}
+
+function buildEnvironment() {
+	const environment = { ...process.env };
+	for (const name of Object.keys(environment)) {
+		if (/(?:API_?KEY|CREDENTIAL|PASSWORD|PRIVATE_?KEY|SECRET|TOKEN)/i.test(name)) {
+			delete environment[name];
+		}
+	}
+	return environment;
 }

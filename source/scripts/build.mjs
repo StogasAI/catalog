@@ -1,18 +1,20 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
 	existsSync,
+	lstatSync,
 	mkdtempSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
 	rmdirSync,
-	statSync,
 	writeFileSync
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stableJson } from './canonical-json.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
@@ -25,13 +27,26 @@ const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
 const cachedCue = join(toolCacheDir, process.platform === 'win32' ? 'cue.exe' : 'cue');
 const args = new Set(process.argv.slice(2));
 const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-const canonicalEfforts = new Set(canonicalEffortOrder);
 const canonicalEffortRanks = new Map(canonicalEffortOrder.map((effort, index) => [effort, index]));
 const reasoningAvailabilities = new Set(['unsupported', 'optional', 'required']);
 const canonicalCredentialModes = new Set(['managed', 'byok']);
+const maxAliasesPerNode = 8;
 const runtimeSizeLimit = 16 * 1024 * 1024;
 const publicSizeLimit = 64 * 1024 * 1024;
+const sourceFileSizeLimit = 1024 * 1024;
+const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;
+
+const supportedArgs = new Set(['--check', '--clean', '--validate-only']);
+for (const arg of args) {
+	if (!supportedArgs.has(arg)) throw new Error(`Unknown catalog build argument: ${arg}`);
+}
+if (args.has('--clean') && args.size > 1) {
+	throw new Error('--clean cannot be combined with another catalog build argument');
+}
+if (args.has('--check') && args.has('--validate-only')) {
+	throw new Error('--check and --validate-only cannot be combined');
+}
 
 function resolveToolCacheRoot() {
 	const configured = process.env.STOGAS_CATALOG_TOOL_CACHE_DIR?.trim();
@@ -49,9 +64,16 @@ function walkFiles(dir, predicate) {
 	const files = [];
 	for (const entry of readdirSync(dir).sort()) {
 		const path = join(dir, entry);
-		const stats = statSync(path);
+		const stats = lstatSync(path);
+		if (stats.isSymbolicLink()) throw new Error(`${rel(path)} must not be a symbolic link`);
 		if (stats.isDirectory()) files.push(...walkFiles(path, predicate));
-		else if (predicate(path)) files.push(path);
+		else if (!stats.isFile()) throw new Error(`${rel(path)} must be a regular file or directory`);
+		else if (predicate(path)) {
+			if (stats.size > sourceFileSizeLimit) {
+				throw new Error(`${rel(path)} exceeds the ${sourceFileSizeLimit}-byte source file limit`);
+			}
+			files.push(path);
+		}
 	}
 	return files;
 }
@@ -94,7 +116,12 @@ function writeFileOwnedNodeSource(sources) {
 	if (!sources.length) return null;
 	const grouped = new Map();
 	for (const source of sources) {
-		grouped.set(source.type, [...(grouped.get(source.type) ?? []), source]);
+		const entries = grouped.get(source.type) ?? [];
+		if (entries.some((entry) => entry.id === source.id)) {
+			throw new Error(`${source.type}.${source.id} is owned by more than one source file`);
+		}
+		entries.push(source);
+		grouped.set(source.type, entries);
 	}
 	const content = [...grouped.entries()]
 		.sort(([left], [right]) => left.localeCompare(right))
@@ -117,6 +144,12 @@ function writeFileOwnedNodeSource(sources) {
 
 function ensureTempBuildDir() {
 	if (tempBuildDir) return tempBuildDir;
+	if (existsSync(tempBuildRoot)) {
+		const stats = lstatSync(tempBuildRoot);
+		if (stats.isSymbolicLink() || !stats.isDirectory()) {
+			throw new Error(`${rel(tempBuildRoot)} must be a regular directory`);
+		}
+	}
 	mkdirSync(tempBuildRoot, { recursive: true });
 	tempBuildDir = mkdtempSync(join(tempBuildRoot, 'build-'));
 	return tempBuildDir;
@@ -142,12 +175,29 @@ function run(command, options = {}) {
 		});
 		let stdout = '';
 		let stderr = '';
+		let outputBytes = 0;
+		let outputExceeded = false;
 		child.stdout.setEncoding('utf8');
 		child.stderr.setEncoding('utf8');
-		child.stdout.on('data', (chunk) => (stdout += chunk));
-		child.stderr.on('data', (chunk) => (stderr += chunk));
+		const collect = (stream, chunk) => {
+			if (outputExceeded) return;
+			outputBytes += Buffer.byteLength(chunk);
+			if (outputBytes > (options.maxOutputBytes ?? processOutputLimit)) {
+				outputExceeded = true;
+				child.kill('SIGKILL');
+				return;
+			}
+			if (stream === 'stdout') stdout += chunk;
+			else stderr += chunk;
+		};
+		child.stdout.on('data', (chunk) => collect('stdout', chunk));
+		child.stderr.on('data', (chunk) => collect('stderr', chunk));
 		child.on('error', reject);
 		child.on('close', (code) => {
+			if (outputExceeded) {
+				reject(new Error(`${command[0]} output exceeded the configured limit`));
+				return;
+			}
 			if (code === 0) resolve(stdout);
 			else reject(new Error(`${command.join(' ')} failed\n${stderr || stdout}`));
 		});
@@ -165,7 +215,7 @@ async function commandWorks(command) {
 
 async function resolveCueCommand() {
 	const configured = process.env.CUE_BIN?.trim();
-	if (configured) return configured.split(/\s+/);
+	if (configured) return [configured];
 	if (existsSync(cachedCue) && (await commandWorks([cachedCue, 'version']))) return [cachedCue];
 	if (await commandWorks(['cue', 'version'])) return ['cue'];
 	if (await commandWorks(['go', 'version'])) {
@@ -176,20 +226,6 @@ async function resolveCueCommand() {
 		return [cachedCue];
 	}
 	throw new Error('CUE is required. Install CUE or Go, or set CUE_BIN.');
-}
-
-function stableValue(value) {
-	if (Array.isArray(value)) return value.map(stableValue);
-	if (!value || typeof value !== 'object') return value;
-	return Object.fromEntries(
-		Object.keys(value)
-			.sort()
-			.map((key) => [key, stableValue(value[key])])
-	);
-}
-
-function stableJson(value) {
-	return `${JSON.stringify(stableValue(value))}\n`;
 }
 
 function same(left, right) {
@@ -310,12 +346,18 @@ function mergePricing(graph, deploymentId, deployment) {
 			pricing[meter] = structuredClone(rates);
 		}
 	}
+	rejectRedundantOverride(
+		pricing,
+		deployment.overrides?.pricing,
+		`${deploymentId}.overrides.pricing`
+	);
+	const inheritedPricing = mergeFacts(pricing, deployment.overrides?.pricing ?? {});
 	for (const meter of Object.keys(deployment.pricing)) {
-		if (pricing[meter]) {
-			throw new Error(`${deploymentId}.pricing.${meter} is already owned by one of its routes`);
+		if (inheritedPricing[meter]) {
+			throw new Error(`${deploymentId}.pricing.${meter} must use overrides.pricing`);
 		}
 	}
-	return mergeFacts(pricing, deployment.pricing);
+	return mergeFacts(inheritedPricing, deployment.pricing);
 }
 
 function effectiveTokenLimits(deploymentId, model, deployment) {
@@ -467,35 +509,68 @@ function effectiveReasoning(deploymentId, model, deployment) {
 	};
 }
 
-function effectiveDataHandling(graph, deploymentId, deployment) {
-	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'dataHandling');
-	rejectRedundantOverride(
-		routeValue,
-		deployment.overrides?.dataHandling,
-		`${deploymentId}.overrides.dataHandling`
-	);
-	const value = mergeFacts(routeValue, deployment.overrides?.dataHandling ?? {});
-	return {
-		processingRegions: [...value.processingRegions],
-		storageRegions: [...value.storageRegions],
-		retentionDays: value.retentionDays,
-		trainingUse: value.trainingUse,
-		zeroDataRetention: value.zeroDataRetention
-	};
+function effectiveRouteOverrides(deploymentId, deployment, reasoningEfforts) {
+	const sourceOverrides = deployment.overrides?.routes ?? {};
+	const routeOverrides = {};
+	const deploymentEfforts = new Set(reasoningEfforts);
+	for (const [routeId, override] of Object.entries(sourceOverrides)) {
+		if (!deployment.routeIds.includes(routeId)) {
+			throw new Error(`${deploymentId}.overrides.routes references unattached route ${routeId}`);
+		}
+		rejectRedundantOverride(
+			reasoningEfforts,
+			override.reasoningEfforts,
+			`${deploymentId}.overrides.routes.${routeId}.reasoningEfforts`
+		);
+		let previousEffortRank = -1;
+		for (const effort of override.reasoningEfforts) {
+			const effortRank = canonicalEffortRanks.get(effort);
+			if (effortRank === undefined) {
+				throw new Error(`${deploymentId}: invalid ${routeId} reasoning effort ${effort}`);
+			}
+			if (effortRank <= previousEffortRank) {
+				throw new Error(
+					`${deploymentId}: ${routeId} reasoning efforts must use canonical order without repeats`
+				);
+			}
+			previousEffortRank = effortRank;
+			if (!deploymentEfforts.has(effort)) {
+				throw new Error(
+					`${deploymentId}: ${routeId} reasoning effort ${effort} is absent from the deployment`
+				);
+			}
+		}
+		routeOverrides[routeId] = {
+			reasoningEfforts: [...override.reasoningEfforts]
+		};
+	}
+	return routeOverrides;
 }
 
-function effectiveModerated(graph, deploymentId, deployment) {
-	const routeValue = oneRouteFact(graph, deploymentId, deployment, 'moderated');
-	rejectRedundantOverride(
-		routeValue,
-		deployment.overrides?.moderated,
-		`${deploymentId}.overrides.moderated`
+function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
+	return Object.fromEntries(
+		[...deployment.routeIds].sort().map((routeId) => {
+			const routeValue = requireNode(graph.routes, routeId, deploymentId).dataHandling;
+			rejectRedundantOverride(
+				routeValue,
+				deployment.overrides?.dataHandling,
+				`${deploymentId}.overrides.dataHandling`
+			);
+			const value = mergeFacts(routeValue, deployment.overrides?.dataHandling ?? {});
+			return [
+				routeId,
+				{
+					processingLocation: value.processingLocation,
+					storageLocation: value.storageLocation,
+					endToEndEncrypted: value.endToEndEncrypted,
+					retentionDays: value.retentionDays,
+					trainingUse: value.trainingUse,
+					zeroDataRetention: value.zeroDataRetention,
+					tee: value.tee ? structuredClone(value.tee) : null
+				}
+			];
+		})
 	);
-	return deployment.overrides?.moderated ?? routeValue;
-}
-
-function effectiveTee(deployment) {
-	return deployment.tee ? structuredClone(deployment.tee) : undefined;
 }
 
 function effectiveDeprecationDate(deploymentId, model, deployment) {
@@ -524,11 +599,6 @@ function buildCatalogs(source) {
 					`${routeId}.overrides.capabilities`
 				);
 				rejectRedundantOverride(
-					provider.dataHandling,
-					overrides.dataHandling,
-					`${routeId}.overrides.dataHandling`
-				);
-				rejectRedundantOverride(
 					provider.moderated,
 					overrides.moderated,
 					`${routeId}.overrides.moderated`
@@ -544,20 +614,21 @@ function buildCatalogs(source) {
 					'structuredOutputs',
 					'systemMessages',
 					'toolChoice',
-					'webSearch',
 					'urlContext',
 					'pdfInput'
 				];
 				for (const capability of capabilityNames) {
 					if (typeof capabilities[capability] !== 'boolean') capabilities[capability] = false;
 				}
-				const dataHandling = mergeFacts(provider.dataHandling, overrides.dataHandling ?? {});
+				const dataHandling = mergeFacts(provider.dataHandling, route.dataHandling);
 				for (const field of [
-					'processingRegions',
-					'storageRegions',
+					'processingLocation',
+					'storageLocation',
+					'endToEndEncrypted',
 					'retentionDays',
 					'trainingUse',
-					'zeroDataRetention'
+					'zeroDataRetention',
+					'tee'
 				]) {
 					if (!(field in dataHandling)) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
@@ -567,6 +638,7 @@ function buildCatalogs(source) {
 				if (typeof moderated !== 'boolean') {
 					throw new Error(`${routeId}: moderated is unresolved`);
 				}
+				const pricing = mergeFacts(provider.pricing ?? {}, route.pricing ?? {});
 				return [
 					routeId,
 					{
@@ -576,7 +648,7 @@ function buildCatalogs(source) {
 						capabilities,
 						dataHandling,
 						moderated,
-						pricing: structuredClone(route.pricing ?? {})
+						pricing
 					}
 				];
 			})
@@ -590,7 +662,9 @@ function buildCatalogs(source) {
 	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
 		for (const routeId of deployment.routeIds) {
 			const key = `${deployment.modelId}\0${routeId}`;
-			deploymentsByModelRoute.set(key, [...(deploymentsByModelRoute.get(key) ?? []), deploymentId]);
+			const deploymentIds = deploymentsByModelRoute.get(key) ?? [];
+			deploymentIds.push(deploymentId);
+			deploymentsByModelRoute.set(key, deploymentIds);
 		}
 	}
 	for (const [key, deploymentIds] of deploymentsByModelRoute) {
@@ -612,6 +686,7 @@ function buildCatalogs(source) {
 	function validateQualifierAliases(nodes, kind) {
 		const qualifiers = new Map();
 		for (const [id, node] of Object.entries(nodes)) {
+			validateAliasCount(node.aliases, kind, id);
 			for (const qualifier of [id, ...node.aliases]) {
 				if (qualifier.trim() !== qualifier || qualifier.includes('/')) {
 					throw new Error(`${kind} ${id}: qualifier ${qualifier} is not canonical`);
@@ -622,6 +697,12 @@ function buildCatalogs(source) {
 				}
 				qualifiers.set(qualifier, id);
 			}
+		}
+	}
+
+	function validateAliasCount(aliases, kind, id) {
+		if (aliases.length > maxAliasesPerNode) {
+			throw new Error(`${kind} ${id}: select at most ${maxAliasesPerNode} aliases`);
 		}
 	}
 
@@ -647,6 +728,7 @@ function buildCatalogs(source) {
 	}
 
 	for (const [modelId, model] of Object.entries(graph.models)) {
+		validateAliasCount(model.aliases, 'model', modelId);
 		if (!reasoningAvailabilities.has(model.reasoningAvailability)) {
 			throw new Error(`${modelId}: invalid reasoning availability`);
 		}
@@ -679,6 +761,10 @@ function buildCatalogs(source) {
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
+		validateAliasCount(deployment.aliases ?? [], 'deployment', deploymentId);
+		if (new Set(deployment.routeIds).size !== deployment.routeIds.length) {
+			throw new Error(`${deploymentId}: routeIds must not repeat`);
+		}
 		const model = requireNode(graph.models, deployment.modelId, deploymentId);
 		const providerId = providerForDeployment(graph, deploymentId, deployment);
 		if (!deployment.upstream?.model) {
@@ -696,25 +782,99 @@ function buildCatalogs(source) {
 				selectorKeys.every((key) => ['model', 'reasoningMode', 'serviceTier'].includes(key))) ||
 			(providerId === 'anthropic' &&
 				selectorKeys.includes('model') &&
-				selectorKeys.includes('serviceTier') &&
-				selectorKeys.every((key) =>
-					['inferenceGeo', 'model', 'serviceTier', 'speed'].includes(key)
-				)) ||
+				selectorKeys.every((key) => ['inferenceGeo', 'model', 'speed'].includes(key))) ||
 			(providerId === 'chutes' &&
 				JSON.stringify(selectorKeys) === JSON.stringify(['chuteId', 'gpuCount', 'model'])) ||
-			(providerId === 'azure' && JSON.stringify(selectorKeys) === JSON.stringify(['model']));
+			(providerId === 'azure' &&
+				selectorKeys.includes('deploymentType') &&
+				selectorKeys.includes('hosting') &&
+				selectorKeys.includes('model') &&
+				selectorKeys.includes('modelFormat') &&
+				selectorKeys.includes('modelVersion') &&
+				selectorKeys.every((key) =>
+					[
+						'deploymentType',
+						'hosting',
+						'model',
+						'modelFormat',
+						'modelVersion',
+						'reasoningMode',
+						'serviceTier'
+					].includes(key)
+				));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
-		if (providerId === 'azure' && deployment.upstream.model !== deployment.modelId) {
-			throw new Error(`${deploymentId}: Azure upstream model must equal modelId`);
-		}
-		if (providerId === 'chutes' ? !deployment.tee : Boolean(deployment.tee)) {
-			throw new Error(`${deploymentId}: TEE metadata must be present only on Chutes deployments`);
+		if (providerId === 'azure') {
+			const usesAnthropicMessages = deployment.routeIds.includes('azure-anthropic-messages');
+			const modelFormat = deployment.upstream.modelFormat.toLowerCase();
+			if (usesAnthropicMessages !== (model.authorId === 'anthropic')) {
+				throw new Error(
+					`${deploymentId}: Azure Anthropic models must use only the Azure Anthropic Messages route`
+				);
+			}
+			if (
+				(modelFormat === 'anthropic' &&
+					!['anthropic', 'azure'].includes(deployment.upstream.hosting)) ||
+				(modelFormat === 'fireworks' && deployment.upstream.hosting !== 'fireworks') ||
+				(['deepseek', 'openai', 'openai-oss'].includes(modelFormat) &&
+					deployment.upstream.hosting !== 'azure') ||
+				(modelFormat === 'nvidia' && deployment.upstream.hosting !== 'nvidia')
+			) {
+				throw new Error(`${deploymentId}: Azure model format and hosting do not match`);
+			}
+			if (
+				model.authorId === 'anthropic' &&
+				!['anthropic', 'azure'].includes(deployment.upstream.hosting)
+			) {
+				throw new Error(`${deploymentId}: Azure Claude hosting must be azure or anthropic`);
+			}
+			if (
+				deployment.upstream.hosting === 'anthropic' &&
+				deployment.upstream.deploymentType !== 'global_standard'
+			) {
+				throw new Error(`${deploymentId}: Anthropic-hosted Azure Claude is Global Standard only`);
+			}
+			if (
+				deployment.upstream.deploymentType !== 'global_standard' &&
+				!['azure', 'fireworks'].includes(deployment.upstream.hosting)
+			) {
+				throw new Error(
+					`${deploymentId}: this Azure hosting mode does not offer Data Zone Standard`
+				);
+			}
+			if (
+				deployment.upstream.serviceTier === 'priority' &&
+				(!['gpt-5.6-sol', 'gpt-5.6-terra'].includes(deployment.upstream.model) ||
+					deployment.upstream.deploymentType !== 'global_standard')
+			) {
+				throw new Error(`${deploymentId}: Azure Priority is unavailable for this target`);
+			}
+			if (
+				deployment.upstream.deploymentType === 'instant' &&
+				(deployment.upstream.hosting !== 'azure' ||
+					modelFormat !== 'openai' ||
+					!['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'].includes(deployment.upstream.model) ||
+					deployment.upstream.serviceTier !== 'default')
+			) {
+				throw new Error(
+					`${deploymentId}: Azure Instant is verified only for default-tier GPT-5.6 targets`
+				);
+			}
+			if (
+				modelFormat === 'fireworks' &&
+				(deployment.upstream.deploymentType !== 'data_zone_standard_us' ||
+					deployment.routeIds.length !== 1 ||
+					deployment.routeIds[0] !== 'azure-chat-completions')
+			) {
+				throw new Error(
+					`${deploymentId}: Fireworks pay-per-token requires US Data Zone Chat Completions`
+				);
+			}
 		}
 		if (
 			deployment.upstream.reasoningMode &&
-			(providerId !== 'openai' ||
+			(!['openai', 'azure'].includes(providerId) ||
 				!deployment.upstream.model.startsWith('gpt-5.6-') ||
 				deployment.routeIds.some((routeId) => {
 					const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
@@ -739,18 +899,60 @@ function buildCatalogs(source) {
 			model,
 			deployment
 		);
+		const routeOverrides = effectiveRouteOverrides(deploymentId, deployment, reasoningEfforts);
 		if (
 			reasoningMaxTokens &&
-			(providerId !== 'anthropic' ||
+			((providerId !== 'anthropic' &&
+				!(providerId === 'azure' && model.authorId === 'anthropic')) ||
 				reasoningMaxTokens.minimum > reasoningMaxTokens.maximum ||
 				reasoningMaxTokens.maximum >= maxOutputTokens)
 		) {
 			throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
 		}
 		const pricing = mergePricing(graph, deploymentId, deployment);
-		const dataHandling = effectiveDataHandling(graph, deploymentId, deployment);
-		const moderated = effectiveModerated(graph, deploymentId, deployment);
-		const tee = effectiveTee(deployment);
+		const dataHandlingByRoute = effectiveDataHandlingByRoute(graph, deploymentId, deployment);
+		const dataHandlingValues = Object.values(dataHandlingByRoute);
+		if (
+			providerId === 'azure' &&
+			deployment.upstream.hosting === 'azure' &&
+			deployment.upstream.deploymentType.startsWith('data_zone_standard_')
+		) {
+			const expectedLocations = {
+				data_zone_standard_apac: { processing: 'apac', storage: 'apac' },
+				data_zone_standard_eu: { processing: 'europe', storage: 'europe' },
+				data_zone_standard_us: { processing: 'US', storage: 'US' }
+			}[deployment.upstream.deploymentType];
+			if (
+				!expectedLocations ||
+				dataHandlingValues.some(
+					(value) =>
+						value.processingLocation !== expectedLocations.processing ||
+						value.storageLocation !== expectedLocations.storage
+				)
+			) {
+				throw new Error(
+					`${deploymentId}: Data Zone Standard must keep processing and storage in its declared location`
+				);
+			}
+		}
+		if (
+			providerId === 'azure' &&
+			deployment.upstream.hosting !== 'azure' &&
+			dataHandlingValues.some(
+				(value) => value.processingLocation !== 'unknown' || value.storageLocation !== 'unknown'
+			)
+		) {
+			throw new Error(`${deploymentId}: externally hosted Azure locations must remain unknown`);
+		}
+		if (
+			dataHandlingValues.some((value) =>
+				providerId === 'chutes' ? !value.tee : Boolean(value.tee)
+			)
+		) {
+			throw new Error(
+				`${deploymentId}: dataHandling.tee must be present only on Chutes deployments`
+			);
+		}
 		const baseStates = deployment.routeIds.map(
 			(routeId) => baseByModelRoute.get(`${deployment.modelId}\0${routeId}`) === deploymentId
 		);
@@ -779,15 +981,20 @@ function buildCatalogs(source) {
 			reasoningAvailability,
 			reasoningEfforts,
 			reasoningMaxTokens,
+			...(Object.keys(routeOverrides).length > 0 ? { routeOverrides } : {}),
 			routeIds: [...deployment.routeIds].sort(),
 			upstream: deployment.upstream,
-			...(tee ? { tee } : {}),
+			dataHandlingByRoute,
 			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};
 		publicDeployments[deploymentId] = {
-			...common,
-			dataHandling,
-			moderated
+			aliases: [...(deployment.aliases ?? [])],
+			modelId: deployment.modelId,
+			pricing: structuredClone(deployment.pricing),
+			routeIds: [...deployment.routeIds].sort(),
+			upstream: structuredClone(deployment.upstream),
+			...(deployment.overrides ? { overrides: structuredClone(deployment.overrides) } : {}),
+			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};
 		runtimeDeployments[deploymentId] = common;
 
@@ -842,7 +1049,7 @@ function buildCatalogs(source) {
 
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v1',
+			schema: 'stogas.catalog.runtime.v2',
 			graph: {
 				authors: runtimeAuthors,
 				models: runtimeModels,
@@ -852,12 +1059,12 @@ function buildCatalogs(source) {
 			}
 		},
 		public: {
-			schema: 'stogas.catalog.public.v1',
+			schema: 'stogas.catalog.public.v2',
 			graph: {
 				authors: graph.authors,
 				models: graph.models,
-				providers: graph.providers,
-				routes: graph.routes,
+				providers: sourceGraph.providers,
+				routes: sourceGraph.routes,
 				deployments: publicDeployments
 			}
 		}
@@ -880,6 +1087,13 @@ if (args.has('--clean')) {
 	process.exit(0);
 }
 
+if (existsSync(generatedRoot)) {
+	const stats = lstatSync(generatedRoot);
+	if (stats.isSymbolicLink() || !stats.isDirectory()) {
+		throw new Error('generated must be a regular directory');
+	}
+}
+
 const cueFiles = walkFiles(join(sourceRoot, 'cue'), (path) => path.endsWith('.cue')).map(rel);
 const allDataFiles = walkFiles(
 	join(sourceRoot, 'data'),
@@ -891,9 +1105,9 @@ const fileOwnedSources = allDataFiles
 	.map(({ path, source }) => ({ ...source, path }));
 const fileOwnedPaths = new Set(fileOwnedSources.map((source) => source.path));
 const dataFiles = allDataFiles.filter((path) => !fileOwnedPaths.has(path)).map(rel);
-const generatedFileOwnedSource = writeFileOwnedNodeSource(fileOwnedSources);
 
 try {
+	const generatedFileOwnedSource = writeFileOwnedNodeSource(fileOwnedSources);
 	const cue = await resolveCueCommand();
 	const sourceFiles = [
 		...cueFiles,
@@ -910,8 +1124,9 @@ try {
 		'json'
 	]);
 	const catalogs = buildCatalogs(JSON.parse(exported));
-	const runtimeJson = stableJson(catalogs.runtime);
 	const publicJson = stableJson(catalogs.public);
+	catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
+	const runtimeJson = stableJson(catalogs.runtime);
 	assertSize('runtime catalog', runtimeJson, runtimeSizeLimit);
 	assertSize('public catalog', publicJson, publicSizeLimit);
 

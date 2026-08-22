@@ -2,6 +2,5 @@ routes:
   providerId: anthropic
   endpoint: https://api.anthropic.com/v1/messages
   interfaces: [chat_completions, responses]
-  pricing:
-    anthropic_web_search_calls:
-      per_1k_calls: '10000000000000000000'
+  dataHandling:
+    endToEndEncrypted: false

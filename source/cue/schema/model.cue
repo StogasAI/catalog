@@ -24,7 +24,6 @@ package catalog
 		structuredOutputs?:       bool
 		systemMessages?:          bool
 		toolChoice?:              bool
-		webSearch?:               bool
 		urlContext?:              bool
 		pdfInput?:                bool
 	})

@@ -1,4 +1,4 @@
-import { createHash, createHmac, createPublicKey } from 'node:crypto';
+import { createHmac, createPublicKey } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -20,6 +20,9 @@ import {
 	catalogArtifact,
 	catalogManifest,
 	canonicalJson,
+	parseSequence,
+	resolveDestructiveOutput,
+	sha256,
 	stableJson,
 	stagingDevelopmentProvenance
 } from './release-format.mjs';
@@ -75,11 +78,15 @@ async function prepareDevelopmentRelease() {
 		throw new Error('Development catalog publication is accepted only for staging.');
 	}
 
-	run('bun', ['install', '--frozen-lockfile']);
-	run('bun', ['run', 'build']);
+	run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
+	run('bun', ['run', 'build'], catalogCheckEnvironment());
 	run('bun', ['run', 'check'], catalogCheckEnvironment());
 	verifySigningKey();
-	run(process.execPath, ['source/scripts/create-release.mjs', String(sequence), outputRoot]);
+	run(
+		process.execPath,
+		['source/scripts/create-release.mjs', String(sequence), outputRoot],
+		signingEnvironment()
+	);
 	verifyChecksums(outputRoot);
 	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
 	const envelope = parseEnvelope(releasePath);
@@ -90,7 +97,7 @@ async function prepareDevelopmentRelease() {
 	const approvalPath = writeApproval(approval);
 
 	const latest = await readLatest();
-	assertMayPublishSequence(latest, readFileSync(releasePath));
+	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
 	for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
 		await publishImmutable(path, outputRoot);
 	}
@@ -108,7 +115,7 @@ async function prepareRelease() {
 
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 	try {
-		run('bun', ['install', '--frozen-lockfile']);
+		run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
 		run('bun', ['run', 'check'], catalogCheckEnvironment());
 		verifySigningKey();
 
@@ -116,7 +123,11 @@ async function prepareRelease() {
 		downloadAndVerifyGitHubProposal(proposalRoot);
 		verifyIndependentBuild(proposalRoot);
 
-		run(process.execPath, ['source/scripts/create-release.mjs', String(sequence), outputRoot]);
+		run(
+			process.execPath,
+			['source/scripts/create-release.mjs', String(sequence), outputRoot],
+			signingEnvironment()
+		);
 		verifyChecksums(outputRoot);
 		const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
 		const envelope = parseEnvelope(releasePath);
@@ -132,7 +143,7 @@ async function prepareRelease() {
 		const approvalPath = writeApproval(approval);
 
 		const latest = await readLatest();
-		assertMayPublishSequence(latest, readFileSync(releasePath));
+		assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
 		for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
 			await publishImmutable(path, outputRoot);
 		}
@@ -165,11 +176,11 @@ async function activateRelease() {
 	if (canonicalJson(approval.signed_release) !== canonicalJson(envelope)) {
 		throw new Error('Catalog approval and signed release differ.');
 	}
-	if (!readFileSync(latestPath).equals(readFileSync(releasePath))) {
+	if (!readBoundedRegularFile(latestPath).equals(readBoundedRegularFile(releasePath))) {
 		throw new Error('Catalog latest candidate and signed release differ.');
 	}
 	const latest = await readLatest();
-	assertMayPublishSequence(latest, readFileSync(releasePath));
+	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
 	await requireImmutableReadbacks(
 		[...artifactPaths(outputRoot), releasePath, approvalPath],
 		outputRoot
@@ -179,11 +190,13 @@ async function activateRelease() {
 }
 
 function requireCommands(commands) {
-	for (const command of commands) run(command, ['--version'], process.env, { stdout: 'ignore' });
+	for (const command of commands) {
+		run(command, ['--version'], catalogCheckEnvironment(), { stdout: 'ignore' });
+	}
 }
 
 function catalogCheckEnvironment() {
-	const environment = { ...process.env };
+	const environment = commandEnvironment('bun');
 	delete environment.AWS_OBJECT_LOCK_ENABLED;
 	return environment;
 }
@@ -204,7 +217,10 @@ function requireStorageEnvironment() {
 
 function releaseOutputRoot(value) {
 	const releasesRoot = join(repositoryRoot, 'release');
-	const candidate = resolve(repositoryRoot, value ?? `release/${tag}`);
+	const candidate = resolveDestructiveOutput(repositoryRoot, value ?? `release/${tag}`, {
+		allowedRepositoryRoots: ['release'],
+		defaultRelative: `release/${tag}`
+	});
 	const pathFromRoot = relative(releasesRoot, candidate);
 	if (
 		!pathFromRoot ||
@@ -311,7 +327,7 @@ function verifyIndependentBuild(proposalRoot) {
 	}
 	for (const filename of ['catalog.runtime.json', 'catalog.public.json']) {
 		const local = catalogArtifact(repositoryRoot, filename).bytes;
-		const github = readFileSync(join(proposalRoot, filename));
+		const github = readBoundedRegularFile(join(proposalRoot, filename));
 		if (!local.equals(github)) {
 			throw new Error(`GitHub Actions and Stogas produced different ${filename} bytes.`);
 		}
@@ -333,7 +349,10 @@ function parseEnvelope(path) {
 function verifyChecksums(root) {
 	const absoluteRoot = resolve(root);
 	const seen = new Set();
-	for (const line of readFileSync(join(root, 'SHA256SUMS'), 'utf8').trim().split('\n')) {
+	for (const line of readBoundedRegularFile(join(root, 'SHA256SUMS'))
+		.toString('utf8')
+		.trim()
+		.split('\n')) {
 		const match = /^([0-9a-f]{64}) {2}(.+)$/.exec(line);
 		if (!match) throw new Error('Release checksum file is malformed.');
 		const relativePath = match[2];
@@ -348,10 +367,11 @@ function verifyChecksums(root) {
 		seen.add(relativePath);
 		const path = resolve(absoluteRoot, relativePath);
 		const pathFromRoot = relative(absoluteRoot, path);
-		if (!pathFromRoot || pathFromRoot.startsWith('..') || lstatSync(path).isSymbolicLink()) {
+		if (!pathFromRoot || pathFromRoot.startsWith('..')) {
 			throw new Error('Release checksum file contains an unsafe path.');
 		}
-		if (sha256(readFileSync(path)) !== match[1]) {
+		const bytes = readContainedRegularFile(absoluteRoot, relativePath);
+		if (sha256(bytes) !== match[1]) {
 			throw new Error(`Release checksum failed for ${relativePath}.`);
 		}
 	}
@@ -360,21 +380,29 @@ function verifyChecksums(root) {
 function appendChecksum(root, path) {
 	const relativePath = relative(root, path).replaceAll('\\', '/');
 	const checksumPath = join(root, 'SHA256SUMS');
-	const current = readFileSync(checksumPath, 'utf8').replace(/\s*$/, '\n');
-	writeFileSync(checksumPath, `${current}${sha256(readFileSync(path))}  ${relativePath}\n`);
+	const current = readBoundedRegularFile(checksumPath).toString('utf8').replace(/\s*$/, '\n');
+	writeFileSync(
+		checksumPath,
+		`${current}${sha256(readBoundedRegularFile(path))}  ${relativePath}\n`
+	);
 }
 
 function artifactPaths(root) {
 	const directory = join(root, 'blobs', 'sha256');
-	return readdirSync(directory, { withFileTypes: true })
-		.filter((entry) => entry.isFile())
-		.map((entry) => join(directory, entry.name))
-		.sort();
+	assertContainedDirectory(root, 'blobs/sha256');
+	const entries = readdirSync(directory, { withFileTypes: true });
+	if (
+		entries.length !== 2 ||
+		entries.some((entry) => !entry.isFile() || !/^[0-9a-f]{64}\.json$/.test(entry.name))
+	) {
+		throw new Error('Catalog release must contain exactly two canonical catalog blobs.');
+	}
+	return entries.map((entry) => join(directory, entry.name)).sort();
 }
 
 async function publishImmutable(path, root) {
 	const key = objectKey(relative(root, path).replaceAll('\\', '/'));
-	const bytes = readFileSync(path);
+	const bytes = readBoundedRegularFile(path);
 	await Promise.all(
 		destinations.map(async (destination) => {
 			const existing = await destination.get(key);
@@ -407,7 +435,7 @@ async function requireImmutableReadbacks(paths, root) {
 			paths.map(async (path) => {
 				const key = objectKey(relative(root, path).replaceAll('\\', '/'));
 				const published = await destination.get(key);
-				if (!published || !readFileSync(path).equals(published.bytes)) {
+				if (!published || !readBoundedRegularFile(path).equals(published.bytes)) {
 					throw new Error(`Catalog object ${key} is absent or different in ${destination.name}.`);
 				}
 			})
@@ -419,14 +447,14 @@ function publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope)
 	const signedReleaseAsset = join(proposalRoot, 'catalog-signed-release.json');
 	const approvalAsset = join(proposalRoot, 'catalog-approval.json');
 	const checksumAsset = join(proposalRoot, 'STOGAS-SHA256SUMS');
-	writeReleaseAsset(signedReleaseAsset, readFileSync(releasePath));
-	writeReleaseAsset(approvalAsset, readFileSync(approvalPath));
+	writeReleaseAsset(signedReleaseAsset, readBoundedRegularFile(releasePath));
+	writeReleaseAsset(approvalAsset, readBoundedRegularFile(approvalPath));
 	writeReleaseAsset(
 		checksumAsset,
 		Buffer.from(
 			[
-				`${sha256(readFileSync(signedReleaseAsset))}  ${basename(signedReleaseAsset)}`,
-				`${sha256(readFileSync(approvalAsset))}  ${basename(approvalAsset)}`
+				`${sha256(readBoundedRegularFile(signedReleaseAsset))}  ${basename(signedReleaseAsset)}`,
+				`${sha256(readBoundedRegularFile(approvalAsset))}  ${basename(approvalAsset)}`
 			].join('\n') + '\n'
 		)
 	);
@@ -461,14 +489,17 @@ function publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope)
 }
 
 function writeReleaseAsset(path, bytes) {
-	if (existsSync(path) && !readFileSync(path).equals(bytes)) {
-		throw new Error(`GitHub release ${tag} contains different ${basename(path)} bytes.`);
+	if (existsSync(path)) {
+		const existing = readBoundedRegularFile(path);
+		if (!existing.equals(bytes)) {
+			throw new Error(`GitHub release ${tag} contains different ${basename(path)} bytes.`);
+		}
 	}
 	writeFileSync(path, bytes);
 }
 
 function readSingleAttestation(path) {
-	const value = readFileSync(path, 'utf8').trim();
+	const value = readBoundedRegularFile(path).toString('utf8').trim();
 	try {
 		const parsed = JSON.parse(value);
 		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
@@ -534,7 +565,7 @@ function assertMayPublishSequence(latest, releaseBytes) {
 }
 
 async function activateLatest(latest, path) {
-	const bytes = readFileSync(path);
+	const bytes = readBoundedRegularFile(path);
 	const key = objectKey('latest.json');
 	await Promise.all(
 		latest.states.map(async ({ current, destination, envelope }) => {
@@ -575,10 +606,13 @@ function parsePublishedEnvelope(bytes, destination) {
 
 async function getR2Object(key) {
 	const response = await r2Request('GET', key);
-	if (response.status === 404) return null;
+	if (response.status === 404) {
+		await response.body?.cancel();
+		return null;
+	}
 	if (!response.ok) {
-		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
-		throw new Error(`R2 GET ${key} failed (${response.status}): ${body}`);
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`R2 GET ${key} failed (${response.status}).`);
 	}
 	return {
 		bytes: await readBoundedResponseBuffer(response, maxObjectBytes),
@@ -596,13 +630,18 @@ async function putR2Object(key, bytes, options = {}) {
 	if (options.ifNoneMatch) headers['if-none-match'] = options.ifNoneMatch;
 	const response = await r2Request('PUT', key, bytes, headers);
 	if (!response.ok) {
-		const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
-		throw new Error(`R2 PUT ${key} failed (${response.status}): ${body}`);
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`R2 PUT ${key} failed (${response.status}).`);
 	}
+	await response.body?.cancel().catch(() => {});
 }
 
 function bucket() {
-	return targetBucket || requiredEnvironment('R2_BUCKET');
+	const value = targetBucket || requiredEnvironment('R2_BUCKET');
+	if (value.length > 255 || hasAsciiControl(value)) {
+		throw new Error('R2 bucket is invalid.');
+	}
+	return value;
 }
 
 async function r2Request(method, key, body, extraHeaders = {}) {
@@ -614,6 +653,7 @@ async function r2Request(method, key, body, extraHeaders = {}) {
 				body,
 				headers: signed.headers,
 				method,
+				redirect: 'error',
 				signal: AbortSignal.timeout(requestTimeoutMs)
 			});
 			if (response.redirected) {
@@ -686,12 +726,17 @@ async function resolveR2Credentials() {
 		`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/tokens/verify`,
 		{
 			headers: { authorization: `Bearer ${apiToken}` },
+			redirect: 'error',
 			signal: AbortSignal.timeout(requestTimeoutMs)
 		}
 	);
+	if (response.redirected) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error('R2 token verification redirected unexpectedly.');
+	}
 	const body = await readBoundedResponseText(response, maxErrorBytes).catch(() => '');
 	if (!response.ok) {
-		throw new Error(`R2 token verification failed (${response.status}): ${body}`);
+		throw new Error(`R2 token verification failed (${response.status}).`);
 	}
 	let verified;
 	try {
@@ -728,18 +773,29 @@ function hmac(key, value) {
 
 function objectKey(path) {
 	const prefix = (process.env.R2_PREFIX ?? 'catalog').trim().replace(/^\/+|\/+$/g, '');
-	return prefix ? `${prefix}/${path}` : path;
+	const normalizedPath = validObjectPath(path, 'Catalog object path');
+	return prefix ? `${validObjectPath(prefix, 'R2 prefix')}/${normalizedPath}` : normalizedPath;
 }
 
-function parseSequence(value) {
-	if (!/^[1-9][0-9]*$/.test(value ?? '')) {
-		throw new Error('Release sequence must be a positive decimal integer.');
+function validObjectPath(value, label) {
+	if (
+		value.length === 0 ||
+		value.length > 1024 ||
+		value.includes('\\') ||
+		hasAsciiControl(value) ||
+		value.split('/').some((segment) => !segment || segment === '.' || segment === '..')
+	) {
+		throw new Error(`${label} is invalid.`);
 	}
-	const parsed = Number(value);
-	if (!Number.isSafeInteger(parsed)) {
-		throw new Error('Release sequence exceeds the safe integer range.');
+	return value;
+}
+
+function hasAsciiControl(value) {
+	for (const character of value) {
+		const code = character.charCodeAt(0);
+		if (code <= 0x1f || code === 0x7f) return true;
 	}
-	return parsed;
+	return false;
 }
 
 function requiredEnvironment(name) {
@@ -748,21 +804,52 @@ function requiredEnvironment(name) {
 	return value;
 }
 
-function sha256(value) {
-	return createHash('sha256').update(value).digest('hex');
+function parseJsonFile(path) {
+	return JSON.parse(readBoundedRegularFile(path).toString('utf8'));
 }
 
-function parseJsonFile(path) {
-	return JSON.parse(readFileSync(path, 'utf8'));
+function readBoundedRegularFile(path) {
+	const stats = lstatSync(path);
+	if (stats.isSymbolicLink() || !stats.isFile() || stats.size > maxObjectBytes) {
+		throw new Error(`${basename(path)} must be a bounded regular file.`);
+	}
+	return readFileSync(path);
+}
+
+function readContainedRegularFile(root, relativePath) {
+	const segments = relativePath.split('/');
+	let cursor = root;
+	for (const [index, segment] of segments.entries()) {
+		cursor = join(cursor, segment);
+		const stats = lstatSync(cursor);
+		if (stats.isSymbolicLink()) throw new Error('Release path must not contain symbolic links.');
+		if (index < segments.length - 1 && !stats.isDirectory()) {
+			throw new Error('Release path contains a non-directory parent.');
+		}
+		if (index === segments.length - 1 && (!stats.isFile() || stats.size > maxObjectBytes)) {
+			throw new Error('Release file is not a bounded regular file.');
+		}
+	}
+	return readFileSync(cursor);
+}
+
+function assertContainedDirectory(root, relativePath) {
+	let cursor = resolve(root);
+	for (const segment of relativePath.split('/')) {
+		cursor = join(cursor, segment);
+		const stats = lstatSync(cursor);
+		if (stats.isSymbolicLink() || !stats.isDirectory()) {
+			throw new Error('Release path must contain only regular directories.');
+		}
+	}
 }
 
 function output(command, args) {
-	return run(command, args, process.env, { capture: true }).trim();
+	return run(command, args, undefined, { capture: true }).trim();
 }
 
-function run(command, args, env = process.env, options = {}) {
-	const result = spawn(command, args, { ...options, env });
-	if (result.status !== 0) throw new Error(`${command} failed with exit code ${result.status}.`);
+function run(command, args, env, options = {}) {
+	const result = spawn(command, args, { ...options, env: env ?? commandEnvironment(command) });
 	return result.stdout;
 }
 
@@ -771,10 +858,45 @@ function spawn(command, args, options = {}) {
 		cwd: repositoryRoot,
 		encoding: 'utf8',
 		env: options.env ?? process.env,
+		maxBuffer: 8 * 1024 * 1024,
 		stdio: options.capture
 			? ['ignore', 'pipe', 'inherit']
 			: ['ignore', options.stdout ?? 'inherit', 'inherit']
 	});
+	if (result.error) throw new Error(`${command} could not start: ${result.error.message}`);
+	if (result.signal) throw new Error(`${command} was terminated by ${result.signal}.`);
 	if (result.status !== 0) throw new Error(`${command} failed with exit code ${result.status}.`);
 	return { status: result.status ?? 1, stdout: result.stdout ?? '' };
+}
+
+function commandEnvironment(command) {
+	const environment = { ...process.env };
+	for (const name of [
+		'AWS_ACCESS_KEY_ID',
+		'AWS_BUCKET',
+		'AWS_OBJECT_LOCK_ENABLED',
+		'AWS_REGION',
+		'AWS_SECRET_ACCESS_KEY',
+		'AWS_SESSION_TOKEN',
+		'CATALOG_SIGNING_PRIVATE_KEY_PEM',
+		'CLOUDFLARE_ACCOUNT_ID',
+		'CLOUDFLARE_API_TOKEN',
+		'R2_BUCKET',
+		'R2_PREFIX'
+	]) {
+		delete environment[name];
+	}
+	if (command !== 'gh') {
+		delete environment.GH_TOKEN;
+		delete environment.GITHUB_TOKEN;
+	}
+	return environment;
+}
+
+function signingEnvironment() {
+	return {
+		...commandEnvironment(process.execPath),
+		CATALOG_SIGNING_KEY_ID: requiredEnvironment('CATALOG_SIGNING_KEY_ID'),
+		CATALOG_SIGNING_PRIVATE_KEY_PEM: requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM')
+	};
 }

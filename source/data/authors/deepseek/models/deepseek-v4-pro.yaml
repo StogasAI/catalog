@@ -1,0 +1,15 @@
+models:
+  authorId: deepseek
+  name: DeepSeek V4 Pro
+  family: DeepSeek
+  series: DeepSeek V4
+  flavors: [instruct]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 384000
+  inputModalities: [text]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: [high, max]
+  reasoningMaxTokens: null
+  snapshot: 2026-04-23
+  releaseDate: 2026-04-24

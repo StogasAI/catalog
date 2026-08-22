@@ -1,13 +1,15 @@
 models:
   authorId: google
-  name: Gemma 4 31B Turbo
+  name: Gemma 4 31B
   family: Gemma
   series: Gemma 4
   flavors: [instruct]
-  contextWindowTokens: 131072
-  maxOutputTokens: 65536
+  contextWindowTokens: 262144
+  maxOutputTokens: 262144
   inputModalities: [text, image]
   outputModalities: [text]
   reasoningAvailability: optional
-  reasoningEfforts: []
+  reasoningEfforts: [minimal, high]
   reasoningMaxTokens: null
+  releaseDate: 2026-03-31
+  knowledgeCutoff: 2025-01-01

@@ -1,0 +1,14 @@
+models:
+  authorId: nvidia
+  name: NVIDIA Nemotron 3 Ultra 550B A55B
+  family: Nemotron
+  series: Nemotron 3
+  flavors: [instruct]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 1048576
+  inputModalities: [text]
+  outputModalities: [text]
+  reasoningAvailability: optional
+  reasoningEfforts: [high]
+  reasoningMaxTokens: null
+  releaseDate: 2026-06-04

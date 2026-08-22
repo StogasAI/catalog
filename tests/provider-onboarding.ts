@@ -3,30 +3,42 @@ import { expect } from 'bun:test';
 type Catalog = {
 	graph: {
 		authors: Record<string, unknown>;
-		deployments: Record<string, any>;
-		models: Record<string, any>;
-		providers: Record<string, any>;
-		routes: Record<string, any>;
+		deployments: Record<
+			string,
+			Record<string, unknown> & {
+				pricing: Record<string, unknown>;
+				routeIds: string[];
+			}
+		>;
+		models: Record<string, Record<string, unknown>>;
+		providers: Record<string, Record<string, unknown>>;
+		routes: Record<string, Record<string, unknown> & { providerId: string }>;
 	};
 };
 
 export type DataHandlingContract = {
-	processingRegions: string[];
+	processingLocation: string;
+	storageLocation: string;
+	endToEndEncrypted: boolean;
 	retentionDays: number | null;
-	storageRegions: string[];
 	trainingUse: boolean;
 	zeroDataRetention: boolean;
+	tee: TeeContract | null;
 };
 
-export type TeeContract = {
+type ProviderDataHandlingContract = Omit<DataHandlingContract, 'endToEndEncrypted'>;
+
+type RouteDataHandlingContract = Pick<DataHandlingContract, 'endToEndEncrypted'>;
+
+type TeeContract = {
+	attestation: 'provider-claimed' | 'unknown' | 'unverified' | 'verified';
 	externalNetworkEgress: 'allowed' | 'blocked' | 'unknown';
-	mechanism: string;
-	status: string;
+	technology: string;
 };
 
-export type ProviderRouteContract = {
+type ProviderRouteContract = {
 	capabilities?: Record<string, boolean>;
-	dataHandling?: DataHandlingContract;
+	dataHandling?: RouteDataHandlingContract;
 	endpoint?: string;
 	id: string;
 	interfaces: string[];
@@ -44,18 +56,22 @@ export type ProviderDeploymentContract = {
 	id: string;
 	inputModalities: string[];
 	maxOutputTokens: number;
+	modelContextWindowTokens?: number;
 	modelId: string;
+	modelInputModalities?: string[];
+	modelMaxOutputTokens?: number;
 	modelReasoningEfforts?: string[];
 	modelReasoningAvailability?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	moderated?: boolean;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
+	publicOverrides?: Record<string, unknown>;
 	reasoningEfforts?: string[];
 	reasoningAvailability?: 'optional' | 'required' | 'unsupported';
 	reasoningMaxTokens?: { maximum: number; minimum: number } | null;
+	routeOverrides?: Record<string, { reasoningEfforts: string[] }>;
 	routeIds: string[];
-	tee?: TeeContract;
 	upstream: Record<string, number | string>;
 	weightPrecision?: string;
 };
@@ -70,6 +86,7 @@ export type ProviderOnboardingContract = {
 		id: string;
 		moderated: boolean;
 		name: string;
+		pricing?: Record<string, Record<string, string>>;
 	};
 	deployments: ProviderDeploymentContract[];
 	routes: ProviderRouteContract[];
@@ -97,30 +114,35 @@ export function assertProviderOnboardingContract(
 		aliases: contract.provider.aliases,
 		capabilities: contract.provider.capabilities,
 		credentialModes: contract.provider.credentialModes,
-		dataHandling: contract.provider.dataHandling,
+		dataHandling: providerDataHandling(contract.provider.dataHandling),
 		moderated: contract.provider.moderated,
 		name: contract.provider.name,
+		...(contract.provider.pricing ? { pricing: contract.provider.pricing } : {}),
 		...(contract.provider.headquarteredCountry
 			? { headquarteredCountry: contract.provider.headquarteredCountry }
 			: {})
 	});
 
 	for (const route of contract.routes) {
-		const capabilities = route.capabilities ?? contract.provider.capabilities;
-		const dataHandling = route.dataHandling ?? contract.provider.dataHandling;
-		const moderated = route.moderated ?? contract.provider.moderated;
+		const dataHandling = route.dataHandling ?? routeDataHandling(contract.provider.dataHandling);
 		expect(runtime.routes[route.id]).toEqual({
 			interfaces: route.interfaces,
 			providerId
 		});
 		expect(published.routes[route.id]).toEqual({
-			capabilities,
-			dataHandling,
 			...(route.endpoint ? { endpoint: route.endpoint } : {}),
+			dataHandling,
 			interfaces: route.interfaces,
-			moderated,
-			pricing: route.pricing ?? {},
-			providerId
+			providerId,
+			...(route.pricing ? { pricing: route.pricing } : {}),
+			...(route.capabilities || route.moderated !== undefined
+				? {
+						overrides: {
+							...(route.capabilities ? { capabilities: route.capabilities } : {}),
+							...(route.moderated !== undefined ? { moderated: route.moderated } : {})
+						}
+					}
+				: {})
 		});
 	}
 
@@ -138,16 +160,21 @@ export function assertProviderOnboardingContract(
 			if (!route) throw new Error(`${expected.id}: unknown contract route ${routeId}`);
 			return route;
 		});
-		const routeDataHandling = routeContracts.map(
-			(route) => route.dataHandling ?? contract.provider.dataHandling
-		);
+		const routeHandling = routeContracts.map((route) => ({
+			...providerDataHandling(contract.provider.dataHandling),
+			...(route.dataHandling ?? routeDataHandling(contract.provider.dataHandling))
+		}));
 		const routeModerated = routeContracts.map(
 			(route) => route.moderated ?? contract.provider.moderated
 		);
-		const firstDataHandling = routeDataHandling[0];
 		const firstModerated = routeModerated[0];
-		for (const value of routeDataHandling) expect(value).toEqual(firstDataHandling);
 		for (const value of routeModerated) expect(value).toBe(firstModerated);
+		const dataHandlingByRoute = Object.fromEntries(
+			routeContracts.map((route, index) => [
+				route.id,
+				expected.dataHandling ?? routeHandling[index]
+			])
+		);
 
 		const runtimeDeployment = {
 			aliases: expected.aliases,
@@ -167,8 +194,9 @@ export function assertProviderOnboardingContract(
 					? expected.reasoningMaxTokens
 					: (expected.modelReasoningMaxTokens ?? null),
 			routeIds: [...expected.routeIds].sort(),
+			...(expected.routeOverrides ? { routeOverrides: expected.routeOverrides } : {}),
 			upstream: expected.upstream,
-			...(expected.tee ? { tee: expected.tee } : {}),
+			dataHandlingByRoute,
 			...(expected.weightPrecision ? { weightPrecision: expected.weightPrecision } : {})
 		};
 		expect(runtime.deployments[expected.id]).toEqual(runtimeDeployment);
@@ -179,17 +207,21 @@ export function assertProviderOnboardingContract(
 			Object.keys(expected.pricing).sort()
 		);
 		expect(published.deployments[expected.id]).toEqual({
-			...runtimeDeployment,
-			dataHandling: expected.dataHandling ?? firstDataHandling,
-			moderated: expected.moderated ?? firstModerated
+			aliases: expected.aliases,
+			modelId: expected.modelId,
+			pricing: expected.pricing,
+			routeIds: [...expected.routeIds].sort(),
+			upstream: expected.upstream,
+			...(expected.publicOverrides ? { overrides: expected.publicOverrides } : {}),
+			...(expected.weightPrecision ? { weightPrecision: expected.weightPrecision } : {})
 		});
 
 		const model = published.models[expected.modelId];
 		expect(model).toMatchObject({
 			authorId: expected.authorId,
-			contextWindowTokens: expected.contextWindowTokens,
-			inputModalities: expected.inputModalities,
-			maxOutputTokens: expected.maxOutputTokens,
+			contextWindowTokens: expected.modelContextWindowTokens ?? expected.contextWindowTokens,
+			inputModalities: expected.modelInputModalities ?? expected.inputModalities,
+			maxOutputTokens: expected.modelMaxOutputTokens ?? expected.maxOutputTokens,
 			outputModalities: expected.outputModalities,
 			reasoningEfforts: expected.modelReasoningEfforts ?? [],
 			reasoningAvailability: expected.modelReasoningAvailability ?? 'unsupported',
@@ -197,4 +229,15 @@ export function assertProviderOnboardingContract(
 		});
 		expect(published.authors[expected.authorId]).toBeDefined();
 	}
+}
+
+function providerDataHandling(value: DataHandlingContract): ProviderDataHandlingContract {
+	const { endToEndEncrypted: _endToEndEncrypted, ...provider } = value;
+	return provider;
+}
+
+function routeDataHandling(value: DataHandlingContract): RouteDataHandlingContract {
+	return {
+		endToEndEncrypted: value.endToEndEncrypted
+	};
 }

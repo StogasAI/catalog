@@ -1,15 +1,14 @@
 package catalog
 
 #OpenAIUpstream: close({
-	model:       #UpstreamId
+	model:          #UpstreamId
 	reasoningMode?: "pro"
-	serviceTier: "default" | "flex" | "priority"
+	serviceTier:    "default" | "flex" | "priority"
 })
 
 #AnthropicUpstream: close({
-	model:        #UpstreamId
-	serviceTier:  "standard_only"
-	speed?:       "standard" | "fast"
+	model:         #UpstreamId
+	speed?:        "standard" | "fast"
 	inferenceGeo?: "global" | "us"
 })
 
@@ -20,17 +19,27 @@ package catalog
 })
 
 #AzureUpstream: close({
-	model: #UpstreamId
+	model:          #UpstreamId
+	modelFormat:    #UpstreamId
+	modelVersion:   #UpstreamId
+	hosting:        "azure" | "anthropic" | "fireworks" | "nvidia"
+	deploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
+	reasoningMode?: "pro"
+	serviceTier?:   "default" | "priority"
 })
 
 #Upstream: close({
-	model:         #UpstreamId
-	chuteId?:      #Uuid
-	gpuCount?:     int & >=1 & <=8
-	serviceTier?:  "default" | "flex" | "priority" | "standard_only"
-	speed?:        "standard" | "fast"
-	inferenceGeo?: "global" | "us"
-	reasoningMode?: "pro"
+	model:           #UpstreamId
+	chuteId?:        #Uuid
+	gpuCount?:       int & >=1 & <=8
+	serviceTier?:    "default" | "flex" | "priority" | "standard_only"
+	speed?:          "standard" | "fast"
+	inferenceGeo?:   "global" | "us"
+	reasoningMode?:  "pro"
+	hosting?:        "azure" | "anthropic" | "fireworks" | "nvidia"
+	modelFormat?:    #UpstreamId
+	modelVersion?:   #UpstreamId
+	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
 })
 
 #DeploymentCapabilityOverrides: close({
@@ -43,9 +52,12 @@ package catalog
 	structuredOutputs?:       bool
 	systemMessages?:          bool
 	toolChoice?:              bool
-	webSearch?:               bool
 	urlContext?:              bool
 	pdfInput?:                bool
+})
+
+#DeploymentRouteOverride: close({
+	reasoningEfforts: [...#ReasoningEffort]
 })
 
 #Deployment: close({
@@ -54,19 +66,20 @@ package catalog
 	upstream: #Upstream
 	aliases?: [...#Slug]
 	weightPrecision?: #WeightPrecision
-	tee?: #Tee
 	overrides?: close({
 		contextWindowTokens?: int & >0
 		maxOutputTokens?:     int & >0
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
-		capabilities?: #DeploymentCapabilityOverrides
+		capabilities?:          #DeploymentCapabilityOverrides
 		reasoningAvailability?: #ReasoningAvailability
-		reasoningEfforts?:      [...#ReasoningEffort]
-		reasoningMaxTokens?:    null | #ReasoningMaxTokens
-		dataHandling?:          #DataHandlingOverride
-		moderated?:             bool
-		deprecationDate?:       #MaybeDate
+		reasoningEfforts?: [...#ReasoningEffort]
+		reasoningMaxTokens?: null | #ReasoningMaxTokens
+		routes?: close({[#Id]: #DeploymentRouteOverride})
+		dataHandling?:    #DeploymentDataHandlingOverride
+		moderated?:       bool
+		pricing?:         #InheritedPricingOverride
+		deprecationDate?: #MaybeDate
 	})
 	pricing: #DeploymentPricing
 })

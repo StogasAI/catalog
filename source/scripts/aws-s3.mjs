@@ -15,7 +15,7 @@ export async function getS3Object(key) {
 	// conditional and followed by an exact authenticated readback, so treating
 	// the ambiguous response as absent cannot overwrite an existing object.
 	if (response.status === 403 || response.status === 404) {
-		await response.body?.cancel();
+		await response.body?.cancel().catch(() => {});
 		return null;
 	}
 	if (!response.ok) {
@@ -45,6 +45,7 @@ export async function putS3Object(key, bytes, options = {}) {
 	if (!response.ok) {
 		throw await responseError(response, `S3 PUT ${key}`);
 	}
+	await response.body?.cancel().catch(() => {});
 	return { etag: response.headers.get('etag') };
 }
 
@@ -70,6 +71,7 @@ async function request(method, key, body, extraHeaders = {}) {
 				body,
 				headers: signed.headers,
 				method,
+				redirect: 'error',
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 			});
 			if (response.redirected) {
@@ -93,8 +95,8 @@ async function request(method, key, body, extraHeaders = {}) {
 function signedRequest(method, key, body, extraHeaders) {
 	const accessKeyId = requiredEnvironment('AWS_ACCESS_KEY_ID');
 	const secretAccessKey = requiredEnvironment('AWS_SECRET_ACCESS_KEY');
-	const region = requiredEnvironment('AWS_REGION');
-	const bucket = requiredEnvironment('AWS_BUCKET');
+	const region = validAwsRegion(requiredEnvironment('AWS_REGION'));
+	const bucket = validS3Bucket(requiredEnvironment('AWS_BUCKET'));
 	const sessionToken = process.env.AWS_SESSION_TOKEN?.trim();
 	const now = new Date();
 	const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
@@ -177,5 +179,27 @@ function retryDelay(attempt) {
 function requiredEnvironment(name) {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`${name} is required.`);
+	return value;
+}
+
+function validAwsRegion(value) {
+	if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value)) {
+		throw new Error('AWS_REGION is invalid.');
+	}
+	return value;
+}
+
+function validS3Bucket(value) {
+	if (
+		value.length < 3 ||
+		value.length > 63 ||
+		!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$/.test(value) ||
+		value.includes('..') ||
+		value.includes('.-') ||
+		value.includes('-.') ||
+		/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)
+	) {
+		throw new Error('AWS_BUCKET is not compatible with virtual-hosted S3 requests.');
+	}
 	return value;
 }

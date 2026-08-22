@@ -11,9 +11,46 @@ export type CatalogGraph = {
 };
 
 export type Catalog = {
-	schema: 'stogas.catalog.public.v1';
+	schema: 'stogas.catalog.public.v2';
 	graph: CatalogGraph;
 };
+
+export function parseCatalog(value: unknown): Catalog {
+	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v2' || !isObject(value.graph)) {
+		throw new TypeError('The generated public catalog is invalid.');
+	}
+
+	return {
+		schema: value.schema,
+		graph: {
+			authors: parseCatalogCollection(value.graph.authors, 'authors'),
+			deployments: parseCatalogCollection(value.graph.deployments, 'deployments'),
+			models: parseCatalogCollection(value.graph.models, 'models'),
+			providers: parseCatalogCollection(value.graph.providers, 'providers'),
+			routes: parseCatalogCollection(value.graph.routes, 'routes')
+		}
+	};
+}
+
+function parseCatalogCollection(
+	value: unknown,
+	name: keyof CatalogGraph
+): Record<string, Record<string, unknown>> {
+	if (!isObject(value)) throw new TypeError(`The generated catalog ${name} collection is invalid.`);
+
+	const entries: Array<[string, Record<string, unknown>]> = [];
+	for (const [id, entry] of Object.entries(value)) {
+		if (!isObject(entry)) {
+			throw new TypeError(`The generated catalog ${name}.${id} entry is invalid.`);
+		}
+		entries.push([id, entry]);
+	}
+	return Object.fromEntries(entries);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 export type GraphNodeData = {
 	label: string;
@@ -53,7 +90,7 @@ export type GraphChain = {
 	nodeKeys: string[];
 };
 
-export type SourceFile = {
+type SourceFile = {
 	path: string;
 	content: string;
 };

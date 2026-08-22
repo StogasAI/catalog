@@ -7,10 +7,8 @@ deployments:
     gpuCount: 8
   aliases: [kimi-k2.6-tee]
   weightPrecision: int4
-  tee:
-    status: claimed
-    mechanism: tdx
-    externalNetworkEgress: blocked
+  overrides:
+    maxOutputTokens: 65535
   pricing:
     input_tokens:
       per_mill_tokens: '580000000000000000'

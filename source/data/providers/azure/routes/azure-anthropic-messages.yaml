@@ -1,0 +1,10 @@
+routes:
+  providerId: azure
+  interfaces: [chat_completions, responses]
+  dataHandling:
+    endToEndEncrypted: false
+  overrides:
+    capabilities:
+      implicitPromptCaching: false
+      explicitPromptCaching: true
+      pdfInput: true

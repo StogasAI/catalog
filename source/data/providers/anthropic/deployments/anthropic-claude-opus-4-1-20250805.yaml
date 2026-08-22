@@ -1,0 +1,16 @@
+deployments:
+  modelId: claude-opus-4-1
+  routeIds: [anthropic-messages]
+  upstream:
+    model: claude-opus-4-1-20250805
+  pricing:
+    input_tokens:
+      per_mill_tokens: '15000000000000000000'
+    cached_input_tokens:
+      per_mill_tokens: '1500000000000000000'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '18750000000000000000'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '30000000000000000000'
+    output_tokens:
+      per_mill_tokens: '75000000000000000000'

@@ -7,13 +7,17 @@ import {
 	catalogManifest,
 	canonicalJson,
 	parseSequence,
+	resolveDestructiveOutput,
 	sha256,
 	stableJson
 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sequence = parseSequence(process.argv[2]);
-const outputRoot = process.argv[3] ?? join(repositoryRoot, 'release');
+const outputRoot = resolveDestructiveOutput(repositoryRoot, process.argv[3], {
+	allowedRepositoryRoots: ['release'],
+	defaultRelative: 'release'
+});
 const signingKeyId = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
 const signingPrivateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
 
