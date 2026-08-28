@@ -18,6 +18,7 @@ import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import { r2WriteConditionETag } from './r2-etag.mjs';
 import {
 	catalogArtifact,
+	catalogApprovalLedgerKey,
 	catalogManifest,
 	canonicalJson,
 	parseSequence,
@@ -299,24 +300,22 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 		}
 	}
 	verifyChecksums(proposalRoot);
-	for (const filename of ['catalog.runtime.json', 'catalog.public.json']) {
-		run('gh', [
-			'attestation',
-			'verify',
-			join(proposalRoot, filename),
-			'--repo',
-			'StogasAI/catalog',
-			'--bundle',
-			join(proposalRoot, 'github-attestation.jsonl'),
-			'--signer-workflow',
-			'StogasAI/catalog/.github/workflows/catalog-release.yml',
-			'--source-ref',
-			`refs/tags/${tag}`,
-			'--source-digest',
-			output('git', ['rev-parse', 'HEAD']),
-			'--deny-self-hosted-runners'
-		]);
-	}
+	run('gh', [
+		'attestation',
+		'verify',
+		join(proposalRoot, 'catalog-release.json'),
+		'--repo',
+		'StogasAI/catalog',
+		'--bundle',
+		join(proposalRoot, 'github-attestation.jsonl'),
+		'--signer-workflow',
+		'StogasAI/catalog/.github/workflows/catalog-release.yml',
+		'--source-ref',
+		`refs/tags/${tag}`,
+		'--source-digest',
+		output('git', ['rev-parse', 'HEAD']),
+		'--deny-self-hosted-runners'
+	]);
 }
 
 function verifyIndependentBuild(proposalRoot) {
@@ -401,7 +400,7 @@ function artifactPaths(root) {
 }
 
 async function publishImmutable(path, root) {
-	const key = objectKey(relative(root, path).replaceAll('\\', '/'));
+	const key = immutableObjectKey(relative(root, path).replaceAll('\\', '/'));
 	const bytes = readBoundedRegularFile(path);
 	await Promise.all(
 		destinations.map(async (destination) => {
@@ -433,7 +432,7 @@ async function requireImmutableReadbacks(paths, root) {
 	await Promise.all(
 		destinations.flatMap((destination) =>
 			paths.map(async (path) => {
-				const key = objectKey(relative(root, path).replaceAll('\\', '/'));
+				const key = immutableObjectKey(relative(root, path).replaceAll('\\', '/'));
 				const published = await destination.get(key);
 				if (!published || !readBoundedRegularFile(path).equals(published.bytes)) {
 					throw new Error(`Catalog object ${key} is absent or different in ${destination.name}.`);
@@ -775,6 +774,11 @@ function objectKey(path) {
 	const prefix = (process.env.R2_PREFIX ?? 'catalog').trim().replace(/^\/+|\/+$/g, '');
 	const normalizedPath = validObjectPath(path, 'Catalog object path');
 	return prefix ? `${validObjectPath(prefix, 'R2 prefix')}/${normalizedPath}` : normalizedPath;
+}
+
+function immutableObjectKey(path) {
+	const normalizedPath = validObjectPath(path, 'Catalog object path');
+	return catalogApprovalLedgerKey(normalizedPath) ?? objectKey(normalizedPath);
 }
 
 function validObjectPath(value, label) {

@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url';
 import {
 	catalogArtifact,
 	catalogManifest,
+	canonicalJson,
 	parseSequence,
 	resolveDestructiveOutput,
-	sha256,
-	stableJson
+	sha256
 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -24,12 +24,12 @@ rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(outputRoot, { recursive: true });
 writeFileSync(join(outputRoot, 'catalog.runtime.json'), runtime.bytes);
 writeFileSync(join(outputRoot, 'catalog.public.json'), publicCatalog.bytes);
-writeFileSync(join(outputRoot, 'catalog-release.json'), stableJson(manifest));
+writeFileSync(join(outputRoot, 'catalog-release.json'), canonicalJson(manifest));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),
 	[
 		`${sha256(runtime.bytes)}  catalog.runtime.json`,
 		`${sha256(publicCatalog.bytes)}  catalog.public.json`,
-		`${sha256(stableJson(manifest))}  catalog-release.json`
+		`${sha256(canonicalJson(manifest))}  catalog-release.json`
 	].join('\n') + '\n'
 );

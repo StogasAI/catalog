@@ -45,7 +45,7 @@ jobs:
           node source/scripts/create-proposal.mjs "$sequence" "dist/catalog/$GITHUB_REF_NAME"
           cd "dist/catalog/$GITHUB_REF_NAME"
           sha256sum -c SHA256SUMS
-          head -n 2 SHA256SUMS > ATTESTATION-SHA256SUMS
+          sha256sum catalog-release.json > ATTESTATION-SHA256SUMS
 
       - name: Generate GitHub artifact attestation
         id: attest

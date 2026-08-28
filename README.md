@@ -25,8 +25,8 @@ bun run editor
 
 Generated runtime and public JSON are committed so catalog changes remain reviewable.
 
-A release is one monotonically increasing sequence, the runtime and public SHA-256 values, and one
-Ed25519 authorization signature. The release command checks and builds the committed source,
-publishes immutable content-addressed artifacts and a GitHub release, then conditionally advances
-`latest.json` in R2. Public verification keys are committed under `keys/`; private release and R2
-credentials remain outside GitHub Actions.
+A release is one monotonically increasing sequence and a manifest containing the runtime and public
+SHA-256 values. GitHub attests that manifest. Stogas independently builds the same bytes and signs
+the same manifest with Ed25519. The release command publishes immutable content-addressed artifacts
+and conditionally advances `latest.json`. Public verification keys are committed under `keys/`;
+private release and object-storage credentials remain outside GitHub Actions.

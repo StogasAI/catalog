@@ -1,14 +1,21 @@
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import {
+	catalogApprovalLedgerKey,
 	resolveDestructiveOutput,
 	stagingDevelopmentProvenance
 } from '../source/scripts/release-format.mjs';
 
 describe('catalog release metadata', () => {
+	test('publishes approvals under the shared ledger path only', () => {
+		expect(catalogApprovalLedgerKey('approvals/32.json')).toBe('ledger/v1/catalogs/32.json');
+		expect(catalogApprovalLedgerKey('releases/32.json')).toBeNull();
+		expect(catalogApprovalLedgerKey('approvals/0.json')).toBeNull();
+	});
+
 	test('restricts destructive release output paths', () => {
 		const temporary = mkdtempSync(join(tmpdir(), 'stogas-catalog-output-'));
 		const linked = join(temporary, 'linked');
@@ -39,18 +46,23 @@ describe('catalog release metadata', () => {
 		}
 	});
 
-	test('creates exact staging-only provenance for both catalog artifacts', () => {
-		const statement = stagingDevelopmentProvenance({
+	test('creates exact staging-only provenance for the catalog release manifest', () => {
+		const manifest = {
 			public: `sha256:${'11'.repeat(32)}`,
 			runtime: `sha256:${'22'.repeat(32)}`
-		});
+		};
+		const statement = stagingDevelopmentProvenance(manifest);
 		expect(statement).toEqual({
 			_type: 'https://in-toto.io/Statement/v1',
 			predicate: { environment: 'staging' },
 			predicateType: 'https://stogas.ai/attestations/staging-development/v1',
 			subject: [
-				{ digest: { sha256: '22'.repeat(32) }, name: 'catalog.runtime.json' },
-				{ digest: { sha256: '11'.repeat(32) }, name: 'catalog.public.json' }
+				{
+					digest: {
+						sha256: createHash('sha256').update(canonicalJson(manifest)).digest('hex')
+					},
+					name: 'catalog-release.json'
+				}
 			]
 		});
 		expect(() =>
@@ -84,6 +96,7 @@ describe('catalog release metadata', () => {
 			expect(envelope.keyId).toBe('test-key');
 			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v1');
 			expect(envelope.manifest.catalogSchema).toBe(1);
+			expect(envelope.manifest.minimumGatewaySequence).toBe(1);
 			expect(envelope.manifest.sequence).toBe(7);
 			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
 			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);
