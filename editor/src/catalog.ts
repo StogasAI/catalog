@@ -497,7 +497,7 @@ export function effectiveDeploymentFacts(
 			'inputModalities',
 			'maxOutputTokens',
 			'outputModalities',
-			'reasoningAvailability',
+			'reasoning',
 			'reasoningEfforts',
 			'reasoningMaxTokens'
 		]),
@@ -522,7 +522,7 @@ export function effectiveDeploymentFacts(
 			'moderated',
 			'outputModalities',
 			'pricing',
-			'reasoningAvailability',
+			'reasoning',
 			'reasoningEfforts',
 			'reasoningMaxTokens'
 		]),

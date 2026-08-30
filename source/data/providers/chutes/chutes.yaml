@@ -15,12 +15,10 @@ providers:
     pdfInput: false
   dataHandling:
     processingLocation: global
-    storageLocation: unknown
+    storageLocation: none
     retentionDays: 0
     trainingUse: false
-    zeroDataRetention: false
-    tee:
-      attestation: provider-claimed
-      technology: intel-tdx
-      externalNetworkEgress: blocked
+    zeroDataRetention: true
+    tee: true
+    teeVerified: false
   moderated: false

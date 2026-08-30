@@ -14,7 +14,7 @@ models:
     parallelFunctionCalling: false
     implicitPromptCaching: false
     explicitPromptCaching: false
-  reasoningAvailability: unsupported
+  reasoning: unsupported
   reasoningEfforts: []
   reasoningMaxTokens: null
   snapshot: 2025-03-11

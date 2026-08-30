@@ -11,12 +11,12 @@ export type CatalogGraph = {
 };
 
 export type Catalog = {
-	schema: 'stogas.catalog.public.v2';
+	schema: 'stogas.catalog.public.v3';
 	graph: CatalogGraph;
 };
 
 export function parseCatalog(value: unknown): Catalog {
-	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v2' || !isObject(value.graph)) {
+	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v3' || !isObject(value.graph)) {
 		throw new TypeError('The generated public catalog is invalid.');
 	}
 

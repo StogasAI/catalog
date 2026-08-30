@@ -8,7 +8,7 @@ models:
   maxOutputTokens: 262144
   inputModalities: [text, image, audio, video]
   outputModalities: [text]
-  reasoningAvailability: optional
+  reasoning: optional
   reasoningEfforts: []
   reasoningMaxTokens:
     minimum: 1

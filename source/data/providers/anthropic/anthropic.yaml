@@ -20,7 +20,8 @@ providers:
     retentionDays: 30
     trainingUse: false
     zeroDataRetention: false
-    tee: null
+    tee: false
+    teeVerified: false
   moderated: true
   pricing:
     anthropic_web_search_calls:

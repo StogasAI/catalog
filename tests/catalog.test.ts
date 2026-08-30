@@ -6,9 +6,9 @@ import runtimeCatalog from '../generated/catalog.runtime.json';
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
 const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 const canonicalEfforts = new Set(canonicalEffortOrder);
-const reasoningAvailabilities = new Set(['unsupported', 'optional', 'required']);
+const reasoningValues = new Set(['unsupported', 'optional', 'required']);
 
-describe('compiled catalog v2', () => {
+describe('compiled catalog v3', () => {
 	test('contains exactly the five useful graph primitives', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -151,7 +151,7 @@ describe('compiled catalog v2', () => {
 
 	test('materializes runtime admission and billing facts', () => {
 		for (const model of Object.values(publicCatalog.graph.models)) {
-			expect(reasoningAvailabilities.has(model.reasoningAvailability)).toBe(true);
+			expect(reasoningValues.has(model.reasoning)).toBe(true);
 			expect(Array.isArray(model.reasoningEfforts)).toBe(true);
 			expect(model).toHaveProperty('reasoningMaxTokens');
 			expect(model.reasoningEfforts).toEqual(
@@ -168,7 +168,7 @@ describe('compiled catalog v2', () => {
 			}
 		}
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(reasoningAvailabilities.has(deployment.reasoningAvailability)).toBe(true);
+			expect(reasoningValues.has(deployment.reasoning)).toBe(true);
 			expect(deployment.contextWindowTokens).toBeGreaterThan(0);
 			expect(deployment.maxOutputTokens).toBeGreaterThan(0);
 			expect(deployment.maxOutputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
@@ -208,12 +208,12 @@ describe('compiled catalog v2', () => {
 
 	test('keeps canonical reasoning facts separate from deployment limits', () => {
 		expect(publicCatalog.graph.models['glm-5.2']).toMatchObject({
-			reasoningAvailability: 'optional',
+			reasoning: 'optional',
 			reasoningEfforts: ['high', 'max'],
 			reasoningMaxTokens: null
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-glm-5.2']).toMatchObject({
-			reasoningAvailability: 'optional',
+			reasoning: 'optional',
 			reasoningEfforts: ['high', 'max'],
 			reasoningMaxTokens: null
 		});
@@ -221,12 +221,12 @@ describe('compiled catalog v2', () => {
 			reasoningMaxTokens: { maximum: 127999, minimum: 1024 }
 		});
 		expect(publicCatalog.graph.models['nemotron-3-nano-omni-30b']).toMatchObject({
-			reasoningAvailability: 'optional',
+			reasoning: 'optional',
 			reasoningEfforts: [],
 			reasoningMaxTokens: { maximum: 262143, minimum: 1 }
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-nemotron-3-nano-omni-30b']).toMatchObject({
-			reasoningAvailability: 'optional',
+			reasoning: 'optional',
 			reasoningEfforts: [],
 			reasoningMaxTokens: null
 		});
@@ -269,6 +269,10 @@ describe('compiled catalog v2', () => {
 			expect(provider.dataHandling).toHaveProperty('processingLocation');
 			expect(provider.dataHandling).toHaveProperty('storageLocation');
 			expect(provider.dataHandling).toHaveProperty('tee');
+			expect(provider.dataHandling).toHaveProperty('teeVerified');
+			expect(typeof provider.dataHandling.tee).toBe('boolean');
+			expect(typeof provider.dataHandling.teeVerified).toBe('boolean');
+			expect(provider.dataHandling.teeVerified && !provider.dataHandling.tee).toBe(false);
 			expect(typeof provider.dataHandling.trainingUse).toBe('boolean');
 			expect(typeof provider.dataHandling.zeroDataRetention).toBe('boolean');
 			expect(provider.dataHandling).not.toHaveProperty('endToEndEncrypted');
@@ -284,7 +288,7 @@ describe('compiled catalog v2', () => {
 		expect(publicCatalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('moderated');
 		expect(
 			publicCatalog.graph.deployments['chutes-nemotron-3-nano-omni-30b'].overrides
-		).toMatchObject({ dataHandling: { tee: { externalNetworkEgress: 'allowed' } } });
+		).not.toHaveProperty('dataHandling');
 		expect(publicCatalog).not.toHaveProperty('evidence');
 		expect(JSON.stringify(publicCatalog)).not.toContain('"webSearch"');
 	});
@@ -643,7 +647,7 @@ describe('compiled catalog v2', () => {
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v2');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v2');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v3');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v3');
 	});
 });

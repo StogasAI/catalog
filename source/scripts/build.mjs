@@ -28,7 +28,7 @@ const cachedCue = join(toolCacheDir, process.platform === 'win32' ? 'cue.exe' : 
 const args = new Set(process.argv.slice(2));
 const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 const canonicalEffortRanks = new Map(canonicalEffortOrder.map((effort, index) => [effort, index]));
-const reasoningAvailabilities = new Set(['unsupported', 'optional', 'required']);
+const reasoningValues = new Set(['unsupported', 'optional', 'required']);
 const canonicalCredentialModes = new Set(['managed', 'byok']);
 const maxAliasesPerNode = 8;
 const runtimeSizeLimit = 16 * 1024 * 1024;
@@ -283,7 +283,7 @@ function normalizeSourceGraph(sourceGraph) {
 					deprecationDate: model.deprecationDate ?? null,
 					flavors: [...(model.flavors ?? [])],
 					knowledgeCutoff: model.knowledgeCutoff ?? null,
-					reasoningAvailability: model.reasoningAvailability,
+					reasoning: model.reasoning,
 					reasoningEfforts: [...model.reasoningEfforts],
 					reasoningMaxTokens: model.reasoningMaxTokens,
 					releaseDate: model.releaseDate ?? null,
@@ -439,20 +439,20 @@ function effectiveCapabilities(graph, deploymentId, model, deployment) {
 }
 
 function effectiveReasoning(deploymentId, model, deployment) {
-	const availabilityOverride = deployment.overrides?.reasoningAvailability;
+	const reasoningOverride = deployment.overrides?.reasoning;
 	rejectRedundantOverride(
-		model.reasoningAvailability,
-		availabilityOverride,
-		`${deploymentId}.overrides.reasoningAvailability`
+		model.reasoning,
+		reasoningOverride,
+		`${deploymentId}.overrides.reasoning`
 	);
-	const reasoningAvailability = availabilityOverride ?? model.reasoningAvailability;
-	if (!reasoningAvailabilities.has(reasoningAvailability)) {
-		throw new Error(`${deploymentId}: invalid reasoning availability`);
+	const reasoning = reasoningOverride ?? model.reasoning;
+	if (!reasoningValues.has(reasoning)) {
+		throw new Error(`${deploymentId}: invalid reasoning value`);
 	}
-	if (model.reasoningAvailability === 'unsupported' && reasoningAvailability !== 'unsupported') {
+	if (model.reasoning === 'unsupported' && reasoning !== 'unsupported') {
 		throw new Error(`${deploymentId}: cannot enable model-unsupported reasoning`);
 	}
-	if (model.reasoningAvailability === 'required' && reasoningAvailability !== 'required') {
+	if (model.reasoning === 'required' && reasoning !== 'required') {
 		throw new Error(`${deploymentId}: cannot weaken required model reasoning`);
 	}
 	rejectRedundantOverride(
@@ -496,14 +496,11 @@ function effectiveReasoning(deploymentId, model, deployment) {
 		throw new Error(`${deploymentId}: cannot raise the model manual reasoning token maximum`);
 	}
 	const reasoningMaxTokens = override === undefined ? model.reasoningMaxTokens : override;
-	if (
-		reasoningAvailability === 'unsupported' &&
-		(reasoningEfforts.length > 0 || reasoningMaxTokens !== null)
-	) {
+	if (reasoning === 'unsupported' && (reasoningEfforts.length > 0 || reasoningMaxTokens !== null)) {
 		throw new Error(`${deploymentId}: unsupported reasoning cannot expose controls`);
 	}
 	return {
-		reasoningAvailability,
+		reasoning,
 		reasoningEfforts,
 		reasoningMaxTokens
 	};
@@ -557,6 +554,11 @@ function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
 				`${deploymentId}.overrides.dataHandling`
 			);
 			const value = mergeFacts(routeValue, deployment.overrides?.dataHandling ?? {});
+			if (value.teeVerified && !value.tee) {
+				throw new Error(
+					`${deploymentId}.overrides.dataHandling cannot verify a deployment without TEE processing`
+				);
+			}
 			return [
 				routeId,
 				{
@@ -566,7 +568,8 @@ function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
 					retentionDays: value.retentionDays,
 					trainingUse: value.trainingUse,
 					zeroDataRetention: value.zeroDataRetention,
-					tee: value.tee ? structuredClone(value.tee) : null
+					tee: value.tee,
+					teeVerified: value.teeVerified
 				}
 			];
 		})
@@ -628,11 +631,15 @@ function buildCatalogs(source) {
 					'retentionDays',
 					'trainingUse',
 					'zeroDataRetention',
-					'tee'
+					'tee',
+					'teeVerified'
 				]) {
 					if (!(field in dataHandling)) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
+				}
+				if (dataHandling.teeVerified && !dataHandling.tee) {
+					throw new Error(`${routeId}: verified TEE handling requires TEE processing`);
 				}
 				const moderated = overrides.moderated ?? provider.moderated;
 				if (typeof moderated !== 'boolean') {
@@ -729,8 +736,8 @@ function buildCatalogs(source) {
 
 	for (const [modelId, model] of Object.entries(graph.models)) {
 		validateAliasCount(model.aliases, 'model', modelId);
-		if (!reasoningAvailabilities.has(model.reasoningAvailability)) {
-			throw new Error(`${modelId}: invalid reasoning availability`);
+		if (!reasoningValues.has(model.reasoning)) {
+			throw new Error(`${modelId}: invalid reasoning value`);
 		}
 		let previousEffortRank = -1;
 		for (const effort of model.reasoningEfforts) {
@@ -743,7 +750,7 @@ function buildCatalogs(source) {
 			previousEffortRank = effortRank;
 		}
 		if (
-			model.reasoningAvailability === 'unsupported' &&
+			model.reasoning === 'unsupported' &&
 			(model.reasoningEfforts.length > 0 || model.reasoningMaxTokens !== null)
 		) {
 			throw new Error(`${modelId}: unsupported reasoning cannot expose controls`);
@@ -894,7 +901,7 @@ function buildCatalogs(source) {
 			model,
 			deployment
 		);
-		const { reasoningAvailability, reasoningEfforts, reasoningMaxTokens } = effectiveReasoning(
+		const { reasoning, reasoningEfforts, reasoningMaxTokens } = effectiveReasoning(
 			deploymentId,
 			model,
 			deployment
@@ -978,7 +985,7 @@ function buildCatalogs(source) {
 			modelId: deployment.modelId,
 			outputModalities: [...outputModalities],
 			pricing,
-			reasoningAvailability,
+			reasoning,
 			reasoningEfforts,
 			reasoningMaxTokens,
 			...(Object.keys(routeOverrides).length > 0 ? { routeOverrides } : {}),
@@ -1023,7 +1030,7 @@ function buildCatalogs(source) {
 					aliases: model.aliases,
 					maxOutputTokens: model.maxOutputTokens,
 					name: model.name,
-					reasoningAvailability: model.reasoningAvailability,
+					reasoning: model.reasoning,
 					reasoningEfforts: model.reasoningEfforts,
 					reasoningMaxTokens: model.reasoningMaxTokens,
 					releaseDate: model.releaseDate
@@ -1049,7 +1056,7 @@ function buildCatalogs(source) {
 
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v2',
+			schema: 'stogas.catalog.runtime.v3',
 			graph: {
 				authors: runtimeAuthors,
 				models: runtimeModels,
@@ -1059,7 +1066,7 @@ function buildCatalogs(source) {
 			}
 		},
 		public: {
-			schema: 'stogas.catalog.public.v2',
+			schema: 'stogas.catalog.public.v3',
 			graph: {
 				authors: graph.authors,
 				models: graph.models,

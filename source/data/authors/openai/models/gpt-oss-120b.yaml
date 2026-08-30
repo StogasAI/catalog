@@ -8,7 +8,7 @@ models:
   maxOutputTokens: 131072
   inputModalities: [text]
   outputModalities: [text]
-  reasoningAvailability: required
+  reasoning: required
   reasoningEfforts: [low, medium, high]
   reasoningMaxTokens: null
   releaseDate: 2025-08-05

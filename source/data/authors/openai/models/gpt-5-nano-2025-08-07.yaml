@@ -10,7 +10,7 @@ models:
   outputModalities: [text]
   capabilities:
     explicitPromptCaching: false
-  reasoningAvailability: required
+  reasoning: required
   reasoningEfforts: [minimal, low, medium, high]
   reasoningMaxTokens: null
   snapshot: 2025-08-07

@@ -27,9 +27,9 @@ package catalog
 		urlContext?:              bool
 		pdfInput?:                bool
 	})
-	reasoningAvailability: #ReasoningAvailability
-	reasoningEfforts:      [...#ReasoningEffort]
-	reasoningMaxTokens:    null | #ReasoningMaxTokens
+	reasoning:          #Reasoning
+	reasoningEfforts:   [...#ReasoningEffort]
+	reasoningMaxTokens: null | #ReasoningMaxTokens
 	snapshot?:        #MaybeDate
 	releaseDate?:     #MaybeDate
 	knowledgeCutoff?: #MaybeDate

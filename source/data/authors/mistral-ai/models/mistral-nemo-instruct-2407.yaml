@@ -8,7 +8,7 @@ models:
   maxOutputTokens: 131072
   inputModalities: [text]
   outputModalities: [text]
-  reasoningAvailability: unsupported
+  reasoning: unsupported
   reasoningEfforts: []
   reasoningMaxTokens: null
   snapshot: 2024-07-01

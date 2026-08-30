@@ -23,18 +23,13 @@ export type DataHandlingContract = {
 	retentionDays: number | null;
 	trainingUse: boolean;
 	zeroDataRetention: boolean;
-	tee: TeeContract | null;
+	tee: boolean;
+	teeVerified: boolean;
 };
 
 type ProviderDataHandlingContract = Omit<DataHandlingContract, 'endToEndEncrypted'>;
 
 type RouteDataHandlingContract = Pick<DataHandlingContract, 'endToEndEncrypted'>;
-
-type TeeContract = {
-	attestation: 'provider-claimed' | 'unknown' | 'unverified' | 'verified';
-	externalNetworkEgress: 'allowed' | 'blocked' | 'unknown';
-	technology: string;
-};
 
 type ProviderRouteContract = {
 	capabilities?: Record<string, boolean>;
@@ -61,14 +56,14 @@ export type ProviderDeploymentContract = {
 	modelInputModalities?: string[];
 	modelMaxOutputTokens?: number;
 	modelReasoningEfforts?: string[];
-	modelReasoningAvailability?: 'optional' | 'required' | 'unsupported';
+	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	moderated?: boolean;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
 	publicOverrides?: Record<string, unknown>;
 	reasoningEfforts?: string[];
-	reasoningAvailability?: 'optional' | 'required' | 'unsupported';
+	reasoning?: 'optional' | 'required' | 'unsupported';
 	reasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	routeOverrides?: Record<string, { reasoningEfforts: string[] }>;
 	routeIds: string[];
@@ -186,8 +181,7 @@ export function assertProviderOnboardingContract(
 			modelId: expected.modelId,
 			outputModalities: expected.outputModalities,
 			pricing: expected.pricing,
-			reasoningAvailability:
-				expected.reasoningAvailability ?? expected.modelReasoningAvailability ?? 'unsupported',
+			reasoning: expected.reasoning ?? expected.modelReasoning ?? 'unsupported',
 			reasoningEfforts: expected.reasoningEfforts ?? expected.modelReasoningEfforts ?? [],
 			reasoningMaxTokens:
 				expected.reasoningMaxTokens !== undefined
@@ -224,7 +218,7 @@ export function assertProviderOnboardingContract(
 			maxOutputTokens: expected.modelMaxOutputTokens ?? expected.maxOutputTokens,
 			outputModalities: expected.outputModalities,
 			reasoningEfforts: expected.modelReasoningEfforts ?? [],
-			reasoningAvailability: expected.modelReasoningAvailability ?? 'unsupported',
+			reasoning: expected.modelReasoning ?? 'unsupported',
 			reasoningMaxTokens: expected.modelReasoningMaxTokens ?? null
 		});
 		expect(published.authors[expected.authorId]).toBeDefined();

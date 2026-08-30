@@ -6,11 +6,6 @@ import {
 	type ProviderDeploymentContract
 } from './provider-onboarding';
 
-const tee = {
-	attestation: 'provider-claimed' as const,
-	externalNetworkEgress: 'blocked' as const,
-	technology: 'intel-tdx'
-};
 const capabilities = {
 	cancellation: true,
 	functionCalling: true,
@@ -56,12 +51,13 @@ const gpuCounts: Record<string, number> = {
 };
 const dataHandling = {
 	processingLocation: 'global',
-	storageLocation: 'unknown',
+	storageLocation: 'none',
 	endToEndEncrypted: true,
 	retentionDays: 0,
 	trainingUse: false,
-	zeroDataRetention: false,
-	tee
+	zeroDataRetention: true,
+	tee: true,
+	teeVerified: false
 };
 const deployments: ProviderDeploymentContract[] = [
 	deployment(
@@ -289,12 +285,7 @@ const deployments: ProviderDeploymentContract[] = [
 		publicOverrides: {
 			contextWindowTokens: 131072,
 			maxOutputTokens: 131072,
-			reasoningMaxTokens: null,
-			dataHandling: { tee: { externalNetworkEgress: 'allowed' } }
-		},
-		dataHandling: {
-			...dataHandling,
-			tee: { ...tee, externalNetworkEgress: 'allowed' }
+			reasoningMaxTokens: null
 		}
 	},
 	{
@@ -361,7 +352,7 @@ function deployment(
 	output: string,
 	structuredOutputs = true,
 	inputModalities = ['text'],
-	modelReasoningAvailability: 'optional' | 'required' | 'unsupported' = 'unsupported',
+	modelReasoning: 'optional' | 'required' | 'unsupported' = 'unsupported',
 	modelReasoningEfforts: string[] = [],
 	modelReasoningMaxTokens: { maximum: number; minimum: number } | null = null,
 	modelFacts: {
@@ -398,7 +389,7 @@ function deployment(
 		modelId,
 		modelInputModalities: modelFacts.inputModalities,
 		modelMaxOutputTokens: modelFacts.maxOutputTokens,
-		modelReasoningAvailability,
+		modelReasoning,
 		modelReasoningEfforts,
 		modelReasoningMaxTokens,
 		outputModalities: ['text'],

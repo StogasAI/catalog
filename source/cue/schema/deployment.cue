@@ -72,7 +72,7 @@ package catalog
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
 		capabilities?:          #DeploymentCapabilityOverrides
-		reasoningAvailability?: #ReasoningAvailability
+		reasoning?:          #Reasoning
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
 		routes?: close({[#Id]: #DeploymentRouteOverride})

@@ -13,7 +13,7 @@ models:
     functionCalling: false
     parallelFunctionCalling: false
     explicitPromptCaching: false
-  reasoningAvailability: unsupported
+  reasoning: unsupported
   reasoningEfforts: []
   reasoningMaxTokens: null
   snapshot: 2025-10-14

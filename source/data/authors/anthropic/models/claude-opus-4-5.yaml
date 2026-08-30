@@ -8,7 +8,7 @@ models:
   maxOutputTokens: 64000
   inputModalities: [text, image]
   outputModalities: [text]
-  reasoningAvailability: optional
+  reasoning: optional
   reasoningEfforts: [low, medium, high]
   reasoningMaxTokens:
     minimum: 1024

@@ -36,8 +36,8 @@ package catalog
 
 #Modality:        "text" | "image" | "audio" | "video"
 #Flavor:          "base" | "instruct" | "chat" | "search" | "code" | "unknown"
-#ReasoningEffort:       "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
-#ReasoningAvailability: "unsupported" | "optional" | "required"
+#ReasoningEffort: "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+#Reasoning:       "unsupported" | "optional" | "required"
 #CredentialMode:  "managed" | "byok"
 #Interface:       "chat_completions" | "responses"
 #ProcessingLocation: "global" | "apac" | "eu" | "europe" | "unknown" | #CountryCode
@@ -48,13 +48,4 @@ package catalog
 	maximum: int & >=minimum
 })
 
-#TeeAttestation:        "verified" | "provider-claimed" | "unverified" | "unknown"
-#TeeTechnology:         "amd-sev-snp" | "intel-tdx" | "aws-nitro-enclaves" | "other" | "unknown"
-#ExternalNetworkEgress: "blocked" | "allowed" | "unknown"
 #WeightPrecision:       "fp32" | "bf16" | "fp16" | "fp8" | "fp6" | "fp4" | "nvfp4" | "mxfp4" | "int8" | "int4"
-
-#Tee: close({
-	attestation:           #TeeAttestation
-	technology:            #TeeTechnology
-	externalNetworkEgress: #ExternalNetworkEgress
-})

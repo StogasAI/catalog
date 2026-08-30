@@ -13,13 +13,13 @@ const catalog = parseCatalog(catalogJson);
 
 describe('effective catalog facts', () => {
 	test('rejects malformed generated catalog collections', () => {
-		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.public.v2' })).toThrow(
+		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.public.v3' })).toThrow(
 			'authors collection'
 		);
 		expect(() =>
 			parseCatalog({
 				graph: { authors: [], deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v2'
+				schema: 'stogas.catalog.public.v3'
 			})
 		).toThrow('authors collection');
 	});
@@ -65,12 +65,13 @@ describe('effective catalog facts', () => {
 		const byPath = new Map(facts.map((fact) => [fact.path, fact]));
 
 		expect(byPath.get('contextWindowTokens')?.origin.type).toBe('model');
-		expect(byPath.get('reasoningAvailability')?.origin.type).toBe('model');
+		expect(byPath.get('reasoning')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningEfforts')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningMaxTokens')?.origin.type).toBe('model');
 		expect(byPath.get('dataHandling.endToEndEncrypted')?.origin.type).toBe('route');
 		expect(byPath.get('dataHandling.processingLocation')?.origin.type).toBe('provider');
-		expect(byPath.get('dataHandling.tee.attestation')?.origin.type).toBe('provider');
+		expect(byPath.get('dataHandling.tee')?.origin.type).toBe('provider');
+		expect(byPath.get('dataHandling.teeVerified')?.origin.type).toBe('provider');
 		expect(byPath.get('upstream.chuteId')?.origin.type).toBe('deployment');
 		expect(byPath.get('upstream.gpuCount')?.origin.type).toBe('deployment');
 	});
