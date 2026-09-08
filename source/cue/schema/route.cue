@@ -36,6 +36,5 @@ package catalog
 	pricing?: #RoutePricing
 	overrides?: close({
 		capabilities?: #RouteCapabilityOverrides
-		moderated?:    bool
 	})
 })

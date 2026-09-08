@@ -4,8 +4,8 @@ models:
   family: Qwen
   series: Qwen3.5
   flavors: [instruct]
-  contextWindowTokens: 262144
-  maxOutputTokens: 262144
+  contextWindowTokens: 1010000
+  maxOutputTokens: 1010000
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: optional

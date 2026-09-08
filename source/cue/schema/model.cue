@@ -4,8 +4,8 @@ package catalog
 	authorId: #Id
 	name:     string & !=""
 	aliases?: [...#Slug]
-	family: string
-	series: string
+	family: string & !=""
+	series: string & !=""
 	derivedFrom?: [...#Id]
 	flavors?: [...#Flavor]
 	// Maximum active sequence for one generation: provider-counted input plus output.

@@ -10,7 +10,7 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: unknown
-      retentionDays: 30
+      storageLocation: none
     deprecationDate: 2027-07-08
   pricing:
     input_tokens:

@@ -16,13 +16,12 @@ providers:
     pdfInput: false
   dataHandling:
     processingLocation: global
-    storageLocation: unknown
-    retentionDays: 30
+    storageLocation: none
+    retentionDays: 0
     trainingUse: false
     zeroDataRetention: false
     tee: false
     teeVerified: false
-  moderated: true
   pricing:
     anthropic_web_search_calls:
       per_1k_calls: '10000000000000000000'

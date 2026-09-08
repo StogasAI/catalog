@@ -1,0 +1,39 @@
+{
+	"reviewedAt": "2026-08-31",
+	"authors": {
+		"anthropic": ["https://platform.claude.com/docs/en/models/overview"],
+		"deepseek": ["https://huggingface.co/deepseek-ai"],
+		"google": ["https://ai.google.dev/gemma/docs/core/model_card_4"],
+		"minimax": ["https://huggingface.co/MiniMaxAI"],
+		"mistral-ai": ["https://docs.mistral.ai/getting-started/models/models_overview/"],
+		"moonshot-ai": ["https://huggingface.co/moonshotai"],
+		"nvidia": ["https://huggingface.co/nvidia"],
+		"openai": ["https://developers.openai.com/api/docs/models"],
+		"qwen": ["https://huggingface.co/Qwen"],
+		"z-ai": ["https://huggingface.co/zai-org"]
+	},
+	"providers": {
+		"anthropic": [
+			"https://platform.claude.com/docs/en/models/overview",
+			"https://platform.claude.com/docs/en/about-claude/pricing",
+			"https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
+			"https://platform.claude.com/docs/en/manage-claude/data-residency"
+		],
+		"azure": [
+			"https://azure.microsoft.com/en-us/pricing/details/azure-openai/",
+			"https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure",
+			"https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/priority-processing",
+			"https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/openai/data-privacy"
+		],
+		"chutes": [
+			"https://chutes.ai/docs/guides/starter-guide",
+			"https://chutes.ai/pricing",
+			"https://chutes.ai/privacy"
+		],
+		"openai": [
+			"https://developers.openai.com/api/docs/guides/your-data",
+			"https://developers.openai.com/api/docs/models",
+			"https://developers.openai.com/api/docs/pricing"
+		]
+	}
+}

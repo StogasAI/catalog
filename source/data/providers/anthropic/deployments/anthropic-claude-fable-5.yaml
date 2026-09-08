@@ -4,6 +4,10 @@ deployments:
   upstream:
     model: claude-fable-5
     inferenceGeo: global
+  overrides:
+    dataHandling:
+      storageLocation: unknown
+      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '10000000000000000000'

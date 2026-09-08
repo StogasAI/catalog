@@ -9,6 +9,6 @@ models:
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: [low, high]
+  reasoningEfforts: []
   reasoningMaxTokens: null
   releaseDate: 2026-03-11

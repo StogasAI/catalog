@@ -23,4 +23,3 @@ providers:
     zeroDataRetention: false
     tee: false
     teeVerified: false
-  moderated: true

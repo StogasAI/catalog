@@ -114,7 +114,7 @@ function groupedLayoutPositions(graph: CatalogGraph) {
 		deploymentsByModel.set(modelId, deployments);
 	}
 	let cursor = 180;
-	for (const modelId of [...deploymentsByModel.keys()].sort((left, right) =>
+	for (const modelId of Object.keys(graph.models).sort((left, right) =>
 		String(graph.models[left]?.name ?? left).localeCompare(
 			String(graph.models[right]?.name ?? right)
 		)
@@ -431,9 +431,8 @@ export function lineageForSelection(
 			source('model', selected.id, model)
 		];
 	}
-	return [
-		source(selected.type, selected.id, selectedNodeValue(catalog.graph, selected.type, selected.id))
-	];
+	const value = selectedNodeValue(catalog.graph, selected.type, selected.id);
+	return value ? [source(selected.type, selected.id, value)] : [];
 }
 
 function selectedNodeValue(graph: CatalogGraph, type: NodeType, id: string) {
@@ -461,7 +460,13 @@ export function effectiveDeploymentFacts(
 	const modelId = String(deployment.modelId ?? '');
 	const model = catalog.graph.models[modelId] ?? {};
 	const deploymentRouteIds = routeIds(deployment);
-	if (deploymentRouteIds.length > 1 && !deploymentRouteIds.includes(preferredRouteId)) return [];
+	if (
+		deploymentRouteIds.length === 0 ||
+		(preferredRouteId && !deploymentRouteIds.includes(preferredRouteId)) ||
+		(!preferredRouteId && deploymentRouteIds.length > 1)
+	) {
+		return [];
+	}
 	const routeId = preferredRouteId || deploymentRouteIds[0] || '';
 	const route = catalog.graph.routes[routeId] ?? {};
 	const providerId = String(route.providerId ?? '');
@@ -476,17 +481,12 @@ export function effectiveDeploymentFacts(
 	applyFactLayer(
 		value,
 		origins,
-		selectFacts(provider, ['capabilities', 'dataHandling', 'moderated', 'pricing']),
+		selectFacts(provider, ['capabilities', 'dataHandling', 'pricing']),
 		providerOrigin
 	);
 	const routeOverrides = objectAt(route, ['overrides']);
 	applyFactLayer(value, origins, { dataHandling: route.dataHandling }, routeOrigin);
-	applyFactLayer(
-		value,
-		origins,
-		selectFacts(routeOverrides, ['capabilities', 'moderated']),
-		routeOrigin
-	);
+	applyFactLayer(value, origins, selectFacts(routeOverrides, ['capabilities']), routeOrigin);
 	applyFactLayer(value, origins, { pricing: route.pricing }, routeOrigin);
 	applyFactLayer(
 		value,
@@ -519,7 +519,6 @@ export function effectiveDeploymentFacts(
 			'deprecationDate',
 			'inputModalities',
 			'maxOutputTokens',
-			'moderated',
 			'outputModalities',
 			'pricing',
 			'reasoning',
@@ -649,10 +648,17 @@ function objectAt(value: Record<string, unknown>, path: string[]) {
 function deploymentLineage(catalog: Catalog, deploymentId: string, preferredRouteId?: string) {
 	const deployment = catalog.graph.deployments[deploymentId];
 	if (!deployment) return [];
+	const deploymentRouteIds = routeIds(deployment);
+	if (
+		deploymentRouteIds.length === 0 ||
+		(preferredRouteId && !deploymentRouteIds.includes(preferredRouteId))
+	) {
+		return [];
+	}
 	const modelId = String(deployment.modelId);
 	const model = catalog.graph.models[modelId];
 	const authorId = String(model?.authorId ?? '');
-	const routeId = preferredRouteId || routeIds(deployment)[0];
+	const routeId = preferredRouteId || deploymentRouteIds[0];
 	const route = catalog.graph.routes[routeId];
 	const providerId = String(route?.providerId ?? '');
 	return [

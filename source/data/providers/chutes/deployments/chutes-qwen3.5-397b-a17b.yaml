@@ -8,6 +8,7 @@ deployments:
   aliases: [qwen3.5-397b-a17b-tee]
   weightPrecision: fp8
   overrides:
+    contextWindowTokens: 262144
     inputModalities: [text, image]
     maxOutputTokens: 65536
   pricing:

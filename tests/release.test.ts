@@ -8,8 +8,23 @@ import {
 	resolveDestructiveOutput,
 	stagingDevelopmentProvenance
 } from '../source/scripts/release-format.mjs';
+import {
+	catalogSigningKeys,
+	catalogVerificationKeys,
+	verifyCatalogReleaseSignature
+} from '../source/scripts/signing-keys.mjs';
 
 describe('catalog release metadata', () => {
+	test('separates signing keys and lets staging verify normal production releases', () => {
+		const production = catalogSigningKeys('prod');
+		const staging = catalogSigningKeys('staging');
+		expect(Object.keys(production)).toEqual(['stogas-ed25519-stamp-v1']);
+		expect(Object.keys(staging)).toEqual(['stogas-ed25519-staging-v1']);
+		expect(Object.values(staging)).not.toEqual(Object.values(production));
+		expect(catalogVerificationKeys('prod')).toEqual(production);
+		expect(catalogVerificationKeys('staging')).toEqual({ ...production, ...staging });
+		expect(() => catalogSigningKeys('local')).toThrow('must be staging or prod');
+	});
 	test('publishes approvals under the shared ledger path only', () => {
 		expect(catalogApprovalLedgerKey('approvals/32.json')).toBe('ledger/v1/catalogs/32.json');
 		expect(catalogApprovalLedgerKey('releases/32.json')).toBeNull();
@@ -94,6 +109,21 @@ describe('catalog release metadata', () => {
 			const envelope = JSON.parse(envelopeBytes.toString());
 			expect(envelope.schema).toBe('stogas.catalog.signed.v1');
 			expect(envelope.keyId).toBe('test-key');
+			const keys = {
+				'test-key': publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
+			};
+			expect(() => verifyCatalogReleaseSignature(envelope, keys)).not.toThrow();
+			for (const changed of [
+				{ ...envelope, keyId: 'unknown-key' },
+				{ ...envelope, signature: 'AA' },
+				{ ...envelope, signature: envelope.signature + '==' },
+				{ ...envelope, manifest: { ...envelope.manifest, sequence: 8 } }
+			]) {
+				expect(() => verifyCatalogReleaseSignature(changed, keys)).toThrow('signature is invalid');
+			}
+			expect(() =>
+				verifyCatalogReleaseSignature(envelope, catalogVerificationKeys('prod'))
+			).toThrow('key is not trusted');
 			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v1');
 			expect(envelope.manifest.catalogSchema).toBe(1);
 			expect(envelope.manifest.minimumGatewaySequence).toBe(1);

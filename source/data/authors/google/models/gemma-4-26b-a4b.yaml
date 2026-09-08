@@ -6,9 +6,9 @@ models:
   flavors: [instruct]
   contextWindowTokens: 262144
   maxOutputTokens: 262144
-  inputModalities: [text, image]
+  inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: [minimal, high]
+  reasoningEfforts: []
   reasoningMaxTokens: null
   releaseDate: 2026-03-31

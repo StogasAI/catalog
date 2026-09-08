@@ -29,4 +29,7 @@ A release is one monotonically increasing sequence and a manifest containing the
 SHA-256 values. GitHub attests that manifest. Stogas independently builds the same bytes and signs
 the same manifest with Ed25519. The release command publishes immutable content-addressed artifacts
 and conditionally advances `latest.json`. Public verification keys are committed under `keys/`;
-private release and object-storage credentials remain outside GitHub Actions.
+private release and object-storage credentials remain outside GitHub Actions. Staging uses a
+separate signing key; production verification rejects that key. Staging can also verify production
+releases. A local staging release can replace GitHub's build proof with a manifest-bound placeholder,
+but it still requires a real Stogas signature.

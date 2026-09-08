@@ -12,7 +12,7 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, relative } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stableJson } from './canonical-json.mjs';
 
@@ -25,11 +25,20 @@ const tempBuildRoot = join(sourceRoot, '.tmp-catalog-build');
 const cueVersion = 'v0.16.1';
 const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
 const cachedCue = join(toolCacheDir, process.platform === 'win32' ? 'cue.exe' : 'cue');
-const args = new Set(process.argv.slice(2));
 const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 const canonicalEffortRanks = new Map(canonicalEffortOrder.map((effort, index) => [effort, index]));
+const canonicalModalityOrder = ['text', 'image', 'audio', 'video'];
+const canonicalModalityRanks = new Map(
+	canonicalModalityOrder.map((modality, index) => [modality, index])
+);
+const canonicalInterfaceRanks = new Map(
+	['chat_completions', 'responses'].map((value, index) => [value, index])
+);
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
-const canonicalCredentialModes = new Set(['managed', 'byok']);
+const canonicalCredentialModes = ['managed', 'byok'];
+const canonicalCredentialModeRanks = new Map(
+	canonicalCredentialModes.map((value, index) => [value, index])
+);
 const maxAliasesPerNode = 8;
 const runtimeSizeLimit = 16 * 1024 * 1024;
 const publicSizeLimit = 64 * 1024 * 1024;
@@ -38,15 +47,6 @@ const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;
 
 const supportedArgs = new Set(['--check', '--clean', '--validate-only']);
-for (const arg of args) {
-	if (!supportedArgs.has(arg)) throw new Error(`Unknown catalog build argument: ${arg}`);
-}
-if (args.has('--clean') && args.size > 1) {
-	throw new Error('--clean cannot be combined with another catalog build argument');
-}
-if (args.has('--check') && args.has('--validate-only')) {
-	throw new Error('--check and --validate-only cannot be combined');
-}
 
 function resolveToolCacheRoot() {
 	const configured = process.env.STOGAS_CATALOG_TOOL_CACHE_DIR?.trim();
@@ -213,16 +213,31 @@ async function commandWorks(command) {
 	}
 }
 
+async function commandIsPinnedCue(command) {
+	try {
+		const output = await run([...command, 'version']);
+		return new RegExp(`^cue version ${cueVersion.replaceAll('.', '\\.')}$`, 'm').test(output);
+	} catch {
+		return false;
+	}
+}
+
 async function resolveCueCommand() {
 	const configured = process.env.CUE_BIN?.trim();
-	if (configured) return [configured];
-	if (existsSync(cachedCue) && (await commandWorks([cachedCue, 'version']))) return [cachedCue];
-	if (await commandWorks(['cue', 'version'])) return ['cue'];
+	if (configured) {
+		if (await commandIsPinnedCue([configured])) return [configured];
+		throw new Error(`CUE_BIN must select CUE ${cueVersion}.`);
+	}
+	if (existsSync(cachedCue) && (await commandIsPinnedCue([cachedCue]))) return [cachedCue];
+	if (await commandIsPinnedCue(['cue'])) return ['cue'];
 	if (await commandWorks(['go', 'version'])) {
 		mkdirSync(toolCacheDir, { recursive: true });
 		await run(['go', 'install', `cuelang.org/go/cmd/cue@${cueVersion}`], {
 			env: { GOBIN: toolCacheDir }
 		});
+		if (!(await commandIsPinnedCue([cachedCue]))) {
+			throw new Error(`Installed CUE does not match ${cueVersion}.`);
+		}
 		return [cachedCue];
 	}
 	throw new Error('CUE is required. Install CUE or Go, or set CUE_BIN.');
@@ -232,10 +247,15 @@ function same(left, right) {
 	return stableJson(left) === stableJson(right);
 }
 
-function validDeprecationDate(value) {
-	if (value === null) return true;
+function validDate(value) {
+	if (typeof value !== 'string') return false;
 	const parsed = new Date(`${value}T00:00:00.000Z`);
 	return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validDeprecationDate(value) {
+	if (value === null) return true;
+	return validDate(value);
 }
 
 function isPlainObject(value) {
@@ -310,6 +330,81 @@ function requireNode(nodes, id, owner) {
 	const node = nodes?.[id];
 	if (!node) throw new Error(`${owner}: missing referenced node ${id}`);
 	return node;
+}
+
+function validateCanonicalList(values, ranks, owner) {
+	if (!Array.isArray(values) || values.length === 0) {
+		throw new Error(`${owner} must not be empty`);
+	}
+	let previousRank = -1;
+	for (const value of values) {
+		const rank = ranks.get(value);
+		if (rank === undefined || rank <= previousRank) {
+			throw new Error(`${owner} must use canonical order without repeats`);
+		}
+		previousRank = rank;
+	}
+}
+
+function validateDataHandling(owner, value) {
+	if (value.teeVerified && !value.tee) {
+		throw new Error(`${owner}: verified TEE handling requires TEE processing`);
+	}
+	if (
+		value.zeroDataRetention &&
+		(value.storageLocation !== 'none' || value.retentionDays !== 0 || value.trainingUse)
+	) {
+		throw new Error(`${owner}: zero data retention conflicts with data handling`);
+	}
+}
+
+function validateRouteEndpoint(routeId, endpoint) {
+	if (endpoint === undefined) return;
+	let url;
+	try {
+		url = new URL(endpoint);
+	} catch {
+		throw new Error(`${routeId}: endpoint must be a canonical HTTPS URL`);
+	}
+	if (
+		endpoint !== endpoint.trim() ||
+		/\s/.test(endpoint) ||
+		url.protocol !== 'https:' ||
+		!url.hostname ||
+		url.username ||
+		url.password ||
+		url.search ||
+		url.hash
+	) {
+		throw new Error(`${routeId}: endpoint must be a canonical HTTPS URL`);
+	}
+}
+
+function validateModelDerivation(models) {
+	const states = new Map();
+	for (const startId of Object.keys(models)) {
+		if (states.get(startId) === 'done') continue;
+		const stack = [{ id: startId, exit: false }];
+		while (stack.length) {
+			const item = stack.pop();
+			if (item.exit) {
+				states.set(item.id, 'done');
+				continue;
+			}
+			if (states.get(item.id) === 'done') continue;
+			if (states.get(item.id) === 'visiting') {
+				throw new Error(`${startId}: derivedFrom contains a cycle through ${item.id}`);
+			}
+			states.set(item.id, 'visiting');
+			stack.push({ id: item.id, exit: true });
+			for (const parentId of [...(models[item.id].derivedFrom ?? [])].reverse()) {
+				if (states.get(parentId) === 'visiting') {
+					throw new Error(`${startId}: derivedFrom contains a cycle through ${parentId}`);
+				}
+				if (states.get(parentId) !== 'done') stack.push({ id: parentId, exit: false });
+			}
+		}
+	}
 }
 
 function oneRouteFact(graph, deploymentId, deployment, field) {
@@ -426,9 +521,7 @@ function effectiveCapabilities(graph, deploymentId, model, deployment) {
 		['inputModalities', inputModalities, model.inputModalities],
 		['outputModalities', outputModalities, model.outputModalities]
 	]) {
-		if (!Array.isArray(values) || values.length === 0) {
-			throw new Error(`${deploymentId}: ${name} must not be empty`);
-		}
+		validateCanonicalList(values, canonicalModalityRanks, `${deploymentId}: ${name}`);
 		for (const value of values) {
 			if (!modelValues.includes(value)) {
 				throw new Error(`${deploymentId}: cannot enable model-unsupported ${name} value ${value}`);
@@ -554,11 +647,7 @@ function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
 				`${deploymentId}.overrides.dataHandling`
 			);
 			const value = mergeFacts(routeValue, deployment.overrides?.dataHandling ?? {});
-			if (value.teeVerified && !value.tee) {
-				throw new Error(
-					`${deploymentId}.overrides.dataHandling cannot verify a deployment without TEE processing`
-				);
-			}
+			validateDataHandling(`${deploymentId}.overrides.dataHandling`, value);
 			return [
 				routeId,
 				{
@@ -588,23 +677,20 @@ function effectiveDeprecationDate(deploymentId, model, deployment) {
 	return model.deprecationDate;
 }
 
-function buildCatalogs(source) {
+export function buildCatalogs(source) {
 	const sourceGraph = normalizeSourceGraph(source.graph);
 	const graph = {
 		...sourceGraph,
 		routes: Object.fromEntries(
 			Object.entries(sourceGraph.routes).map(([routeId, route]) => {
 				const provider = requireNode(sourceGraph.providers, route.providerId, routeId);
+				validateCanonicalList(route.interfaces, canonicalInterfaceRanks, `${routeId}: interfaces`);
+				validateRouteEndpoint(routeId, route.endpoint);
 				const overrides = route.overrides ?? {};
 				rejectRedundantOverride(
 					provider.capabilities,
 					overrides.capabilities,
 					`${routeId}.overrides.capabilities`
-				);
-				rejectRedundantOverride(
-					provider.moderated,
-					overrides.moderated,
-					`${routeId}.overrides.moderated`
 				);
 				const capabilities = mergeFacts(provider.capabilities, overrides.capabilities ?? {});
 				const capabilityNames = [
@@ -638,13 +724,7 @@ function buildCatalogs(source) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
 				}
-				if (dataHandling.teeVerified && !dataHandling.tee) {
-					throw new Error(`${routeId}: verified TEE handling requires TEE processing`);
-				}
-				const moderated = overrides.moderated ?? provider.moderated;
-				if (typeof moderated !== 'boolean') {
-					throw new Error(`${routeId}: moderated is unresolved`);
-				}
+				validateDataHandling(routeId, dataHandling);
 				const pricing = mergeFacts(provider.pricing ?? {}, route.pricing ?? {});
 				return [
 					routeId,
@@ -654,7 +734,6 @@ function buildCatalogs(source) {
 						interfaces: [...route.interfaces],
 						capabilities,
 						dataHandling,
-						moderated,
 						pricing
 					}
 				];
@@ -725,17 +804,50 @@ function buildCatalogs(source) {
 	validateQualifierAliases(graph.authors, 'author');
 	validateQualifierAliases(graph.providers, 'provider');
 	for (const [providerId, provider] of Object.entries(graph.providers)) {
-		if (
-			provider.credentialModes.length === 0 ||
-			new Set(provider.credentialModes).size !== provider.credentialModes.length ||
-			provider.credentialModes.some((mode) => !canonicalCredentialModes.has(mode))
-		) {
-			throw new Error(`${providerId}: invalid provider credential modes`);
-		}
+		validateCanonicalList(
+			provider.credentialModes,
+			canonicalCredentialModeRanks,
+			`${providerId}: credentialModes`
+		);
+		validateDataHandling(providerId, provider.dataHandling);
 	}
 
 	for (const [modelId, model] of Object.entries(graph.models)) {
 		validateAliasCount(model.aliases, 'model', modelId);
+		requireNode(graph.authors, model.authorId, modelId);
+		const parents = model.derivedFrom ?? [];
+		if (new Set(parents).size !== parents.length) {
+			throw new Error(`${modelId}: derivedFrom must not repeat`);
+		}
+		for (const parentId of parents) requireNode(graph.models, parentId, modelId);
+		if (model.maxOutputTokens > model.contextWindowTokens) {
+			throw new Error(`${modelId}: output limit must fit inside the context window`);
+		}
+		validateCanonicalList(
+			model.inputModalities,
+			canonicalModalityRanks,
+			`${modelId}: inputModalities`
+		);
+		validateCanonicalList(
+			model.outputModalities,
+			canonicalModalityRanks,
+			`${modelId}: outputModalities`
+		);
+		for (const field of ['releaseDate', 'snapshot', 'knowledgeCutoff']) {
+			if (model[field] !== null && !validDate(model[field])) {
+				throw new Error(`${modelId}: ${field} is invalid`);
+			}
+		}
+		if (!validDeprecationDate(model.deprecationDate)) {
+			throw new Error(`${modelId}: deprecationDate is invalid`);
+		}
+		if (
+			model.releaseDate !== null &&
+			model.deprecationDate !== null &&
+			model.deprecationDate < model.releaseDate
+		) {
+			throw new Error(`${modelId}: deprecationDate precedes releaseDate`);
+		}
 		if (!reasoningValues.has(model.reasoning)) {
 			throw new Error(`${modelId}: invalid reasoning value`);
 		}
@@ -757,7 +869,8 @@ function buildCatalogs(source) {
 		}
 		if (
 			model.reasoningMaxTokens &&
-			(model.reasoningMaxTokens.minimum > model.reasoningMaxTokens.maximum ||
+			(model.reasoningMaxTokens.minimum <= 0 ||
+				model.reasoningMaxTokens.minimum > model.reasoningMaxTokens.maximum ||
 				model.reasoningMaxTokens.maximum >= model.maxOutputTokens)
 		) {
 			throw new Error(`${modelId}: invalid manual reasoning token bounds`);
@@ -765,6 +878,7 @@ function buildCatalogs(source) {
 		addSelector(modelId, 'model', modelId);
 		for (const alias of model.aliases) addSelector(alias, 'model', modelId);
 	}
+	validateModelDerivation(graph.models);
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
@@ -780,6 +894,13 @@ function buildCatalogs(source) {
 		const deprecationDate = effectiveDeprecationDate(deploymentId, model, deployment);
 		if (!validDeprecationDate(deprecationDate)) {
 			throw new Error(`${deploymentId}: deprecationDate is invalid`);
+		}
+		if (
+			deprecationDate !== null &&
+			model.releaseDate !== null &&
+			deprecationDate < model.releaseDate
+		) {
+			throw new Error(`${deploymentId}: deprecationDate precedes model releaseDate`);
 		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
@@ -815,9 +936,16 @@ function buildCatalogs(source) {
 		if (providerId === 'azure') {
 			const usesAnthropicMessages = deployment.routeIds.includes('azure-anthropic-messages');
 			const modelFormat = deployment.upstream.modelFormat.toLowerCase();
-			if (usesAnthropicMessages !== (model.authorId === 'anthropic')) {
+			const isAnthropicModel = model.authorId === 'anthropic';
+			if (
+				isAnthropicModel
+					? modelFormat !== 'anthropic' ||
+						deployment.routeIds.length !== 1 ||
+						!usesAnthropicMessages
+					: modelFormat === 'anthropic' || usesAnthropicMessages
+			) {
 				throw new Error(
-					`${deploymentId}: Azure Anthropic models must use only the Azure Anthropic Messages route`
+					`${deploymentId}: Azure Anthropic models and format must use only the Azure Anthropic Messages route`
 				);
 			}
 			if (
@@ -852,7 +980,8 @@ function buildCatalogs(source) {
 			}
 			if (
 				deployment.upstream.serviceTier === 'priority' &&
-				(!['gpt-5.6-sol', 'gpt-5.6-terra'].includes(deployment.upstream.model) ||
+				(deployment.upstream.hosting !== 'azure' ||
+					modelFormat !== 'openai' ||
 					deployment.upstream.deploymentType !== 'global_standard')
 			) {
 				throw new Error(`${deploymentId}: Azure Priority is unavailable for this target`);
@@ -861,11 +990,10 @@ function buildCatalogs(source) {
 				deployment.upstream.deploymentType === 'instant' &&
 				(deployment.upstream.hosting !== 'azure' ||
 					modelFormat !== 'openai' ||
-					!['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'].includes(deployment.upstream.model) ||
 					deployment.upstream.serviceTier !== 'default')
 			) {
 				throw new Error(
-					`${deploymentId}: Azure Instant is verified only for default-tier GPT-5.6 targets`
+					`${deploymentId}: Azure Instant requires a default-tier Azure OpenAI target`
 				);
 			}
 			if (
@@ -882,13 +1010,13 @@ function buildCatalogs(source) {
 		if (
 			deployment.upstream.reasoningMode &&
 			(!['openai', 'azure'].includes(providerId) ||
-				!deployment.upstream.model.startsWith('gpt-5.6-') ||
+				model.authorId !== 'openai' ||
 				deployment.routeIds.some((routeId) => {
 					const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
 					return interfaces.length !== 1 || interfaces[0] !== 'responses';
 				}))
 		) {
-			throw new Error(`${deploymentId}: fixed reasoning mode requires OpenAI GPT-5.6 Responses`);
+			throw new Error(`${deploymentId}: fixed reasoning mode requires an OpenAI Responses model`);
 		}
 		const { contextWindowTokens, maxOutputTokens } = effectiveTokenLimits(
 			deploymentId,
@@ -946,18 +1074,13 @@ function buildCatalogs(source) {
 			providerId === 'azure' &&
 			deployment.upstream.hosting !== 'azure' &&
 			dataHandlingValues.some(
-				(value) => value.processingLocation !== 'unknown' || value.storageLocation !== 'unknown'
-			)
-		) {
-			throw new Error(`${deploymentId}: externally hosted Azure locations must remain unknown`);
-		}
-		if (
-			dataHandlingValues.some((value) =>
-				providerId === 'chutes' ? !value.tee : Boolean(value.tee)
+				(value) =>
+					value.processingLocation !== 'unknown' ||
+					!['none', 'unknown'].includes(value.storageLocation)
 			)
 		) {
 			throw new Error(
-				`${deploymentId}: dataHandling.tee must be present only on Chutes deployments`
+				`${deploymentId}: externally hosted Azure locations must remain unknown or none`
 			);
 		}
 		const baseStates = deployment.routeIds.map(
@@ -1088,68 +1211,85 @@ function assertSize(name, content, limit) {
 	if (size > limit) throw new Error(`${name} is ${size} bytes; limit is ${limit}`);
 }
 
-if (args.has('--clean')) {
-	rmSync(generatedRoot, { force: true, recursive: true });
-	rmSync(tempBuildRoot, { force: true, recursive: true });
-	process.exit(0);
-}
-
-if (existsSync(generatedRoot)) {
-	const stats = lstatSync(generatedRoot);
-	if (stats.isSymbolicLink() || !stats.isDirectory()) {
-		throw new Error('generated must be a regular directory');
+export async function main(argv = process.argv.slice(2)) {
+	const args = new Set(argv);
+	for (const arg of args) {
+		if (!supportedArgs.has(arg)) throw new Error(`Unknown catalog build argument: ${arg}`);
 	}
-}
+	if (args.has('--clean') && args.size > 1) {
+		throw new Error('--clean cannot be combined with another catalog build argument');
+	}
+	if (args.has('--check') && args.has('--validate-only')) {
+		throw new Error('--check and --validate-only cannot be combined');
+	}
 
-const cueFiles = walkFiles(join(sourceRoot, 'cue'), (path) => path.endsWith('.cue')).map(rel);
-const allDataFiles = walkFiles(
-	join(sourceRoot, 'data'),
-	(path) => path.endsWith('.yaml') || path.endsWith('.yml')
-);
-const fileOwnedSources = allDataFiles
-	.map((path) => ({ path, source: fileOwnedNodeSource(path) }))
-	.filter(({ source }) => source)
-	.map(({ path, source }) => ({ ...source, path }));
-const fileOwnedPaths = new Set(fileOwnedSources.map((source) => source.path));
-const dataFiles = allDataFiles.filter((path) => !fileOwnedPaths.has(path)).map(rel);
+	if (args.has('--clean')) {
+		rmSync(generatedRoot, { force: true, recursive: true });
+		rmSync(tempBuildRoot, { force: true, recursive: true });
+		return;
+	}
 
-try {
-	const generatedFileOwnedSource = writeFileOwnedNodeSource(fileOwnedSources);
-	const cue = await resolveCueCommand();
-	const sourceFiles = [
-		...cueFiles,
-		...dataFiles,
-		...(generatedFileOwnedSource ? [rel(generatedFileOwnedSource)] : [])
-	];
-	const exported = await run([
-		...cue,
-		'export',
-		...sourceFiles,
-		'-e',
-		'compiledSource',
-		'--out',
-		'json'
-	]);
-	const catalogs = buildCatalogs(JSON.parse(exported));
-	const publicJson = stableJson(catalogs.public);
-	catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
-	const runtimeJson = stableJson(catalogs.runtime);
-	assertSize('runtime catalog', runtimeJson, runtimeSizeLimit);
-	assertSize('public catalog', publicJson, publicSizeLimit);
-
-	if (!args.has('--validate-only')) {
-		if (args.has('--check')) {
-			const currentRuntime = existsSync(runtimePath) ? readFileSync(runtimePath, 'utf8') : null;
-			const currentPublic = existsSync(publicPath) ? readFileSync(publicPath, 'utf8') : null;
-			if (currentRuntime !== runtimeJson || currentPublic !== publicJson) {
-				throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
-			}
-		} else {
-			mkdirSync(generatedRoot, { recursive: true });
-			writeIfChanged(runtimePath, runtimeJson);
-			writeIfChanged(publicPath, publicJson);
+	if (existsSync(generatedRoot)) {
+		const stats = lstatSync(generatedRoot);
+		if (stats.isSymbolicLink() || !stats.isDirectory()) {
+			throw new Error('generated must be a regular directory');
 		}
 	}
-} finally {
-	cleanupTempBuildDir();
+
+	const cueFiles = walkFiles(join(sourceRoot, 'cue'), (path) => path.endsWith('.cue')).map(rel);
+	const allDataFiles = walkFiles(
+		join(sourceRoot, 'data'),
+		(path) => path.endsWith('.yaml') || path.endsWith('.yml')
+	);
+	const fileOwnedSources = allDataFiles
+		.map((path) => ({ path, source: fileOwnedNodeSource(path) }))
+		.filter(({ source }) => source)
+		.map(({ path, source }) => ({ ...source, path }));
+	const fileOwnedPaths = new Set(fileOwnedSources.map((source) => source.path));
+	const dataFiles = allDataFiles.filter((path) => !fileOwnedPaths.has(path)).map(rel);
+
+	try {
+		const generatedFileOwnedSource = writeFileOwnedNodeSource(fileOwnedSources);
+		const cue = await resolveCueCommand();
+		const sourceFiles = [
+			...cueFiles,
+			...dataFiles,
+			...(generatedFileOwnedSource ? [rel(generatedFileOwnedSource)] : [])
+		];
+		const exported = await run([
+			...cue,
+			'export',
+			...sourceFiles,
+			'-e',
+			'compiledSource',
+			'--out',
+			'json'
+		]);
+		const catalogs = buildCatalogs(JSON.parse(exported));
+		const publicJson = stableJson(catalogs.public);
+		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
+		const runtimeJson = stableJson(catalogs.runtime);
+		assertSize('runtime catalog', runtimeJson, runtimeSizeLimit);
+		assertSize('public catalog', publicJson, publicSizeLimit);
+
+		if (!args.has('--validate-only')) {
+			if (args.has('--check')) {
+				const currentRuntime = existsSync(runtimePath) ? readFileSync(runtimePath, 'utf8') : null;
+				const currentPublic = existsSync(publicPath) ? readFileSync(publicPath, 'utf8') : null;
+				if (currentRuntime !== runtimeJson || currentPublic !== publicJson) {
+					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
+				}
+			} else {
+				mkdirSync(generatedRoot, { recursive: true });
+				writeIfChanged(runtimePath, runtimeJson);
+				writeIfChanged(publicPath, publicJson);
+			}
+		}
+	} finally {
+		cleanupTempBuildDir();
+	}
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	await main();
 }

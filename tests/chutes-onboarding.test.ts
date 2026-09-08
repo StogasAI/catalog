@@ -73,7 +73,10 @@ const deployments: ProviderDeploymentContract[] = [
 		'416000000000000000',
 		true,
 		['text'],
-		'optional'
+		'optional',
+		[],
+		null,
+		{ contextWindowTokens: 131072, maxOutputTokens: 131072 }
 	),
 	deployment(
 		'chutes-qwen3.5-397b-a17b',
@@ -91,7 +94,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'optional',
 		[],
 		null,
-		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
+		{
+			contextWindowTokens: 1_010_000,
+			inputModalities: ['text', 'image', 'video'],
+			maxOutputTokens: 1_010_000
+		}
 	),
 	{
 		...deployment(
@@ -108,21 +115,15 @@ const deployments: ProviderDeploymentContract[] = [
 			true,
 			['text', 'image'],
 			'optional',
-			['minimal', 'high'],
+			[],
 			null,
 			{
 				contextWindowTokens: 262144,
-				inputModalities: ['text', 'image'],
+				inputModalities: ['text', 'image', 'video'],
 				maxOutputTokens: 262144
 			}
 		),
-		aliases: ['gemma-4-31b-turbo-tee'],
-		reasoningEfforts: [],
-		publicOverrides: {
-			contextWindowTokens: 131072,
-			maxOutputTokens: 65536,
-			reasoningEfforts: []
-		}
+		aliases: ['gemma-4-31b-turbo-tee']
 	},
 	deployment(
 		'chutes-glm-5.1',
@@ -194,7 +195,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'optional',
 		[],
 		null,
-		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
+		{
+			contextWindowTokens: 1_010_000,
+			inputModalities: ['text', 'image', 'video'],
+			maxOutputTokens: 1_010_000
+		}
 	),
 	deployment(
 		'chutes-qwen3.8-27b',
@@ -212,7 +217,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'optional',
 		['low', 'medium', 'xhigh'],
 		null,
-		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144 }
+		{
+			contextWindowTokens: 1_000_000,
+			inputModalities: ['text', 'image', 'video'],
+			maxOutputTokens: 1_000_000
+		}
 	),
 	deployment(
 		'chutes-kimi-k2.6',
@@ -325,7 +334,6 @@ describe('Chutes provider onboarding contract', () => {
 				credentialModes: ['managed', 'byok'],
 				dataHandling,
 				id: 'chutes',
-				moderated: false,
 				name: 'Chutes'
 			},
 			routes: [

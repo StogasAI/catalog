@@ -37,7 +37,6 @@ type ProviderRouteContract = {
 	endpoint?: string;
 	id: string;
 	interfaces: string[];
-	moderated?: boolean;
 	pricing?: Record<string, Record<string, string>>;
 };
 
@@ -58,7 +57,6 @@ export type ProviderDeploymentContract = {
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
-	moderated?: boolean;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
 	publicOverrides?: Record<string, unknown>;
@@ -79,7 +77,6 @@ export type ProviderOnboardingContract = {
 		dataHandling: DataHandlingContract;
 		headquarteredCountry?: string;
 		id: string;
-		moderated: boolean;
 		name: string;
 		pricing?: Record<string, Record<string, string>>;
 	};
@@ -110,7 +107,6 @@ export function assertProviderOnboardingContract(
 		capabilities: contract.provider.capabilities,
 		credentialModes: contract.provider.credentialModes,
 		dataHandling: providerDataHandling(contract.provider.dataHandling),
-		moderated: contract.provider.moderated,
 		name: contract.provider.name,
 		...(contract.provider.pricing ? { pricing: contract.provider.pricing } : {}),
 		...(contract.provider.headquarteredCountry
@@ -130,11 +126,10 @@ export function assertProviderOnboardingContract(
 			interfaces: route.interfaces,
 			providerId,
 			...(route.pricing ? { pricing: route.pricing } : {}),
-			...(route.capabilities || route.moderated !== undefined
+			...(route.capabilities
 				? {
 						overrides: {
-							...(route.capabilities ? { capabilities: route.capabilities } : {}),
-							...(route.moderated !== undefined ? { moderated: route.moderated } : {})
+							capabilities: route.capabilities
 						}
 					}
 				: {})
@@ -159,11 +154,6 @@ export function assertProviderOnboardingContract(
 			...providerDataHandling(contract.provider.dataHandling),
 			...(route.dataHandling ?? routeDataHandling(contract.provider.dataHandling))
 		}));
-		const routeModerated = routeContracts.map(
-			(route) => route.moderated ?? contract.provider.moderated
-		);
-		const firstModerated = routeModerated[0];
-		for (const value of routeModerated) expect(value).toBe(firstModerated);
 		const dataHandlingByRoute = Object.fromEntries(
 			routeContracts.map((route, index) => [
 				route.id,

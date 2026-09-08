@@ -77,7 +77,6 @@ package catalog
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
 		routes?: close({[#Id]: #DeploymentRouteOverride})
 		dataHandling?:    #DeploymentDataHandlingOverride
-		moderated?:       bool
 		pricing?:         #InheritedPricingOverride
 		deprecationDate?: #MaybeDate
 	})

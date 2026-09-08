@@ -233,8 +233,14 @@ describe('compiled catalog v3', () => {
 	});
 
 	test('keeps author capabilities separate from reviewed Chutes serving limits', () => {
+		expect(publicCatalog.graph.models['gemma-4-26b-a4b']).toMatchObject({
+			inputModalities: ['text', 'image', 'video'],
+			reasoning: 'optional',
+			reasoningEfforts: []
+		});
 		expect(publicCatalog.graph.models['gemma-4-31b']).toMatchObject({
-			inputModalities: ['text', 'image']
+			inputModalities: ['text', 'image', 'video'],
+			reasoningEfforts: []
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-gemma-4-31b-turbo']).toMatchObject({
 			contextWindowTokens: 131072,
@@ -262,10 +268,43 @@ describe('compiled catalog v3', () => {
 			name: 'Mistral NeMo Instruct 2407',
 			series: 'Mistral NeMo'
 		});
+		for (const [modelId, contextWindowTokens] of [
+			['qwen3-32b', 131_072],
+			['qwen3.5-397b-a17b', 1_010_000],
+			['qwen3.6-27b', 1_010_000],
+			['qwen3.8-27b', 1_000_000]
+		] as const) {
+			expect(publicCatalog.graph.models[modelId]).toMatchObject({
+				contextWindowTokens,
+				maxOutputTokens: contextWindowTokens
+			});
+		}
+		expect(runtimeCatalog.graph.deployments['chutes-qwen3-32b']).toMatchObject({
+			contextWindowTokens: 40960,
+			maxOutputTokens: 40960
+		});
+		for (const deploymentId of [
+			'chutes-qwen3.5-397b-a17b',
+			'chutes-qwen3.6-27b',
+			'chutes-qwen3.8-27b'
+		]) {
+			expect(runtimeCatalog.graph.deployments[deploymentId]).toMatchObject({
+				contextWindowTokens: 262_144,
+				maxOutputTokens: 65_536
+			});
+		}
+		for (const modelId of ['nemotron-3-super', 'nemotron-3-ultra']) {
+			expect(publicCatalog.graph.models[modelId]).toMatchObject({
+				reasoning: 'optional',
+				reasoningEfforts: []
+			});
+		}
+		expect(publicCatalog.graph.models['gpt-oss-120b'].knowledgeCutoff).toBe('2024-06-01');
 	});
 
 	test('keeps public policy facts at their semantic owner', () => {
 		for (const provider of Object.values(publicCatalog.graph.providers)) {
+			expect(provider).not.toHaveProperty('moderated');
 			expect(provider.dataHandling).toHaveProperty('processingLocation');
 			expect(provider.dataHandling).toHaveProperty('storageLocation');
 			expect(provider.dataHandling).toHaveProperty('tee');
@@ -435,6 +474,24 @@ describe('compiled catalog v3', () => {
 		expect(runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].pricing).toHaveProperty(
 			'anthropic_web_search_calls'
 		);
+		expect(publicCatalog.graph.providers.anthropic.dataHandling).toMatchObject({
+			storageLocation: 'none',
+			retentionDays: 0,
+			zeroDataRetention: false
+		});
+		for (const deploymentId of ['anthropic-claude-fable-5', 'anthropic-claude-fable-5-us']) {
+			expect(runtimeCatalog.graph.deployments[deploymentId].dataHandlingByRoute).toEqual({
+				'anthropic-messages': expect.objectContaining({
+					storageLocation: 'unknown',
+					retentionDays: 30
+				})
+			});
+		}
+		expect(
+			runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].dataHandlingByRoute[
+				'anthropic-messages'
+			]
+		).toMatchObject({ storageLocation: 'none', retentionDays: 0 });
 	});
 
 	test('publishes OpenAI Fast naming and current GPT-5.6 prices', () => {
@@ -532,22 +589,54 @@ describe('compiled catalog v3', () => {
 
 		expect(deployments['openai-gpt-5.6-sol-fast'].pricing).toMatchObject({
 			input_tokens: {
+				per_mill_context_lte_272k: '8000000000000000000',
+				per_mill_context_gt_272k: '16000000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '800000000000000000',
+				per_mill_context_gt_272k: '1600000000000000000'
+			},
+			cache_write_input_tokens: {
 				per_mill_context_lte_272k: '10000000000000000000',
 				per_mill_context_gt_272k: '20000000000000000000'
 			},
-			cached_input_tokens: {
-				per_mill_context_lte_272k: '1000000000000000000',
-				per_mill_context_gt_272k: '2000000000000000000'
-			},
-			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '12500000000000000000',
-				per_mill_context_gt_272k: '25000000000000000000'
-			},
 			output_tokens: {
-				per_mill_context_lte_272k: '60000000000000000000',
-				per_mill_context_gt_272k: '90000000000000000000'
+				per_mill_context_lte_272k: '40000000000000000000',
+				per_mill_context_gt_272k: '60000000000000000000'
 			}
 		});
+		expect(deployments['openai-gpt-5.6-sol'].pricing).toMatchObject({
+			input_tokens: {
+				per_mill_context_lte_272k: '4000000000000000000',
+				per_mill_context_gt_272k: '8000000000000000000'
+			},
+			cached_input_tokens: {
+				per_mill_context_lte_272k: '400000000000000000',
+				per_mill_context_gt_272k: '800000000000000000'
+			},
+			cache_write_input_tokens: {
+				per_mill_context_lte_272k: '5000000000000000000',
+				per_mill_context_gt_272k: '10000000000000000000'
+			},
+			output_tokens: {
+				per_mill_context_lte_272k: '20000000000000000000',
+				per_mill_context_gt_272k: '30000000000000000000'
+			}
+		});
+		for (const meter of [
+			'input_tokens',
+			'cached_input_tokens',
+			'cache_write_input_tokens',
+			'output_tokens'
+		] as const) {
+			for (const band of ['per_mill_context_lte_272k', 'per_mill_context_gt_272k'] as const) {
+				const standard = BigInt(deployments['openai-gpt-5.6-sol'].pricing[meter][band]);
+				const flex = BigInt(deployments['openai-gpt-5.6-sol-flex'].pricing[meter][band]);
+				const fast = BigInt(deployments['openai-gpt-5.6-sol-fast'].pricing[meter][band]);
+				expect(flex * 2n).toBe(standard);
+				expect(fast).toBe(standard * 2n);
+			}
+		}
 		expect(deployments['openai-gpt-5.6-sol-fast'].contextWindowTokens).toBe(1_050_000);
 
 		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({

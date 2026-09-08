@@ -78,9 +78,9 @@
 	const effectiveJSON = $derived(effectiveValue ? JSON.stringify(effectiveValue, null, 2) : '');
 	const effectiveRouteRequired = $derived(
 		contextDeploymentId !== '' &&
-		!contextRouteId &&
-		Array.isArray(catalog.graph.deployments[contextDeploymentId]?.routeIds) &&
-		catalog.graph.deployments[contextDeploymentId].routeIds.length > 1
+			!contextRouteId &&
+			Array.isArray(catalog.graph.deployments[contextDeploymentId]?.routeIds) &&
+			catalog.graph.deployments[contextDeploymentId].routeIds.length > 1
 	);
 	const decoratedFlow = $derived(
 		decorateFlow(flow, selectedKey, selectedEdgeId, selectedGraphKeys, graphChains)
@@ -214,9 +214,7 @@
 	async function buildCatalog() {
 		buildStatus = 'Building...';
 		try {
-			const payload = parseBuildResult(
-				await requestJson('api/catalog/build', { method: 'POST' })
-			);
+			const payload = parseBuildResult(await requestJson('api/catalog/build', { method: 'POST' }));
 			buildStatus = payload.ok ? 'Build passed' : payload.output;
 		} catch (error) {
 			buildStatus = error instanceof Error ? error.message : String(error);
@@ -285,7 +283,10 @@
 		});
 		const nodeSources: Record<string, string[]> = {};
 		for (const [key, paths] of Object.entries(value.nodeSources)) {
-			if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === 'string')) {
+			if (
+				!Array.isArray(paths) ||
+				!paths.every((path): path is string => typeof path === 'string')
+			) {
 				throw new Error('Catalog editor API returned invalid source data');
 			}
 			nodeSources[key] = paths;
@@ -453,7 +454,9 @@
 			<div class="section-head">
 				<div>
 					<span>Context</span>
-					<strong>{visibleLineage.length ? `${visibleLineage.length} nodes` : 'No selection'}</strong>
+					<strong
+						>{visibleLineage.length ? `${visibleLineage.length} nodes` : 'No selection'}</strong
+					>
 				</div>
 			</div>
 			<div class="chain-row">
@@ -516,6 +519,5 @@
 			{/if}
 			{#if sourceStatus}<p class="status">{sourceStatus}</p>{/if}
 		</section>
-
 	</aside>
 </main>

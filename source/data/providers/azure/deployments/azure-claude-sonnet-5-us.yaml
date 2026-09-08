@@ -11,7 +11,6 @@ deployments:
     dataHandling:
       processingLocation: US
       storageLocation: US
-      retentionDays: 30
     deprecationDate: 2027-06-30
   pricing:
     input_tokens:

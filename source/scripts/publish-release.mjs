@@ -1,4 +1,4 @@
-import { createHmac, createPublicKey } from 'node:crypto';
+import { createHmac, createPrivateKey, createPublicKey } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -17,6 +17,11 @@ import { getS3Object, putS3Object } from './aws-s3.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import { r2WriteConditionETag } from './r2-etag.mjs';
 import {
+	catalogSigningKeys,
+	catalogVerificationKeys,
+	verifyCatalogReleaseSignature
+} from './signing-keys.mjs';
+import {
 	catalogArtifact,
 	catalogApprovalLedgerKey,
 	catalogManifest,
@@ -34,6 +39,9 @@ const sequence = parseSequence(process.argv[3]);
 const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
 const targetBucket = process.argv[5]?.trim();
+const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
+const signingKeys = catalogSigningKeys(publicationEnvironment);
+const verificationKeys = catalogVerificationKeys(publicationEnvironment);
 const latestBrowserCacheControl = 'public, max-age=0, must-revalidate, stale-if-error=0';
 const latestEdgeCacheControl = 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0';
 const immutableCacheControl = 'public, max-age=31536000, immutable';
@@ -59,24 +67,26 @@ const destinations = [
 
 if (action === 'prepare') {
 	await prepareRelease();
-} else if (action === 'prepare-development') {
-	await prepareDevelopmentRelease();
+} else if (action === 'prepare-placeholder') {
+	await preparePlaceholderRelease();
+} else if (action === 'repair') {
+	await repairRelease();
 } else if (action === 'activate') {
 	await activateRelease();
 } else {
 	throw new Error(
-		'Use: publish-release.mjs <prepare|prepare-development|activate> <sequence> <release-output-dir> [r2-bucket]'
+		'Use: publish-release.mjs <prepare|prepare-placeholder|repair|activate> <sequence> <release-output-dir> [r2-bucket]'
 	);
 }
 
-async function prepareDevelopmentRelease() {
+async function preparePlaceholderRelease() {
 	requireCommands(['bun', 'git']);
 	requireStorageEnvironment();
 	for (const name of ['CATALOG_SIGNING_KEY_ID', 'CATALOG_SIGNING_PRIVATE_KEY_PEM']) {
 		requiredEnvironment(name);
 	}
-	if (process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim() !== 'staging') {
-		throw new Error('Development catalog publication is accepted only for staging.');
+	if (publicationEnvironment !== 'staging') {
+		throw new Error('Placeholder proof is allowed only for staging.');
 	}
 
 	run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
@@ -102,7 +112,7 @@ async function prepareDevelopmentRelease() {
 	for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
 		await publishImmutable(path, outputRoot);
 	}
-	console.log(`Prepared staging development catalog ${sequence}.`);
+	console.log(`Prepared staging catalog ${sequence} with placeholder GitHub proof.`);
 	console.log(`  approval ${approvalPath}`);
 }
 
@@ -148,7 +158,9 @@ async function prepareRelease() {
 		for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
 			await publishImmutable(path, outputRoot);
 		}
-		publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope);
+		if (publicationEnvironment === 'prod') {
+			publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope);
+		}
 		console.log(`Prepared catalog ${sequence}.`);
 		console.log(`  approval ${approvalPath}`);
 	} finally {
@@ -166,7 +178,7 @@ function writeApproval(approval) {
 	return approvalPath;
 }
 
-async function activateRelease() {
+function readPreparedRelease() {
 	requireStorageEnvironment();
 	verifyChecksums(outputRoot);
 	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
@@ -177,9 +189,36 @@ async function activateRelease() {
 	if (canonicalJson(approval.signed_release) !== canonicalJson(envelope)) {
 		throw new Error('Catalog approval and signed release differ.');
 	}
+	if (!Array.isArray(approval.github_in_toto) || approval.github_in_toto.length !== 1) {
+		throw new Error('Catalog approval requires one GitHub proof.');
+	}
+	const proof = approval.github_in_toto[0];
+	if (proof?.predicateType === 'https://stogas.ai/attestations/staging-development/v1') {
+		if (
+			publicationEnvironment !== 'staging' ||
+			canonicalJson(proof) !== canonicalJson(stagingDevelopmentProvenance(envelope.manifest))
+		) {
+			throw new Error('Catalog placeholder proof is invalid for this target.');
+		}
+	}
 	if (!readBoundedRegularFile(latestPath).equals(readBoundedRegularFile(releasePath))) {
 		throw new Error('Catalog latest candidate and signed release differ.');
 	}
+	return { approvalPath, latestPath, releasePath };
+}
+
+async function repairRelease() {
+	const { approvalPath, releasePath } = readPreparedRelease();
+	const latest = await readLatest();
+	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
+	const immutablePaths = [...artifactPaths(outputRoot), releasePath, approvalPath];
+	for (const path of immutablePaths) await publishImmutable(path, outputRoot);
+	await requireImmutableReadbacks(immutablePaths, outputRoot);
+	console.log(`Repaired immutable catalog ${sequence} objects.`);
+}
+
+async function activateRelease() {
+	const { approvalPath, latestPath, releasePath } = readPreparedRelease();
 	const latest = await readLatest();
 	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
 	await requireImmutableReadbacks(
@@ -258,12 +297,11 @@ function requireCleanTaggedSource() {
 function verifySigningKey() {
 	const id = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
 	const privateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
-	const keyring = parseJsonFile(join(repositoryRoot, 'keys/catalog-signing-keys.json'));
-	const trusted = keyring[id];
+	const trusted = signingKeys[id];
 	if (typeof trusted !== 'string') {
 		throw new Error(`Catalog signing key ${id} is not trusted by this source.`);
 	}
-	const actual = createPublicKey(privateKey)
+	const actual = createPublicKey(createPrivateKey(privateKey))
 		.export({ format: 'der', type: 'spki' })
 		.toString('base64');
 	if (actual !== trusted) {
@@ -342,6 +380,7 @@ function parseEnvelope(path) {
 	) {
 		throw new Error('Generated catalog release is invalid.');
 	}
+	verifyCatalogReleaseSignature(envelope, verificationKeys);
 	return envelope;
 }
 

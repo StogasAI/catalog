@@ -8,8 +8,6 @@ deployments:
     hosting: azure
     deploymentType: global_standard
   overrides:
-    dataHandling:
-      retentionDays: 30
     deprecationDate: 2027-09-01
   pricing:
     input_tokens:

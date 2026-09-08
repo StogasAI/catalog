@@ -12,4 +12,4 @@ models:
   reasoningEfforts: [low, medium, high]
   reasoningMaxTokens: null
   releaseDate: 2025-08-05
-  knowledgeCutoff: 2024-05-31
+  knowledgeCutoff: 2024-06-01

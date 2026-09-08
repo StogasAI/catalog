@@ -2,8 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import catalogJson from '../generated/catalog.public.json';
 import {
 	buildFlow,
+	completeUnambiguousGraphSelection,
+	concreteGraphChains,
+	decorateFlow,
 	effectiveDeploymentFacts,
 	effectiveDeploymentValue,
+	extendGraphSelection,
+	filterFlow,
+	lineageForSelection,
 	parseNodeKey
 } from '../editor/src/catalog';
 import { readBoundedResponseText } from '../editor/src/http';
@@ -13,6 +19,8 @@ const catalog = parseCatalog(catalogJson);
 
 describe('effective catalog facts', () => {
 	test('rejects malformed generated catalog collections', () => {
+		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
+		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
 		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.public.v3' })).toThrow(
 			'authors collection'
 		);
@@ -22,6 +30,12 @@ describe('effective catalog facts', () => {
 				schema: 'stogas.catalog.public.v3'
 			})
 		).toThrow('authors collection');
+		expect(() =>
+			parseCatalog({
+				graph: { authors: { bad: [] }, deployments: {}, models: {}, providers: {}, routes: {} },
+				schema: 'stogas.catalog.public.v3'
+			})
+		).toThrow('authors.bad entry');
 	});
 
 	test('rejects incomplete graph node keys', () => {
@@ -58,6 +72,153 @@ describe('effective catalog facts', () => {
 			.filter((node) => node.data.type === 'route')
 			.map((node) => node.position.y);
 		expect(new Set(routeYs).size).toBe(routeYs.length);
+	});
+
+	test('places every node in a lane without overlap, including informational models', () => {
+		const flow = buildFlow(catalog.graph);
+		for (const type of ['author', 'model', 'deployment', 'route', 'provider']) {
+			const nodes = flow.nodes.filter((node) => node.data.type === type);
+			expect(new Set(nodes.map((node) => node.position.y)).size, type).toBe(nodes.length);
+		}
+		for (const modelId of ['gemma-4-26b-a4b', 'nemotron-3-super', 'nemotron-3-ultra']) {
+			expect(flow.nodes.find((node) => node.id === `model:${modelId}`)?.position.y).toBeDefined();
+		}
+	});
+
+	test('enumerates one complete chain for every deployment route', () => {
+		const chains = concreteGraphChains(catalog);
+		const routeReferences = Object.values(catalog.graph.deployments).reduce(
+			(total, deployment) => total + (deployment.routeIds as string[]).length,
+			0
+		);
+		expect(chains).toHaveLength(routeReferences);
+		for (const chain of chains) {
+			expect(chain.nodeKeys).toHaveLength(5);
+			expect(chain.edgeIds).toHaveLength(4);
+			expect(new Set(chain.nodeKeys).size).toBe(5);
+		}
+	});
+
+	test('extends and completes only compatible graph selections', () => {
+		const flow = buildFlow(catalog.graph);
+		const chains = concreteGraphChains(catalog);
+		const model = 'model:gpt-5.6-sol';
+		const deployment = 'deployment:openai-gpt-5.6-sol';
+		const route = 'route:openai-responses';
+		const selected = [model];
+
+		expect(extendGraphSelection(flow, chains, [], model)).toEqual([model]);
+		expect(extendGraphSelection(flow, chains, selected, model)).toBe(selected);
+		expect(extendGraphSelection(flow, chains, [model], 'model:missing')).toBeNull();
+		expect(extendGraphSelection(flow, chains, [model], 'provider:chutes')).toBeNull();
+		expect(extendGraphSelection(flow, chains, [model], route)).toEqual([model, deployment, route]);
+		expect(completeUnambiguousGraphSelection(chains, [deployment, route])).toEqual([
+			'author:openai',
+			model,
+			deployment,
+			route,
+			'provider:openai'
+		]);
+		expect(completeUnambiguousGraphSelection(chains, [model])).toEqual(['author:openai', model]);
+		expect(completeUnambiguousGraphSelection(chains, ['model:missing'])).toEqual(['model:missing']);
+	});
+
+	test('decorates and filters compatible graph state without dangling edges', () => {
+		const flow = buildFlow(catalog.graph);
+		const chains = concreteGraphChains(catalog);
+		const visibleTypes = {
+			author: true,
+			model: true,
+			deployment: true,
+			route: true,
+			provider: true
+		};
+		const undecorated = decorateFlow(flow, '', '', [], chains);
+		expect(undecorated.edges.every((edge) => !edge.hidden)).toBe(true);
+
+		const selected = ['deployment:chutes-glm-5.2'];
+		const decorated = decorateFlow(flow, selected[0], '', selected, chains);
+		expect(decorated.nodes.find((node) => node.id === selected[0])?.class).toContain(
+			'catalog-node-current'
+		);
+		expect(decorated.edges.some((edge) => edge.hidden)).toBe(true);
+		const otherEdgeId = chains.find((chain) => !chain.nodeKeys.includes(selected[0]))?.edgeIds[0];
+		expect(otherEdgeId).toBeDefined();
+		const forced = decorateFlow(flow, selected[0], otherEdgeId, selected, chains);
+		expect(forced.edges.find((edge) => edge.id === otherEdgeId)).toMatchObject({
+			hidden: false
+		});
+		expect(forced.edges.find((edge) => edge.id === otherEdgeId)?.class).toContain(
+			'catalog-edge-current'
+		);
+
+		const activeEdge = flow.edges[0];
+		const active = decorateFlow(
+			flow,
+			'',
+			'',
+			[String(activeEdge.source), String(activeEdge.target)],
+			chains
+		);
+		expect(active.edges.find((edge) => edge.id === activeEdge.id)?.class).toContain(
+			'catalog-edge-active'
+		);
+
+		const unfiltered = filterFlow(flow, visibleTypes, '', [], chains);
+		expect(unfiltered.nodes).toHaveLength(flow.nodes.length);
+		expect(unfiltered.edges).toHaveLength(flow.edges.length);
+		const providersHidden = filterFlow(flow, { ...visibleTypes, provider: false }, '', [], chains);
+		expect(providersHidden.nodes.some((node) => node.data.type === 'provider')).toBe(false);
+		const providersOnly = filterFlow(flow, visibleTypes, 'provider', [], chains);
+		expect(providersOnly.nodes.every((node) => node.data.type === 'provider')).toBe(true);
+		expect(providersOnly.edges).toHaveLength(0);
+		const incompatible = filterFlow(
+			flow,
+			visibleTypes,
+			'',
+			['model:gpt-5.6-sol', 'provider:chutes'],
+			chains
+		);
+		expect(incompatible).toEqual({ nodes: [], edges: [] });
+
+		const filtered = filterFlow(decorated, visibleTypes, 'GLM', selected, chains);
+		const nodeIds = new Set(filtered.nodes.map((node) => node.id));
+		for (const edge of filtered.edges) {
+			expect(nodeIds.has(String(edge.source))).toBe(true);
+			expect(nodeIds.has(String(edge.target))).toBe(true);
+		}
+	});
+
+	test('returns direct lineage only for existing catalog nodes', () => {
+		expect(
+			lineageForSelection(catalog, 'deployment:chutes-glm-5.2', {
+				deploymentId: 'chutes-glm-5.2',
+				routeId: 'chutes-chat-completions'
+			})
+		).toMatchObject([
+			{ type: 'author', id: 'z-ai' },
+			{ type: 'model', id: 'glm-5.2' },
+			{ type: 'deployment', id: 'chutes-glm-5.2' },
+			{ type: 'route', id: 'chutes-chat-completions' },
+			{ type: 'provider', id: 'chutes' }
+		]);
+		expect(lineageForSelection(catalog, 'route:openai-responses', {})).toMatchObject([
+			{ type: 'route', id: 'openai-responses' },
+			{ type: 'provider', id: 'openai' }
+		]);
+		expect(lineageForSelection(catalog, 'model:gpt-5.6-sol', {})).toMatchObject([
+			{ type: 'author', id: 'openai' },
+			{ type: 'model', id: 'gpt-5.6-sol' }
+		]);
+		expect(lineageForSelection(catalog, 'author:openai', {})).toMatchObject([
+			{ type: 'author', id: 'openai' }
+		]);
+		expect(lineageForSelection(catalog, 'provider:chutes', {})).toMatchObject([
+			{ type: 'provider', id: 'chutes' }
+		]);
+		expect(lineageForSelection(catalog, 'invalid', {})).toEqual([]);
+		expect(lineageForSelection(catalog, 'model:missing', {})).toEqual([]);
+		expect(lineageForSelection(catalog, 'provider:missing', {})).toEqual([]);
 	});
 
 	test('shows the semantic owner of inherited and overridden deployment facts', () => {
@@ -122,6 +283,37 @@ describe('effective catalog facts', () => {
 				(fact) => fact.path === 'pricing.openai_responses_web_search_calls.per_1k_calls'
 			)
 		).toBe(false);
+	});
+
+	test('rejects a preferred route that is not attached to the deployment', () => {
+		for (const deploymentId of ['chutes-glm-5.2', 'openai-gpt-5.6-sol']) {
+			expect(effectiveDeploymentFacts(catalog, deploymentId, 'azure-responses')).toEqual([]);
+			expect(effectiveDeploymentValue(catalog, deploymentId, 'azure-responses')).toBeNull();
+			expect(
+				lineageForSelection(catalog, `deployment:${deploymentId}`, {
+					deploymentId,
+					routeId: 'azure-responses'
+				})
+			).toEqual([]);
+		}
+	});
+
+	test('rejects deployment facts and lineage when no route exists', () => {
+		expect(effectiveDeploymentFacts(catalog, 'missing')).toEqual([]);
+		expect(effectiveDeploymentValue(catalog, 'missing')).toBeNull();
+		expect(lineageForSelection(catalog, 'deployment:missing', { deploymentId: 'missing' })).toEqual(
+			[]
+		);
+
+		const isolated = structuredClone(catalog);
+		isolated.graph.deployments['chutes-glm-5.2'].routeIds = [];
+		expect(effectiveDeploymentFacts(isolated, 'chutes-glm-5.2')).toEqual([]);
+		expect(effectiveDeploymentValue(isolated, 'chutes-glm-5.2')).toBeNull();
+		expect(
+			lineageForSelection(isolated, 'deployment:chutes-glm-5.2', {
+				deploymentId: 'chutes-glm-5.2'
+			})
+		).toEqual([]);
 	});
 
 	test('builds nested resolved JSON for one concrete deployment route', () => {

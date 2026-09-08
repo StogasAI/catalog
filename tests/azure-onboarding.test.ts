@@ -347,7 +347,7 @@ describe('Azure provider onboarding contract', () => {
 		}
 	});
 
-	test('pins Claude hosting, reasoning, retention, and prices separately', () => {
+	test('pins Claude hosting, reasoning, model-specific retention, and prices separately', () => {
 		const prices = {
 			'claude-fable-5': [10_000_000_000_000_000_000n, 50_000_000_000_000_000_000n],
 			'claude-haiku-4-5': [1_000_000_000_000_000_000n, 5_000_000_000_000_000_000n],
@@ -363,7 +363,13 @@ describe('Azure provider onboarding contract', () => {
 			expect(deployment.pricing).toEqual(
 				claudePricing(input, output, deployment.upstream.deploymentType === 'data_zone_standard_us')
 			);
-			expect(deployment.dataHandlingByRoute['azure-anthropic-messages'].retentionDays).toBe(30);
+			const handling = deployment.dataHandlingByRoute['azure-anthropic-messages'];
+			expect(handling.retentionDays).toBe(deployment.modelId === 'claude-fable-5' ? 30 : 0);
+			if (deployment.modelId === 'claude-fable-5') {
+				expect(handling.storageLocation).toBe('unknown');
+			} else if (deployment.upstream.hosting === 'anthropic') {
+				expect(handling.storageLocation).toBe('none');
+			}
 			expect(deployment.upstream).not.toHaveProperty('speed');
 			expect(deployment.upstream).not.toHaveProperty('serviceTier');
 		}
