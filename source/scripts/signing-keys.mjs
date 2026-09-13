@@ -16,9 +16,15 @@ export function catalogVerificationKeys(environment) {
 }
 
 export function verifyCatalogReleaseSignature(envelope, keys) {
+	if (envelope?.schema !== 'stogas.release-evidence.v1') {
+		throw new Error('Catalog release evidence schema is unsupported.');
+	}
 	try {
-		const encodedKey = keys[envelope.keyId];
-		if (typeof encodedKey !== 'string' || !/^[A-Za-z0-9_-]{86}$/.test(envelope.signature)) {
+		const encodedKey = keys[envelope.signature.key_id];
+		if (
+			typeof encodedKey !== 'string' ||
+			!/^[A-Za-z0-9_-]{86}$/.test(envelope.signature.signature)
+		) {
 			throw new Error();
 		}
 		const key = createPublicKey({
@@ -26,13 +32,13 @@ export function verifyCatalogReleaseSignature(envelope, keys) {
 			format: 'der',
 			type: 'spki'
 		});
-		const signature = Buffer.from(envelope.signature, 'base64url');
+		const signature = Buffer.from(envelope.signature.signature, 'base64url');
 		if (
 			key.asymmetricKeyType !== 'ed25519' ||
-			signature.toString('base64url') !== envelope.signature ||
+			signature.toString('base64url') !== envelope.signature.signature ||
 			!verify(
 				null,
-				Buffer.from(`stogas catalog release v1\n${canonicalJson(envelope.manifest)}`),
+				Buffer.from(`stogas signed document v1\n${canonicalJson(envelope.manifest)}`),
 				key,
 				signature
 			)

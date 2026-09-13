@@ -93,18 +93,25 @@ async function preparePlaceholderRelease() {
 	run('bun', ['run', 'build'], catalogCheckEnvironment());
 	run('bun', ['run', 'check'], catalogCheckEnvironment());
 	verifySigningKey();
-	run(
-		process.execPath,
-		['source/scripts/create-release.mjs', String(sequence), outputRoot],
-		signingEnvironment()
-	);
+	const proofRoot = mkdtempSync(join(tmpdir(), 'stogas-catalog-proof-'));
+	try {
+		const proofPath = join(proofRoot, 'attestation.json');
+		writeFileSync(
+			proofPath,
+			stableJson(stagingDevelopmentProvenance(catalogManifest(repositoryRoot, sequence)))
+		);
+		run(
+			process.execPath,
+			['source/scripts/create-release.mjs', String(sequence), outputRoot, proofPath],
+			signingEnvironment()
+		);
+	} finally {
+		rmSync(proofRoot, { recursive: true, force: true });
+	}
 	verifyChecksums(outputRoot);
 	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
 	const envelope = parseEnvelope(releasePath);
-	const approval = {
-		github_in_toto: [stagingDevelopmentProvenance(envelope.manifest)],
-		signed_release: envelope
-	};
+	const approval = envelope;
 	const approvalPath = writeApproval(approval);
 
 	const latest = await readLatest();
@@ -136,7 +143,12 @@ async function prepareRelease() {
 
 		run(
 			process.execPath,
-			['source/scripts/create-release.mjs', String(sequence), outputRoot],
+			[
+				'source/scripts/create-release.mjs',
+				String(sequence),
+				outputRoot,
+				join(proposalRoot, 'github-attestation.jsonl')
+			],
 			signingEnvironment()
 		);
 		verifyChecksums(outputRoot);
@@ -147,10 +159,7 @@ async function prepareRelease() {
 			throw new Error('The Stogas manifest differs from the GitHub Actions manifest.');
 		}
 
-		const approval = {
-			github_in_toto: [readSingleAttestation(join(proposalRoot, 'github-attestation.jsonl'))],
-			signed_release: envelope
-		};
+		const approval = envelope;
 		const approvalPath = writeApproval(approval);
 
 		const latest = await readLatest();
@@ -186,13 +195,13 @@ function readPreparedRelease() {
 	const latestPath = join(outputRoot, 'latest.json');
 	const envelope = parseEnvelope(releasePath);
 	const approval = parseJsonFile(approvalPath);
-	if (canonicalJson(approval.signed_release) !== canonicalJson(envelope)) {
+	if (canonicalJson(approval) !== canonicalJson(envelope)) {
 		throw new Error('Catalog approval and signed release differ.');
 	}
-	if (!Array.isArray(approval.github_in_toto) || approval.github_in_toto.length !== 1) {
+	if (!Array.isArray(approval.attested_builds) || approval.attested_builds.length !== 1) {
 		throw new Error('Catalog approval requires one GitHub proof.');
 	}
-	const proof = approval.github_in_toto[0];
+	const proof = approval.attested_builds[0];
 	if (proof?.predicateType === 'https://stogas.ai/attestations/staging-development/v1') {
 		if (
 			publicationEnvironment !== 'staging' ||
@@ -338,22 +347,24 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 		}
 	}
 	verifyChecksums(proposalRoot);
-	run('gh', [
-		'attestation',
-		'verify',
-		join(proposalRoot, 'catalog-release.json'),
-		'--repo',
-		'StogasAI/catalog',
-		'--bundle',
-		join(proposalRoot, 'github-attestation.jsonl'),
-		'--signer-workflow',
-		'StogasAI/catalog/.github/workflows/catalog-release.yml',
-		'--source-ref',
-		`refs/tags/${tag}`,
-		'--source-digest',
-		output('git', ['rev-parse', 'HEAD']),
-		'--deny-self-hosted-runners'
-	]);
+	for (const artifact of ['catalog-release.json', 'catalog.runtime.json', 'catalog.public.json']) {
+		run('gh', [
+			'attestation',
+			'verify',
+			join(proposalRoot, artifact),
+			'--repo',
+			'StogasAI/catalog',
+			'--bundle',
+			join(proposalRoot, 'github-attestation.jsonl'),
+			'--signer-workflow',
+			'StogasAI/catalog/.github/workflows/catalog-release.yml',
+			'--source-ref',
+			`refs/tags/${tag}`,
+			'--source-digest',
+			output('git', ['rev-parse', 'HEAD']),
+			'--deny-self-hosted-runners'
+		]);
+	}
 }
 
 function verifyIndependentBuild(proposalRoot) {
@@ -374,7 +385,6 @@ function verifyIndependentBuild(proposalRoot) {
 function parseEnvelope(path) {
 	const envelope = parseJsonFile(path);
 	if (
-		envelope?.schema !== 'stogas.catalog.signed.v1' ||
 		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
 		envelope.manifest.sequence !== sequence
 	) {
@@ -536,24 +546,6 @@ function writeReleaseAsset(path, bytes) {
 	writeFileSync(path, bytes);
 }
 
-function readSingleAttestation(path) {
-	const value = readBoundedRegularFile(path).toString('utf8').trim();
-	try {
-		const parsed = JSON.parse(value);
-		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
-		return parsed;
-	} catch {
-		const rows = value
-			.split(/\r?\n/)
-			.filter(Boolean)
-			.map((row) => JSON.parse(row));
-		if (rows.length !== 1 || !rows[0] || typeof rows[0] !== 'object' || Array.isArray(rows[0])) {
-			throw new Error('Catalog release must contain exactly one GitHub attestation bundle.');
-		}
-		return rows[0];
-	}
-}
-
 async function readLatest() {
 	const key = objectKey('latest.json');
 	const states = await Promise.all(
@@ -633,7 +625,7 @@ async function activateLatest(latest, path) {
 function parsePublishedEnvelope(bytes, destination) {
 	const envelope = JSON.parse(bytes.toString('utf8'));
 	if (
-		envelope?.schema !== 'stogas.catalog.signed.v1' ||
+		envelope?.schema !== 'stogas.release-evidence.v1' ||
 		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
 		!Number.isSafeInteger(envelope.manifest?.sequence)
 	) {

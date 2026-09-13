@@ -3,7 +3,7 @@ import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { canonicalJson } from './canonical-json.mjs';
+import { stableJson } from './canonical-json.mjs';
 
 export { canonicalJson, stableJson } from './canonical-json.mjs';
 
@@ -97,12 +97,16 @@ export function stagingDevelopmentProvenance(manifest) {
 	if (!runtime || !publicCatalog) {
 		throw new Error('Catalog development provenance requires valid runtime and public digests.');
 	}
-	const manifestDigest = sha256(canonicalJson(manifest));
+	const manifestDigest = sha256(stableJson(manifest));
 	return {
 		_type: 'https://in-toto.io/Statement/v1',
 		predicate: { environment: 'staging' },
 		predicateType: 'https://stogas.ai/attestations/staging-development/v1',
-		subject: [{ digest: { sha256: manifestDigest }, name: 'catalog-release.json' }]
+		subject: [
+			{ digest: { sha256: manifestDigest }, name: 'catalog-release.json' },
+			{ digest: { sha256: runtime }, name: 'catalog.runtime.json' },
+			{ digest: { sha256: publicCatalog }, name: 'catalog.public.json' }
+		]
 	};
 }
 

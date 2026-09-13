@@ -1,5 +1,5 @@
 import { createPrivateKey, sign } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -18,6 +18,20 @@ const outputRoot = resolveDestructiveOutput(repositoryRoot, process.argv[3], {
 	allowedRepositoryRoots: ['release'],
 	defaultRelative: 'release'
 });
+const attestationPath = process.argv[4];
+if (!attestationPath) throw new Error('A build attestation file is required.');
+const attestationStat = lstatSync(attestationPath);
+if (
+	!attestationStat.isFile() ||
+	attestationStat.isSymbolicLink() ||
+	attestationStat.size > 1024 * 1024
+) {
+	throw new Error('Build attestation must be a bounded regular file.');
+}
+const attestation = JSON.parse(readFileSync(attestationPath, 'utf8'));
+if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
+	throw new Error('Exactly one build attestation is required.');
+}
 const signingKeyId = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
 const signingPrivateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
 
@@ -35,16 +49,16 @@ if (privateKey.asymmetricKeyType !== 'ed25519') {
 const signature = sign(
 	null,
 	Buffer.concat([
-		Buffer.from('stogas catalog release v1\n', 'utf8'),
+		Buffer.from('stogas signed document v1\n', 'utf8'),
 		Buffer.from(manifestBytes, 'utf8')
 	]),
 	privateKey
 ).toString('base64url');
 const envelope = {
-	keyId: signingKeyId,
+	attested_builds: [attestation],
 	manifest,
-	schema: 'stogas.catalog.signed.v1',
-	signature
+	schema: 'stogas.release-evidence.v1',
+	signature: { key_id: signingKeyId, signature }
 };
 
 mkdirSync(join(outputRoot, 'releases'), { recursive: true });

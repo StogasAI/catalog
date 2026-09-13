@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
@@ -74,10 +74,14 @@ describe('catalog release metadata', () => {
 			subject: [
 				{
 					digest: {
-						sha256: createHash('sha256').update(canonicalJson(manifest)).digest('hex')
+						sha256: createHash('sha256')
+							.update(`${canonicalJson(manifest)}\n`)
+							.digest('hex')
 					},
 					name: 'catalog-release.json'
-				}
+				},
+				{ name: 'catalog.runtime.json', digest: { sha256: '22'.repeat(32) } },
+				{ name: 'catalog.public.json', digest: { sha256: '11'.repeat(32) } }
 			]
 		});
 		expect(() =>
@@ -92,31 +96,52 @@ describe('catalog release metadata', () => {
 		const output = mkdtempSync(join(tmpdir(), 'stogas-catalog-release-'));
 		const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 		try {
-			const result = Bun.spawnSync(['node', 'source/scripts/create-release.mjs', '7', output], {
-				cwd: process.cwd(),
-				env: {
-					...process.env,
-					CATALOG_SIGNING_KEY_ID: 'test-key',
-					CATALOG_SIGNING_PRIVATE_KEY_PEM: privateKey
-						.export({ format: 'pem', type: 'pkcs8' })
-						.toString()
+			const proofPath = join(output, 'attestation.json');
+			const proof = { testAttestation: true };
+			writeFileSync(proofPath, JSON.stringify(proof));
+			const result = Bun.spawnSync(
+				['node', 'source/scripts/create-release.mjs', '7', output, proofPath],
+				{
+					cwd: process.cwd(),
+					env: {
+						...process.env,
+						CATALOG_SIGNING_KEY_ID: 'test-key',
+						CATALOG_SIGNING_PRIVATE_KEY_PEM: privateKey
+							.export({ format: 'pem', type: 'pkcs8' })
+							.toString()
+					}
 				}
-			});
+			);
 			expect(result.exitCode).toBe(0);
 
 			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(envelope.schema).toBe('stogas.catalog.signed.v1');
-			expect(envelope.keyId).toBe('test-key');
+			expect(Object.keys(envelope).sort()).toEqual([
+				'attested_builds',
+				'manifest',
+				'schema',
+				'signature'
+			]);
+			expect(envelope.schema).toBe('stogas.release-evidence.v1');
+			expect(envelope.attested_builds).toEqual([proof]);
+			expect(envelope.signature.key_id).toBe('test-key');
 			const keys = {
 				'test-key': publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
 			};
 			expect(() => verifyCatalogReleaseSignature(envelope, keys)).not.toThrow();
+			for (const schema of [undefined, null, 1, '', 'stogas.release-evidence.v2']) {
+				expect(() => verifyCatalogReleaseSignature({ ...envelope, schema }, keys)).toThrow(
+					'evidence schema is unsupported'
+				);
+			}
 			for (const changed of [
-				{ ...envelope, keyId: 'unknown-key' },
-				{ ...envelope, signature: 'AA' },
-				{ ...envelope, signature: envelope.signature + '==' },
+				{ ...envelope, signature: { ...envelope.signature, key_id: 'unknown-key' } },
+				{ ...envelope, signature: { ...envelope.signature, signature: 'AA' } },
+				{
+					...envelope,
+					signature: { ...envelope.signature, signature: envelope.signature.signature + '==' }
+				},
 				{ ...envelope, manifest: { ...envelope.manifest, sequence: 8 } }
 			]) {
 				expect(() => verifyCatalogReleaseSignature(changed, keys)).toThrow('signature is invalid');
@@ -138,9 +163,9 @@ describe('catalog release metadata', () => {
 			expect(
 				verify(
 					null,
-					Buffer.from(`stogas catalog release v1\n${canonicalJson(envelope.manifest)}`),
+					Buffer.from(`stogas signed document v1\n${canonicalJson(envelope.manifest)}`),
 					publicKey,
-					Buffer.from(envelope.signature, 'base64url')
+					Buffer.from(envelope.signature.signature, 'base64url')
 				)
 			).toBe(true);
 		} finally {
