@@ -140,6 +140,19 @@ function asAzureClaude(source: Source) {
 }
 
 describe('catalog source compiler invariants', () => {
+	test.each(['0', '1', '1000000000000000', '42000000000000000', '1000000000000000000000000000000'])(
+		'preserves exact rate %s atoms in both catalog artifacts',
+		(rate) => {
+			const source = sourceFixture();
+			source.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens = rate;
+			const catalogs = buildCatalogs(source);
+			for (const artifact of [catalogs.public, catalogs.runtime]) {
+				expect(
+					artifact.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens
+				).toBe(rate);
+			}
+		}
+	);
 	test('materializes one minimal graph without leaking public-only policy into runtime', () => {
 		const catalogs = buildCatalogs(sourceFixture());
 		expect(catalogs.runtime.graph.deployments['openai-gpt-test']).toMatchObject({
