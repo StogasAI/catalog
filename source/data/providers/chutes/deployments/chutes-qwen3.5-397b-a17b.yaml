@@ -13,8 +13,8 @@ deployments:
     maxOutputTokens: 65536
   pricing:
     input_tokens:
-      per_mill_tokens: '450000000000000000'
+      per_mill_tokens: '0.45'
     cached_input_tokens:
-      per_mill_tokens: '45000000000000000'
+      per_mill_tokens: '0.045'
     output_tokens:
-      per_mill_tokens: '3000000000000000000'
+      per_mill_tokens: '3'

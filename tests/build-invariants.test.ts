@@ -29,6 +29,7 @@ function sourceFixture() {
 			models: {
 				'gpt-test': {
 					authorId: 'openai',
+					tokenizerFamily: 'openai',
 					name: 'GPT Test',
 					family: 'GPT',
 					series: 'GPT Test',
@@ -129,6 +130,7 @@ function asAzureClaude(source: Source) {
 	asAzure(source);
 	source.graph.authors.anthropic = { name: 'Anthropic' };
 	source.graph.models['gpt-test'].authorId = 'anthropic';
+	source.graph.models['gpt-test'].tokenizerFamily = 'anthropic';
 	source.graph.routes['azure-anthropic-messages'] = {
 		...source.graph.routes['azure-responses'],
 		interfaces: ['chat_completions', 'responses']
@@ -140,8 +142,30 @@ function asAzureClaude(source: Source) {
 }
 
 describe('catalog source compiler invariants', () => {
-	test.each(['0', '1', '1000000000000000', '42000000000000000', '1000000000000000000000000000000'])(
-		'preserves exact rate %s atoms in both catalog artifacts',
+	test.each([undefined, null, '', 'automatic', 'qwen', 'Qwen3', ' qwen3', 1])(
+		'rejects missing or unsupported tokenizer family %p',
+		(family) => {
+			const source = sourceFixture();
+			Object.assign(source.graph.models['gpt-test'], { tokenizerFamily: family });
+			expect(() => buildCatalogs(source)).toThrow('tokenizerFamily');
+		}
+	);
+
+	test('keeps explicit model tokenization independent of author and host', () => {
+		const source = sourceFixture();
+		source.graph.authors['new-author'] = { name: 'New author' };
+		source.graph.models['gpt-test'].authorId = 'new-author';
+		source.graph.models['gpt-test'].tokenizerFamily = 'qwen3';
+		asAzure(source);
+		const catalogs = buildCatalogs(source);
+		for (const artifact of [catalogs.public, catalogs.runtime]) {
+			expect(artifact.graph.models['gpt-test'].tokenizerFamily).toBe('qwen3');
+			expect(artifact.graph.deployments['azure-gpt-test']).not.toHaveProperty('tokenizerFamily');
+		}
+	});
+
+	test.each(['0', '0.001', '0.042', '0.000000000000000000000000000000000001', '1000000000000'])(
+		'preserves exact rate %s USD in both catalog artifacts',
 		(rate) => {
 			const source = sourceFixture();
 			source.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens = rate;

@@ -5,7 +5,7 @@ package catalog
 #UpstreamId:  string & !=""
 #Date:        string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 #MaybeDate:   null | #Date
-#AtomUSD:     string & =~"^[0-9]+$"
+#USD: string & =~"^(0|[1-9][0-9]{0,11})([.][0-9]{0,35}[1-9])?$|^1000000000000$"
 #CountryCode:
 	"AD" | "AE" | "AF" | "AG" | "AI" | "AL" | "AM" | "AO" | "AQ" | "AR" | "AS" | "AT" | "AU" | "AW" | "AX" | "AZ" |
 	"BA" | "BB" | "BD" | "BE" | "BF" | "BG" | "BH" | "BI" | "BJ" | "BL" | "BM" | "BN" | "BO" | "BQ" | "BR" | "BS" | "BT" | "BV" | "BW" | "BY" | "BZ" |

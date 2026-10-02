@@ -9,7 +9,10 @@ import {
 	effectiveDeploymentValue,
 	extendGraphSelection,
 	filterFlow,
+	GRAPH_PAGE_SIZE,
+	indexGraphPaths,
 	lineageForSelection,
+	pageGraph,
 	parseNodeKey
 } from '../editor/src/catalog';
 import { readBoundedResponseText } from '../editor/src/http';
@@ -97,6 +100,73 @@ describe('effective catalog facts', () => {
 			expect(chain.edgeIds).toHaveLength(4);
 			expect(new Set(chain.nodeKeys).size).toBe(5);
 		}
+	});
+
+	test('bounds graph pages without losing nodes, paths, or unused resources', () => {
+		const fixture = structuredClone(catalog);
+		fixture.graph.providers.unused = { name: 'Unused provider' };
+		fixture.graph.routes.unused = { providerId: 'unused' };
+		fixture.graph.authors.unused = { name: 'Unused author' };
+		const index = indexGraphPaths(fixture);
+		const options = {
+			page: 0,
+			query: '',
+			selectedKeys: [],
+			visibleTypes: { author: true, model: true, deployment: true, route: true, provider: true }
+		};
+		const first = pageGraph(fixture, index, options);
+		const nodes = new Set<string>();
+		const edges = new Set<string>();
+		for (let page = 0; page < first.pageCount; page++) {
+			const result = pageGraph(fixture, index, { ...options, page });
+			expect(result.flow.nodes.length).toBeLessThanOrEqual(GRAPH_PAGE_SIZE * 5);
+			expect(result.flow.edges.length).toBeLessThanOrEqual(GRAPH_PAGE_SIZE * 4);
+			const pageNodes = new Set(result.flow.nodes.map((node) => node.id));
+			for (const id of pageNodes) nodes.add(id);
+			for (const edge of result.flow.edges) {
+				expect(pageNodes.has(edge.source)).toBe(true);
+				expect(pageNodes.has(edge.target)).toBe(true);
+				edges.add(edge.id);
+			}
+		}
+		const complete = buildFlow(fixture.graph);
+		expect(nodes).toEqual(new Set(complete.nodes.map((node) => node.id)));
+		expect(edges).toEqual(new Set(complete.edges.map((edge) => edge.id)));
+		expect(fixture.graph.deployments).toEqual(catalog.graph.deployments);
+	});
+
+	test('searches all graph pages, preserves context, and clamps empty or narrowed results', () => {
+		const index = indexGraphPaths(catalog);
+		const options = {
+			page: 999,
+			query: 'OPEN-AI',
+			selectedKeys: [],
+			visibleTypes: { author: true, model: true, deployment: true, route: true, provider: true }
+		};
+		const result = pageGraph(catalog, index, options);
+		expect(result.total).toBeGreaterThan(0);
+		expect(result.page).toBe(result.pageCount - 1);
+		expect(result.flow.nodes.some((node) => node.data.type === 'deployment')).toBe(true);
+		expect(result.flow.nodes.some((node) => node.data.type === 'provider')).toBe(true);
+		const missing = pageGraph(catalog, index, { ...options, query: 'missing-catalog-entry' });
+		expect(missing).toEqual({ flow: { nodes: [], edges: [] }, total: 0, page: 0, pageCount: 1 });
+		const incompatible = pageGraph(catalog, index, {
+			...options,
+			query: '',
+			selectedKeys: ['provider:chutes', 'model:gpt-5.6-sol']
+		});
+		expect(incompatible.total).toBe(0);
+		const hidden = pageGraph(catalog, index, {
+			...options,
+			visibleTypes: {
+				author: false,
+				model: false,
+				deployment: false,
+				route: false,
+				provider: false
+			}
+		});
+		expect(hidden.total).toBe(0);
 	});
 
 	test('extends and completes only compatible graph selections', () => {
@@ -226,6 +296,11 @@ describe('effective catalog facts', () => {
 		const byPath = new Map(facts.map((fact) => [fact.path, fact]));
 
 		expect(byPath.get('contextWindowTokens')?.origin.type).toBe('model');
+		expect(byPath.get('tokenizerFamily')).toEqual({
+			path: 'tokenizerFamily',
+			value: 'glm',
+			origin: { type: 'model', id: 'glm-5.2' }
+		});
 		expect(byPath.get('reasoning')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningEfforts')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningMaxTokens')?.origin.type).toBe('model');

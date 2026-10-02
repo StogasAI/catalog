@@ -1,5 +1,6 @@
 models:
   authorId: nvidia
+  tokenizerFamily: tekken
   name: Nemotron 3 Nano Omni 30B A3B Reasoning
   family: Nemotron
   series: Nemotron 3

@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stableJson } from './canonical-json.mjs';
+import { resolvedCatalogChains } from './resolved-chains.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
@@ -35,6 +36,18 @@ const canonicalInterfaceRanks = new Map(
 	['chat_completions', 'responses'].map((value, index) => [value, index])
 );
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
+const tokenizerFamilies = new Set([
+	'openai',
+	'anthropic',
+	'deepseek',
+	'qwen3',
+	'qwen35',
+	'gemma',
+	'minimax',
+	'tekken',
+	'kimi',
+	'glm'
+]);
 const canonicalCredentialModes = ['managed', 'byok'];
 const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
@@ -815,6 +828,9 @@ export function buildCatalogs(source) {
 	for (const [modelId, model] of Object.entries(graph.models)) {
 		validateAliasCount(model.aliases, 'model', modelId);
 		requireNode(graph.authors, model.authorId, modelId);
+		if (!tokenizerFamilies.has(model.tokenizerFamily)) {
+			throw new Error(`${modelId}: tokenizerFamily must select a supported local estimator`);
+		}
 		const parents = model.derivedFrom ?? [];
 		if (new Set(parents).size !== parents.length) {
 			throw new Error(`${modelId}: derivedFrom must not repeat`);
@@ -1150,6 +1166,7 @@ export function buildCatalogs(source) {
 				id,
 				{
 					authorId: model.authorId,
+					tokenizerFamily: model.tokenizerFamily,
 					aliases: model.aliases,
 					maxOutputTokens: model.maxOutputTokens,
 					name: model.name,
@@ -1177,7 +1194,7 @@ export function buildCatalogs(source) {
 		])
 	);
 
-	return {
+	const catalogs = {
 		runtime: {
 			schema: 'stogas.catalog.runtime.v3',
 			graph: {
@@ -1199,6 +1216,15 @@ export function buildCatalogs(source) {
 			}
 		}
 	};
+	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(
+		catalogs.public,
+		catalogs.runtime
+	)) {
+		const deployment = runtimeDeployments[deploymentId];
+		deployment.chainHashes ??= {};
+		deployment.chainHashes[routeId] = hash;
+	}
+	return catalogs;
 }
 
 function writeIfChanged(path, content) {

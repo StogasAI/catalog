@@ -13,8 +13,8 @@ deployments:
     inputModalities: [text, image]
   pricing:
     input_tokens:
-      per_mill_tokens: '120000000000000000'
+      per_mill_tokens: '0.12'
     cached_input_tokens:
-      per_mill_tokens: '12000000000000000'
+      per_mill_tokens: '0.012'
     output_tokens:
-      per_mill_tokens: '370000000000000000'
+      per_mill_tokens: '0.37'

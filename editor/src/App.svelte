@@ -14,16 +14,17 @@
 	import catalogJson from '../../generated/catalog.public.json';
 	import CatalogNode from './CatalogNode.svelte';
 	import {
-		buildFlow,
 		completeUnambiguousGraphSelection,
-		concreteGraphChains,
 		decorateFlow,
 		effectiveDeploymentFacts,
 		effectiveDeploymentValue,
 		extendGraphSelection,
 		filterFlow,
+		GRAPH_PAGE_SIZE,
+		indexGraphPaths,
 		lineageForSelection,
 		nodeKey,
+		pageGraph,
 		parseNodeKey
 	} from './catalog';
 	import { readBoundedResponseText } from './http';
@@ -44,6 +45,7 @@
 	let contextRouteId = $state('');
 	let contextDeploymentId = $state('');
 	let nodeFilter = $state('');
+	let graphPageNumber = $state(0);
 	let compatibleOnly = $state(false);
 	let visibleNodeTypes = $state<Record<NodeType, boolean>>({
 		author: true,
@@ -60,8 +62,17 @@
 	let buildStatus = $state('');
 
 	const selected = $derived(parseNodeKey(selectedKey));
-	const flow = $derived(buildFlow(catalog.graph));
-	const graphChains = $derived(concreteGraphChains(catalog));
+	const graphIndex = indexGraphPaths(catalog);
+	const graphChains = graphIndex.paths;
+	const graphPage = $derived(
+		pageGraph(catalog, graphIndex, {
+			page: graphPageNumber,
+			query: nodeFilter,
+			visibleTypes: visibleNodeTypes,
+			selectedKeys: compatibleOnly ? selectedGraphKeys : []
+		})
+	);
+	const flow = $derived(graphPage.flow);
 	const lineage = $derived(
 		lineageForSelection(catalog, selectedKey, {
 			routeId: contextRouteId,
@@ -85,15 +96,8 @@
 	const decoratedFlow = $derived(
 		decorateFlow(flow, selectedKey, selectedEdgeId, selectedGraphKeys, graphChains)
 	);
-	const filteredFlow = $derived(
-		filterFlow(
-			decoratedFlow,
-			visibleNodeTypes,
-			nodeFilter,
-			compatibleOnly ? selectedGraphKeys : [],
-			graphChains
-		)
-	);
+	const filteredFlow = $derived(filterFlow(decoratedFlow, visibleNodeTypes, ''));
+	const visiblePageKey = $derived(filteredFlow.nodes.map((node) => node.id).join('|'));
 	const sourcePaths = $derived(sources?.nodeSources[selectedKey] ?? []);
 	const flowEvents = {
 		onedgeclick: selectEdge,
@@ -158,6 +162,7 @@
 		contextDeploymentId = '';
 		contextRouteId = '';
 		setCurrentKey('');
+		if (compatibleOnly) graphPageNumber = 0;
 	}
 
 	function selectGraphNode(key: string) {
@@ -182,6 +187,7 @@
 	function setGraphSelection(keys: string[]) {
 		selectedGraphKeys = completeUnambiguousGraphSelection(graphChains, keys);
 		syncGraphContext(selectedGraphKeys);
+		if (compatibleOnly) graphPageNumber = 0;
 	}
 
 	function selectEdge(event: CustomEvent<{ edge: Edge }> | { edge: Edge }) {
@@ -191,10 +197,12 @@
 
 	function toggleNodeType(type: NodeType) {
 		visibleNodeTypes = { ...visibleNodeTypes, [type]: !visibleNodeTypes[type] };
+		graphPageNumber = 0;
 	}
 
 	function toggleCompatibleOnly() {
 		compatibleOnly = !compatibleOnly;
+		graphPageNumber = 0;
 	}
 
 	function setTheme(theme: UiTheme) {
@@ -388,7 +396,16 @@
 			</div>
 		</div>
 		<div class="graph-filters" aria-label="Graph filters">
-			<input bind:value={nodeFilter} placeholder="Filter nodes" aria-label="Filter nodes" />
+			<input
+				type="search"
+				name="catalog-search"
+				bind:value={nodeFilter}
+				oninput={() => (graphPageNumber = 0)}
+				placeholder="Search names, aliases, or IDs…"
+				aria-label="Search catalog"
+				autocomplete="off"
+				spellcheck={false}
+			/>
 			<div class="filter-chips" aria-label="Node type filters">
 				<label data-type="compatible">
 					<input type="checkbox" checked={compatibleOnly} onchange={toggleCompatibleOnly} />
@@ -414,25 +431,51 @@
 				<span>route</span>
 				<span>provider</span>
 			</div>
-			<SvelteFlow
-				nodes={filteredFlow.nodes}
-				edges={filteredFlow.edges}
-				{nodeTypes}
-				fitView
-				fitViewOptions={{ padding: 0.13 }}
-				minZoom={0.2}
-				maxZoom={1.8}
-				nodesDraggable={false}
-				nodesConnectable={false}
-				elementsSelectable={false}
-				colorMode={uiTheme}
-				{...flowEvents}
-			>
-				<Controls />
-				<MiniMap pannable zoomable nodeStrokeWidth={3} />
-				<Background variant={BackgroundVariant.Lines} />
-			</SvelteFlow>
+			{#if !graphPage.total}
+				<p class="graph-empty" role="status">No matching catalog paths.</p>
+			{:else}
+				{#key visiblePageKey}
+					<SvelteFlow
+						nodes={filteredFlow.nodes}
+						edges={filteredFlow.edges}
+						{nodeTypes}
+						fitView
+						fitViewOptions={{ padding: 0.13 }}
+						minZoom={0.2}
+						maxZoom={1.8}
+						nodesDraggable={false}
+						nodesConnectable={false}
+						elementsSelectable={false}
+						onlyRenderVisibleElements
+						colorMode={uiTheme}
+						{...flowEvents}
+					>
+						<Controls />
+						<MiniMap pannable zoomable nodeStrokeWidth={3} />
+						<Background variant={BackgroundVariant.Lines} />
+					</SvelteFlow>
+				{/key}
+			{/if}
 		</div>
+		<nav class="graph-pagination" aria-label="Catalog graph pages">
+			<span aria-live="polite">
+				{graphPage.total ? graphPage.page * GRAPH_PAGE_SIZE + 1 : 0}–{Math.min(
+					(graphPage.page + 1) * GRAPH_PAGE_SIZE,
+					graphPage.total
+				)} of {graphPage.total} paths
+			</span>
+			<button
+				type="button"
+				disabled={graphPage.page === 0}
+				onclick={() => (graphPageNumber = graphPage.page - 1)}>Previous</button
+			>
+			<span>Page {graphPage.page + 1} of {graphPage.pageCount}</span>
+			<button
+				type="button"
+				disabled={graphPage.page + 1 === graphPage.pageCount}
+				onclick={() => (graphPageNumber = graphPage.page + 1)}>Next</button
+			>
+		</nav>
 	</section>
 
 	<button

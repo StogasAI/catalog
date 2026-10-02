@@ -15,8 +15,8 @@ deployments:
       processingLocation: unknown
   pricing:
     input_tokens:
-      per_mill_tokens: '1925000000000000000'
+      per_mill_tokens: '1.925'
     cached_input_tokens:
-      per_mill_tokens: '165000000000000000'
+      per_mill_tokens: '0.165'
     output_tokens:
-      per_mill_tokens: '3828000000000000000'
+      per_mill_tokens: '3.828'

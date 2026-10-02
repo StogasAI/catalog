@@ -6,11 +6,11 @@ deployments:
     serviceTier: default
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '5000000000000000000'
-      per_mill_context_gt_272k: '10000000000000000000'
+      per_mill_context_lte_272k: '5'
+      per_mill_context_gt_272k: '10'
     cached_input_tokens:
-      per_mill_context_lte_272k: '500000000000000000'
-      per_mill_context_gt_272k: '1000000000000000000'
+      per_mill_context_lte_272k: '0.5'
+      per_mill_context_gt_272k: '1'
     output_tokens:
-      per_mill_context_lte_272k: '30000000000000000000'
-      per_mill_context_gt_272k: '45000000000000000000'
+      per_mill_context_lte_272k: '30'
+      per_mill_context_gt_272k: '45'

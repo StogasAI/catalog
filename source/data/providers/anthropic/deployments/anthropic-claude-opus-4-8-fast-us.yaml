@@ -10,12 +10,12 @@ deployments:
       processingLocation: US
   pricing:
     input_tokens:
-      per_mill_tokens: '11000000000000000000'
+      per_mill_tokens: '11'
     cached_input_tokens:
-      per_mill_tokens: '1100000000000000000'
+      per_mill_tokens: '1.1'
     cache_write_5m_input_tokens:
-      per_mill_tokens: '13750000000000000000'
+      per_mill_tokens: '13.75'
     cache_write_1h_input_tokens:
-      per_mill_tokens: '22000000000000000000'
+      per_mill_tokens: '22'
     output_tokens:
-      per_mill_tokens: '55000000000000000000'
+      per_mill_tokens: '55'

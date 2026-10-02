@@ -266,6 +266,27 @@ exit 1
 
 	for (const fixture of [
 		{
+			name: 'missing model tokenizer family',
+			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
+			from: '  tokenizerFamily: openai\n',
+			to: '',
+			error: 'tokenizerFamily'
+		},
+		{
+			name: 'unknown model tokenizer family',
+			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
+			from: '  tokenizerFamily: openai',
+			to: '  tokenizerFamily: automatic',
+			error: 'tokenizerFamily'
+		},
+		{
+			name: 'deployment tokenizer override',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: '  overrides:\n',
+			to: '  overrides:\n    tokenizerFamily: qwen3\n',
+			error: 'tokenizerFamily'
+		},
+		{
 			name: 'empty model family',
 			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
 			from: '  family: gpt-oss',

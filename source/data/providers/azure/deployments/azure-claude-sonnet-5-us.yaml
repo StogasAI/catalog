@@ -14,12 +14,12 @@ deployments:
     deprecationDate: 2027-06-30
   pricing:
     input_tokens:
-      per_mill_tokens: '2200000000000000000'
+      per_mill_tokens: '2.2'
     cached_input_tokens:
-      per_mill_tokens: '220000000000000000'
+      per_mill_tokens: '0.22'
     cache_write_5m_input_tokens:
-      per_mill_tokens: '2750000000000000000'
+      per_mill_tokens: '2.75'
     cache_write_1h_input_tokens:
-      per_mill_tokens: '4400000000000000000'
+      per_mill_tokens: '4.4'
     output_tokens:
-      per_mill_tokens: '11000000000000000000'
+      per_mill_tokens: '11'

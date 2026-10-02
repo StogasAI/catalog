@@ -1,5 +1,6 @@
 models:
   authorId: anthropic
+  tokenizerFamily: anthropic
   name: Claude Sonnet 4.6
   aliases: [claude-sonnet-4.6]
   family: Claude

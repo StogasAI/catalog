@@ -90,14 +90,6 @@ function gptTargets(tier: 'luna' | 'sol' | 'terra'): AzureTarget[] {
 
 const otherTargets: AzureTarget[] = [
 	['azure-claude-fable-5', 'claude-fable-5', '1', 'anthropic', 'global_standard'],
-	['azure-claude-haiku-4-5', 'claude-haiku-4-5', '2', 'azure', 'global_standard'],
-	[
-		'azure-claude-haiku-4-5-anthropic-hosted',
-		'claude-haiku-4-5',
-		'20251001',
-		'anthropic',
-		'global_standard'
-	],
 	['azure-claude-opus-4-7', 'claude-opus-4-7', '1', 'anthropic', 'global_standard'],
 	['azure-claude-opus-4-8', 'claude-opus-4-8', '2', 'azure', 'global_standard'],
 	[
@@ -221,43 +213,49 @@ otherTargets.push(
 	}
 );
 
-function scaled(value: bigint, numerator: bigint, denominator = 1n) {
-	return ((value * numerator) / denominator).toString();
+// Independent exact arithmetic for the reviewed price relationships.
+function scaled(value: string, numerator: bigint, denominator = 1n) {
+	const [whole, fraction = ''] = value.split('.');
+	const coefficient = BigInt(whole! + fraction.padEnd(36, '0'));
+	const scaledValue = coefficient * numerator;
+	expect(scaledValue % denominator).toBe(0n);
+	const digits = (scaledValue / denominator).toString().padStart(37, '0');
+	return `${digits.slice(0, -36)}.${digits.slice(-36)}`.replace(/0+$/, '').replace(/\.$/, '');
 }
 
 function gptPricing(
-	input: bigint,
-	output: bigint,
+	input: string,
+	output: string,
 	options: { dataZone: boolean; priority: boolean }
 ) {
 	const regionNumerator = options.dataZone ? 11n : 10n;
-	const shortInput = (input * regionNumerator) / 10n;
-	const shortCached = shortInput / 10n;
-	const shortWrite = (shortInput * 5n) / 4n;
-	const shortOutput = (output * regionNumerator) / 10n;
+	const shortInput = scaled(input, regionNumerator, 10n);
+	const shortCached = scaled(shortInput, 1n, 10n);
+	const shortWrite = scaled(shortInput, 5n, 4n);
+	const shortOutput = scaled(output, regionNumerator, 10n);
 	return {
 		cache_write_input_tokens: {
-			per_mill_context_gt_272k: scaled(shortWrite, 2n),
+			per_mill_context_gt_272k: scaled(shortWrite, options.priority ? 4n : 2n),
 			per_mill_context_lte_272k: scaled(shortWrite, options.priority ? 2n : 1n)
 		},
 		cached_input_tokens: {
-			per_mill_context_gt_272k: scaled(shortCached, 2n),
+			per_mill_context_gt_272k: scaled(shortCached, options.priority ? 4n : 2n),
 			per_mill_context_lte_272k: scaled(shortCached, options.priority ? 2n : 1n)
 		},
 		input_tokens: {
-			per_mill_context_gt_272k: scaled(shortInput, 2n),
+			per_mill_context_gt_272k: scaled(shortInput, options.priority ? 4n : 2n),
 			per_mill_context_lte_272k: scaled(shortInput, options.priority ? 2n : 1n)
 		},
 		output_tokens: {
-			per_mill_context_gt_272k: scaled(shortOutput, 3n, 2n),
+			per_mill_context_gt_272k: scaled(shortOutput, options.priority ? 6n : 3n, 2n),
 			per_mill_context_lte_272k: scaled(shortOutput, options.priority ? 2n : 1n)
 		}
 	};
 }
 
-function claudePricing(input: bigint, output: bigint, dataZone: boolean) {
-	const adjustedInput = dataZone ? (input * 11n) / 10n : input;
-	const adjustedOutput = dataZone ? (output * 11n) / 10n : output;
+function claudePricing(input: string, output: string, dataZone: boolean) {
+	const adjustedInput = dataZone ? scaled(input, 11n, 10n) : input;
+	const adjustedOutput = dataZone ? scaled(output, 11n, 10n) : output;
 	return {
 		cache_write_1h_input_tokens: { per_mill_tokens: scaled(adjustedInput, 2n) },
 		cache_write_5m_input_tokens: { per_mill_tokens: scaled(adjustedInput, 5n, 4n) },
@@ -307,9 +305,9 @@ describe('Azure provider onboarding contract', () => {
 
 	test('pins GPT-5.6 standard, data-zone, Instant, Pro, and Priority prices', () => {
 		const baseRates = {
-			'gpt-5.6-luna': [1_000_000_000_000_000_000n, 6_000_000_000_000_000_000n],
-			'gpt-5.6-sol': [5_000_000_000_000_000_000n, 30_000_000_000_000_000_000n],
-			'gpt-5.6-terra': [2_500_000_000_000_000_000n, 15_000_000_000_000_000_000n]
+			'gpt-5.6-luna': ['0.2', '1.2'],
+			'gpt-5.6-sol': ['4', '20'],
+			'gpt-5.6-terra': ['2', '12']
 		} as const;
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in baseRates)) continue;
@@ -349,13 +347,12 @@ describe('Azure provider onboarding contract', () => {
 
 	test('pins Claude hosting, reasoning, model-specific retention, and prices separately', () => {
 		const prices = {
-			'claude-fable-5': [10_000_000_000_000_000_000n, 50_000_000_000_000_000_000n],
-			'claude-haiku-4-5': [1_000_000_000_000_000_000n, 5_000_000_000_000_000_000n],
-			'claude-opus-4-7': [5_000_000_000_000_000_000n, 25_000_000_000_000_000_000n],
-			'claude-opus-4-8': [5_000_000_000_000_000_000n, 25_000_000_000_000_000_000n],
-			'claude-opus-5': [5_000_000_000_000_000_000n, 25_000_000_000_000_000_000n],
-			'claude-sonnet-4-6': [3_000_000_000_000_000_000n, 15_000_000_000_000_000_000n],
-			'claude-sonnet-5': [2_000_000_000_000_000_000n, 10_000_000_000_000_000_000n]
+			'claude-fable-5': ['10', '50'],
+			'claude-opus-4-7': ['5', '25'],
+			'claude-opus-4-8': ['5', '25'],
+			'claude-opus-5': ['5', '25'],
+			'claude-sonnet-4-6': ['3', '15'],
+			'claude-sonnet-5': ['2', '10']
 		} as const;
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in prices)) continue;
@@ -377,43 +374,19 @@ describe('Azure provider onboarding contract', () => {
 			minimum: 1024,
 			maximum: 127_999
 		});
-		expect(runtimeCatalog.graph.deployments['azure-claude-haiku-4-5'].reasoningMaxTokens).toEqual({
-			minimum: 1024,
-			maximum: 63_999
-		});
 	});
 
 	test('pins all non-GPT and non-Claude token prices', () => {
 		const expected = {
-			'azure-deepseek-v3.2': ['580000000000000000', '580000000000000000', '1680000000000000000'],
-			'azure-deepseek-v4-flash-0423': [
-				'190000000000000000',
-				'28000000000000000',
-				'510000000000000000'
-			],
-			'azure-deepseek-v4-flash-0423-eu': [
-				'210000000000000000',
-				'31000000000000000',
-				'560000000000000000'
-			],
-			'azure-deepseek-v4-flash-0423-us': [
-				'210000000000000000',
-				'31000000000000000',
-				'560000000000000000'
-			],
-			'azure-deepseek-v4-pro': ['1740000000000000000', '145000000000000000', '3480000000000000000'],
-			'azure-deepseek-v4-pro-fireworks': [
-				'1925000000000000000',
-				'165000000000000000',
-				'3828000000000000000'
-			],
-			'azure-deepseek-v4-pro-us': [
-				'1910000000000000000',
-				'160000000000000000',
-				'3830000000000000000'
-			],
-			'azure-glm-5.2': ['1540000000000000000', '150000000000000000', '4840000000000000000'],
-			'azure-minimax-m3': ['330000000000000000', '66000000000000000', '1320000000000000000']
+			'azure-deepseek-v3.2': ['0.58', '0.58', '1.68'],
+			'azure-deepseek-v4-flash-0423': ['0.19', '0.028', '0.51'],
+			'azure-deepseek-v4-flash-0423-eu': ['0.21', '0.031', '0.56'],
+			'azure-deepseek-v4-flash-0423-us': ['0.21', '0.031', '0.56'],
+			'azure-deepseek-v4-pro': ['1.74', '0.145', '3.48'],
+			'azure-deepseek-v4-pro-fireworks': ['1.925', '0.165', '3.828'],
+			'azure-deepseek-v4-pro-us': ['1.91', '0.16', '3.83'],
+			'azure-glm-5.2': ['1.54', '0.15', '4.84'],
+			'azure-minimax-m3': ['0.33', '0.066', '1.32']
 		} as const;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
 			expect(runtimeCatalog.graph.deployments[id].pricing).toEqual({
@@ -423,12 +396,12 @@ describe('Azure provider onboarding contract', () => {
 			});
 		}
 		expect(runtimeCatalog.graph.deployments['azure-gpt-oss-120b'].pricing).toEqual({
-			input_tokens: { per_mill_tokens: '150000000000000000' },
-			output_tokens: { per_mill_tokens: '600000000000000000' }
+			input_tokens: { per_mill_tokens: '0.15' },
+			output_tokens: { per_mill_tokens: '0.6' }
 		});
 		expect(runtimeCatalog.graph.deployments['azure-gpt-oss-120b-us'].pricing).toEqual({
-			input_tokens: { per_mill_tokens: '165000000000000000' },
-			output_tokens: { per_mill_tokens: '660000000000000000' }
+			input_tokens: { per_mill_tokens: '0.165' },
+			output_tokens: { per_mill_tokens: '0.66' }
 		});
 	});
 

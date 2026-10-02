@@ -6,8 +6,8 @@ routes:
     endToEndEncrypted: false
   pricing:
     openai_responses_web_search_calls:
-      per_1k_calls: '10000000000000000000'
+      per_1k_calls: '10'
     openai_responses_web_search_preview_calls:
-      per_1k_calls: '10000000000000000000'
+      per_1k_calls: '10'
     openai_responses_web_search_preview_non_reasoning_calls:
-      per_1k_calls: '25000000000000000000'
+      per_1k_calls: '25'

@@ -1,11 +1,10 @@
-import { createPrivateKey, sign } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
 	catalogManifest,
-	canonicalJson,
 	parseSequence,
 	resolveDestructiveOutput,
 	sha256,
@@ -32,34 +31,26 @@ const attestation = JSON.parse(readFileSync(attestationPath, 'utf8'));
 if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
 	throw new Error('Exactly one build attestation is required.');
 }
-const signingKeyId = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
-const signingPrivateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
+const signature = JSON.parse(requiredEnvironment('CATALOG_SIGNATURE_JSON'));
+const signingKeys = catalogSigningKeys(
+	requiredEnvironment('CATALOG_PUBLICATION_ENVIRONMENT'),
+	requiredEnvironment('CATALOG_AUTHORIZED_SIGNING_KEYS_JSON')
+);
 
-rmSync(outputRoot, { recursive: true, force: true });
-mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
-
-const runtime = addBlob('catalog.runtime.json');
-const publicCatalog = addBlob('catalog.public.json');
 const manifest = catalogManifest(repositoryRoot, sequence);
-const manifestBytes = canonicalJson(manifest);
-const privateKey = createPrivateKey(signingPrivateKey);
-if (privateKey.asymmetricKeyType !== 'ed25519') {
-	throw new Error('CATALOG_SIGNING_PRIVATE_KEY_PEM must contain an Ed25519 private key.');
-}
-const signature = sign(
-	null,
-	Buffer.concat([
-		Buffer.from('stogas signed document v1\n', 'utf8'),
-		Buffer.from(manifestBytes, 'utf8')
-	]),
-	privateKey
-).toString('base64url');
 const envelope = {
 	attested_builds: [attestation],
 	manifest,
 	schema: 'stogas.release-evidence.v1',
-	signature: { key_id: signingKeyId, signature }
+	signature
 };
+
+verifyCatalogReleaseSignature(envelope, signingKeys);
+
+rmSync(outputRoot, { recursive: true, force: true });
+mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
+const runtime = addBlob('catalog.runtime.json');
+const publicCatalog = addBlob('catalog.public.json');
 
 mkdirSync(join(outputRoot, 'releases'), { recursive: true });
 writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), stableJson(envelope));

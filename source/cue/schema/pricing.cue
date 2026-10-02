@@ -1,24 +1,24 @@
 package catalog
 
 #FlatTokenRate: close({
-	per_mill_tokens: #AtomUSD
+	per_mill_tokens: #USD
 })
 
 #ContextTokenRate: close({
-	per_mill_context_lte_272k: #AtomUSD
-	per_mill_context_gt_272k:  #AtomUSD
+	per_mill_context_lte_272k: #USD
+	per_mill_context_gt_272k:  #USD
 })
 
 #TokenRate: #FlatTokenRate | #ContextTokenRate
 
 #CallRate: close({
-	per_1k_calls: #AtomUSD
+	per_1k_calls: #USD
 })
 
 #SearchContextCallRate: close({
-	per_1k_search_context_low_calls:    #AtomUSD
-	per_1k_search_context_medium_calls: #AtomUSD
-	per_1k_search_context_high_calls:   #AtomUSD
+	per_1k_search_context_low_calls:    #USD
+	per_1k_search_context_medium_calls: #USD
+	per_1k_search_context_high_calls:   #USD
 })
 
 #TokenPricing: {

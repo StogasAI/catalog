@@ -1,5 +1,6 @@
 models:
   authorId: openai
+  tokenizerFamily: openai
   name: gpt-oss-120b
   family: gpt-oss
   series: gpt-oss

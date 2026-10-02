@@ -13,6 +13,6 @@ deployments:
       implicitPromptCaching: false
   pricing:
     input_tokens:
-      per_mill_tokens: '150000000000000000'
+      per_mill_tokens: '0.15'
     output_tokens:
-      per_mill_tokens: '600000000000000000'
+      per_mill_tokens: '0.6'

@@ -1,4 +1,4 @@
-import { createHmac, createPrivateKey, createPublicKey } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -16,11 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import { r2WriteConditionETag } from './r2-etag.mjs';
-import {
-	catalogSigningKeys,
-	catalogVerificationKeys,
-	verifyCatalogReleaseSignature
-} from './signing-keys.mjs';
+import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
 	catalogApprovalLedgerKey,
@@ -40,8 +36,11 @@ const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
 const targetBucket = process.argv[5]?.trim();
 const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
-const signingKeys = catalogSigningKeys(publicationEnvironment);
-const verificationKeys = catalogVerificationKeys(publicationEnvironment);
+const signingKeys = catalogSigningKeys(
+	publicationEnvironment,
+	process.env.CATALOG_AUTHORIZED_SIGNING_KEYS_JSON
+);
+const verificationKeys = signingKeys;
 const latestBrowserCacheControl = 'public, max-age=0, must-revalidate, stale-if-error=0';
 const latestEdgeCacheControl = 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0';
 const immutableCacheControl = 'public, max-age=31536000, immutable';
@@ -82,15 +81,12 @@ if (action === 'prepare') {
 async function preparePlaceholderRelease() {
 	requireCommands(['bun', 'git']);
 	requireStorageEnvironment();
-	for (const name of ['CATALOG_SIGNING_KEY_ID', 'CATALOG_SIGNING_PRIVATE_KEY_PEM']) {
-		requiredEnvironment(name);
-	}
+	requiredEnvironment('CATALOG_SIGNATURE_JSON');
 	if (publicationEnvironment !== 'staging') {
 		throw new Error('Placeholder proof is allowed only for staging.');
 	}
 
 	run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
-	run('bun', ['run', 'build'], catalogCheckEnvironment());
 	run('bun', ['run', 'check'], catalogCheckEnvironment());
 	verifySigningKey();
 	const proofRoot = mkdtempSync(join(tmpdir(), 'stogas-catalog-proof-'));
@@ -126,9 +122,7 @@ async function preparePlaceholderRelease() {
 async function prepareRelease() {
 	requireCommands(['bun', 'gh', 'git']);
 	requireStorageEnvironment();
-	for (const name of ['CATALOG_SIGNING_KEY_ID', 'CATALOG_SIGNING_PRIVATE_KEY_PEM']) {
-		requiredEnvironment(name);
-	}
+	requiredEnvironment('CATALOG_SIGNATURE_JSON');
 	requireCleanTaggedSource();
 
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
@@ -304,18 +298,14 @@ function requireCleanTaggedSource() {
 }
 
 function verifySigningKey() {
-	const id = requiredEnvironment('CATALOG_SIGNING_KEY_ID');
-	const privateKey = requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM');
-	const trusted = signingKeys[id];
-	if (typeof trusted !== 'string') {
-		throw new Error(`Catalog signing key ${id} is not trusted by this source.`);
-	}
-	const actual = createPublicKey(createPrivateKey(privateKey))
-		.export({ format: 'der', type: 'spki' })
-		.toString('base64');
-	if (actual !== trusted) {
-		throw new Error(`Catalog signing key ${id} does not match its committed public key.`);
-	}
+	verifyCatalogReleaseSignature(
+		{
+			schema: 'stogas.release-evidence.v1',
+			manifest: catalogManifest(repositoryRoot, sequence),
+			signature: JSON.parse(requiredEnvironment('CATALOG_SIGNATURE_JSON'))
+		},
+		signingKeys
+	);
 }
 
 function downloadAndVerifyGitHubProposal(proposalRoot) {
@@ -913,7 +903,7 @@ function commandEnvironment(command) {
 		'AWS_REGION',
 		'AWS_SECRET_ACCESS_KEY',
 		'AWS_SESSION_TOKEN',
-		'CATALOG_SIGNING_PRIVATE_KEY_PEM',
+		'CATALOG_SIGNATURE_JSON',
 		'CLOUDFLARE_ACCOUNT_ID',
 		'CLOUDFLARE_API_TOKEN',
 		'R2_BUCKET',
@@ -931,7 +921,8 @@ function commandEnvironment(command) {
 function signingEnvironment() {
 	return {
 		...commandEnvironment(process.execPath),
-		CATALOG_SIGNING_KEY_ID: requiredEnvironment('CATALOG_SIGNING_KEY_ID'),
-		CATALOG_SIGNING_PRIVATE_KEY_PEM: requiredEnvironment('CATALOG_SIGNING_PRIVATE_KEY_PEM')
+		CATALOG_SIGNATURE_JSON: requiredEnvironment('CATALOG_SIGNATURE_JSON'),
+		CATALOG_PUBLICATION_ENVIRONMENT: publicationEnvironment,
+		CATALOG_AUTHORIZED_SIGNING_KEYS_JSON: JSON.stringify(signingKeys)
 	};
 }

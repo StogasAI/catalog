@@ -1,5 +1,6 @@
 models:
   authorId: openai
+  tokenizerFamily: openai
   name: GPT-5.5
   aliases: [gpt-5.5]
   family: GPT

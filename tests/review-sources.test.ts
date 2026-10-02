@@ -4,12 +4,15 @@ import reviewSources from '../source/review-sources.json';
 
 const allowedDomains = new Set([
 	'ai.google.dev',
+	'api.chutes.ai',
 	'azure.microsoft.com',
 	'chutes.ai',
 	'developers.openai.com',
 	'docs.mistral.ai',
 	'huggingface.co',
 	'learn.microsoft.com',
+	'llm.chutes.ai',
+	'prices.azure.com',
 	'platform.claude.com'
 ]);
 

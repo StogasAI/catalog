@@ -16,14 +16,14 @@ deployments:
     deprecationDate: 2027-07-09
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '2750000000000000000'
-      per_mill_context_gt_272k: '5500000000000000000'
+      per_mill_context_lte_272k: '2.2'
+      per_mill_context_gt_272k: '4.4'
     cached_input_tokens:
-      per_mill_context_lte_272k: '275000000000000000'
-      per_mill_context_gt_272k: '550000000000000000'
+      per_mill_context_lte_272k: '0.22'
+      per_mill_context_gt_272k: '0.44'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '3437500000000000000'
-      per_mill_context_gt_272k: '6875000000000000000'
+      per_mill_context_lte_272k: '2.75'
+      per_mill_context_gt_272k: '5.5'
     output_tokens:
-      per_mill_context_lte_272k: '16500000000000000000'
-      per_mill_context_gt_272k: '24750000000000000000'
+      per_mill_context_lte_272k: '13.2'
+      per_mill_context_gt_272k: '19.8'

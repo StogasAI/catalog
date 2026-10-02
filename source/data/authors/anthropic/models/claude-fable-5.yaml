@@ -1,5 +1,6 @@
 models:
   authorId: anthropic
+  tokenizerFamily: anthropic
   name: Claude Fable 5
   aliases: [claude-fable-latest]
   family: Claude

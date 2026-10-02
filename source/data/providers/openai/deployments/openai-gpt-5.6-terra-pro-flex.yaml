@@ -8,14 +8,14 @@ deployments:
     serviceTier: flex
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '1000000000000000000'
-      per_mill_context_gt_272k: '2000000000000000000'
+      per_mill_context_lte_272k: '1'
+      per_mill_context_gt_272k: '2'
     cached_input_tokens:
-      per_mill_context_lte_272k: '100000000000000000'
-      per_mill_context_gt_272k: '200000000000000000'
+      per_mill_context_lte_272k: '0.1'
+      per_mill_context_gt_272k: '0.2'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '1250000000000000000'
-      per_mill_context_gt_272k: '2500000000000000000'
+      per_mill_context_lte_272k: '1.25'
+      per_mill_context_gt_272k: '2.5'
     output_tokens:
-      per_mill_context_lte_272k: '6000000000000000000'
-      per_mill_context_gt_272k: '9000000000000000000'
+      per_mill_context_lte_272k: '6'
+      per_mill_context_gt_272k: '9'

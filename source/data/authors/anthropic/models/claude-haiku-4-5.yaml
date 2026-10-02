@@ -1,5 +1,6 @@
 models:
   authorId: anthropic
+  tokenizerFamily: anthropic
   name: Claude Haiku 4.5
   aliases: [claude-haiku-4.5]
   family: Claude

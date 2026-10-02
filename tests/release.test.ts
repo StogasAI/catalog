@@ -5,25 +5,38 @@ import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import {
 	catalogApprovalLedgerKey,
+	catalogManifest,
 	resolveDestructiveOutput,
 	stagingDevelopmentProvenance
 } from '../source/scripts/release-format.mjs';
 import {
 	catalogSigningKeys,
-	catalogVerificationKeys,
 	verifyCatalogReleaseSignature
 } from '../source/scripts/signing-keys.mjs';
 
 describe('catalog release metadata', () => {
-	test('separates signing keys and lets staging verify normal production releases', () => {
-		const production = catalogSigningKeys('prod');
-		const staging = catalogSigningKeys('staging');
-		expect(Object.keys(production)).toEqual(['stogas-ed25519-stamp-v1']);
-		expect(Object.keys(staging)).toEqual(['stogas-ed25519-staging-v1']);
-		expect(Object.values(staging)).not.toEqual(Object.values(production));
-		expect(catalogVerificationKeys('prod')).toEqual(production);
-		expect(catalogVerificationKeys('staging')).toEqual({ ...production, ...staging });
-		expect(() => catalogSigningKeys('local')).toThrow('must be staging or prod');
+	test('uses explicit current signing authorization without committed online keys', () => {
+		const { publicKey } = signManifest({ test: true });
+		const classicalKey = generateKeyPairSync('ed25519')
+			.publicKey.export({ format: 'der', type: 'spki' })
+			.toString('base64');
+		for (const environment of ['staging', 'prod']) {
+			expect(catalogSigningKeys(environment, JSON.stringify({ rotated_key: publicKey }))).toEqual({
+				rotated_key: publicKey
+			});
+			for (const input of [
+				undefined,
+				'null',
+				'[]',
+				'{}',
+				JSON.stringify({ a: publicKey, b: publicKey }),
+				JSON.stringify({ a: classicalKey }),
+				'{"a":"invalid"}'
+			]) {
+				expect(() => catalogSigningKeys(environment, input)).toThrow();
+			}
+		}
+		expect(() => catalogSigningKeys('local', '{}')).toThrow('must be staging or prod');
 	});
 	test('publishes approvals under the shared ledger path only', () => {
 		expect(catalogApprovalLedgerKey('approvals/32.json')).toBe('ledger/v1/catalogs/32.json');
@@ -94,7 +107,7 @@ describe('catalog release metadata', () => {
 
 	test('builds one compact authorization over content-addressed artifacts', () => {
 		const output = mkdtempSync(join(tmpdir(), 'stogas-catalog-release-'));
-		const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+		const { publicKey, signature } = signManifest(catalogManifest(process.cwd(), 7));
 		try {
 			const proofPath = join(output, 'attestation.json');
 			const proof = { testAttestation: true };
@@ -105,10 +118,9 @@ describe('catalog release metadata', () => {
 					cwd: process.cwd(),
 					env: {
 						...process.env,
-						CATALOG_SIGNING_KEY_ID: 'test-key',
-						CATALOG_SIGNING_PRIVATE_KEY_PEM: privateKey
-							.export({ format: 'pem', type: 'pkcs8' })
-							.toString()
+						CATALOG_SIGNATURE_JSON: JSON.stringify(signature),
+						CATALOG_PUBLICATION_ENVIRONMENT: 'staging',
+						CATALOG_AUTHORIZED_SIGNING_KEYS_JSON: JSON.stringify({ 'test-key': publicKey })
 					}
 				}
 			);
@@ -127,7 +139,7 @@ describe('catalog release metadata', () => {
 			expect(envelope.attested_builds).toEqual([proof]);
 			expect(envelope.signature.key_id).toBe('test-key');
 			const keys = {
-				'test-key': publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
+				'test-key': publicKey
 			};
 			expect(() => verifyCatalogReleaseSignature(envelope, keys)).not.toThrow();
 			for (const schema of [undefined, null, 1, '', 'stogas.release-evidence.v2']) {
@@ -146,12 +158,10 @@ describe('catalog release metadata', () => {
 			]) {
 				expect(() => verifyCatalogReleaseSignature(changed, keys)).toThrow('signature is invalid');
 			}
-			expect(() =>
-				verifyCatalogReleaseSignature(envelope, catalogVerificationKeys('prod'))
-			).toThrow('key is not trusted');
+			expect(() => verifyCatalogReleaseSignature(envelope, {})).toThrow('key is not trusted');
 			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v1');
 			expect(envelope.manifest.catalogSchema).toBe(1);
-			expect(envelope.manifest.minimumGatewaySequence).toBe(1);
+			expect(envelope.manifest.minimumGatewaySequence).toBe(1_000_005_000_052);
 			expect(envelope.manifest.sequence).toBe(7);
 			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
 			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -164,7 +174,7 @@ describe('catalog release metadata', () => {
 				verify(
 					null,
 					Buffer.from(`stogas signed document v1\n${canonicalJson(envelope.manifest)}`),
-					publicKey,
+					{ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' },
 					Buffer.from(envelope.signature.signature, 'base64url')
 				)
 			).toBe(true);
@@ -176,6 +186,33 @@ describe('catalog release metadata', () => {
 
 function canonicalJson(value: unknown) {
 	return JSON.stringify(stableValue(value));
+}
+
+// Node provides ML-DSA signing; Bun currently verifies it but cannot generate these keys.
+function signManifest(manifest: unknown): {
+	publicKey: string;
+	signature: { key_id: string; signature: string };
+} {
+	const result = Bun.spawnSync(
+		[
+			'node',
+			'--input-type=module',
+			'-e',
+			`
+		import {generateKeyPairSync, sign} from 'node:crypto';
+		import {readFileSync} from 'node:fs';
+		const {privateKey, publicKey} = generateKeyPairSync('ml-dsa-65');
+		const payload = Buffer.concat([Buffer.from('stogas signed document v1\\n'), readFileSync(0)]);
+		process.stdout.write(JSON.stringify({
+			publicKey: publicKey.export({format:'der', type:'spki'}).toString('base64'),
+			signature: {key_id:'test-key', signature:sign(null, payload, privateKey).toString('base64url')}
+		}));
+	`
+		],
+		{ stdin: Buffer.from(canonicalJson(manifest)) }
+	);
+	if (result.exitCode !== 0) throw Error(result.stderr.toString());
+	return JSON.parse(result.stdout.toString());
 }
 
 function stableValue(value: unknown): unknown {

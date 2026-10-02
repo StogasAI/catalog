@@ -1,7 +1,11 @@
 package catalog
 
+#TokenizerFamily: "openai" | "anthropic" | "deepseek" | "qwen3" | "qwen35" | "gemma" | "minimax" | "tekken" | "kimi" | "glm"
+
 #Model: close({
 	authorId: #Id
+	// Selects the gateway's local estimator; implementations and buffers are code-owned.
+	tokenizerFamily!: #TokenizerFamily
 	name:     string & !=""
 	aliases?: [...#Slug]
 	family: string & !=""

@@ -66,7 +66,7 @@ textarea {
 
 .graph-pane {
 	display: grid;
-	grid-template-rows: auto auto minmax(0, 1fr);
+	grid-template-rows: auto auto minmax(0, 1fr) auto;
 	border-right: 1px solid #243244;
 	background: #0f1720;
 }
@@ -773,6 +773,29 @@ button.secondary {
 	gap: 0.5rem;
 	justify-content: flex-end;
 	min-width: 0;
+}
+
+.graph-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	padding: 0.75rem 1rem;
+	background: var(--pane-subtle);
+	color: var(--text-soft);
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.graph-pagination > span:first-child {
+	margin-right: auto;
+}
+
+.graph-empty {
+	padding: 4rem 1rem;
+	text-align: center;
+	color: var(--muted);
 }
 
 .shell .bar p,

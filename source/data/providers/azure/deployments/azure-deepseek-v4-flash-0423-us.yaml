@@ -20,8 +20,8 @@ deployments:
       storageLocation: US
   pricing:
     input_tokens:
-      per_mill_tokens: '210000000000000000'
+      per_mill_tokens: '0.21'
     cached_input_tokens:
-      per_mill_tokens: '31000000000000000'
+      per_mill_tokens: '0.031'
     output_tokens:
-      per_mill_tokens: '560000000000000000'
+      per_mill_tokens: '0.56'

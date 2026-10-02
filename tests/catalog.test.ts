@@ -9,6 +9,31 @@ const canonicalEfforts = new Set(canonicalEffortOrder);
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
 
 describe('compiled catalog v3', () => {
+	test('keeps reviewed tokenizer choices on every model in both artifacts', () => {
+		const expected: Record<string, string> = {
+			anthropic: 'anthropic',
+			deepseek: 'deepseek',
+			google: 'gemma',
+			minimax: 'minimax',
+			'mistral-ai': 'tekken',
+			'moonshot-ai': 'kimi',
+			nvidia: 'tekken',
+			openai: 'openai',
+			qwen: 'qwen35',
+			'z-ai': 'glm'
+		};
+		for (const [id, model] of Object.entries(publicCatalog.graph.models)) {
+			// This is the reviewed current inventory, not a production fallback.
+			expect(model.tokenizerFamily).toBe(id === 'qwen3-32b' ? 'qwen3' : expected[model.authorId]);
+		}
+		for (const [id, model] of Object.entries(runtimeCatalog.graph.models)) {
+			expect(model.tokenizerFamily).toBe(publicCatalog.graph.models[id].tokenizerFamily);
+		}
+		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
+			expect(deployment).not.toHaveProperty('tokenizerFamily');
+		}
+	});
+
 	test('contains exactly the five useful graph primitives', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -19,7 +44,7 @@ describe('compiled catalog v3', () => {
 					Object.keys(publicCatalog.graph[nodeType]).length
 				])
 			)
-		).toEqual({ authors: 10, models: 39, providers: 4, routes: 7, deployments: 114 });
+		).toEqual({ authors: 10, models: 34, providers: 4, routes: 7, deployments: 106 });
 		expect(JSON.stringify(publicCatalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -60,7 +85,7 @@ describe('compiled catalog v3', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(53);
+		expect(Object.keys(selectors)).toHaveLength(51);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5': 'claude-opus-5',
 			'azure-claude-opus-5-anthropic-hosted': 'claude-opus-5',
@@ -107,20 +132,31 @@ describe('compiled catalog v3', () => {
 		expect(runtimeCatalog.graph.providers.openai.aliases).toEqual(['open-ai']);
 	});
 
-	test('uses one nullable deprecation date and keeps history deterministic', () => {
+	test('excludes confirmed shutdowns through the pre-launch cutoff without retiring other providers', () => {
+		expect(runtimeCatalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toBeDefined();
+		expect(publicCatalog.graph.models['claude-opus-4-5'].deprecationDate).toBeNull();
+		expect(publicCatalog.graph.deployments['azure-claude-haiku-4-5']).toBeUndefined();
 		expect(
-			publicCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
-		).not.toHaveProperty('deprecationDate');
-		expect(publicCatalog.graph.models['gpt-4o-search-preview-2025-03-11']).toMatchObject({
-			deprecationDate: '2026-07-23'
-		});
-		expect(
-			runtimeCatalog.graph.deployments['openai-gpt-4o-search-preview-2025-03-11']
-		).toMatchObject({
-			deprecationDate: '2026-07-23'
-		});
+			publicCatalog.graph.deployments['azure-claude-haiku-4-5-anthropic-hosted']
+		).toBeUndefined();
+		for (const modelId of [
+			'gpt-5-nano-2025-08-07',
+			'claude-sonnet-4-5',
+			'claude-opus-4-1',
+			'gpt-4o-mini-search-preview-2025-03-11',
+			'gpt-4o-search-preview-2025-03-11'
+		]) {
+			expect(publicCatalog.graph.models).not.toHaveProperty(modelId);
+			expect(
+				Object.values(runtimeCatalog.graph.deployments).some(
+					(deployment) => deployment.modelId === modelId
+				)
+			).toBe(false);
+		}
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(deployment).toHaveProperty('deprecationDate');
+			if (deployment.deprecationDate !== null)
+				expect(deployment.deprecationDate > '2026-12-31').toBe(true);
 			expect(deployment).not.toHaveProperty('status');
 			expect(deployment).not.toHaveProperty('deprecatedAt');
 			expect(deployment).not.toHaveProperty('retiredAt');
@@ -388,7 +424,6 @@ describe('compiled catalog v3', () => {
 			'claude-opus-4-7',
 			'claude-opus-4-8',
 			'claude-opus-5',
-			'claude-sonnet-4-5',
 			'claude-sonnet-4-6',
 			'claude-sonnet-5'
 		];
@@ -418,7 +453,6 @@ describe('compiled catalog v3', () => {
 			['claude-opus-4-6', 'claude-opus-4.6'],
 			['claude-opus-4-7', 'claude-opus-4.7'],
 			['claude-opus-4-8', 'claude-opus-4.8'],
-			['claude-sonnet-4-5', 'claude-sonnet-4.5'],
 			['claude-sonnet-4-6', 'claude-sonnet-4.6']
 		] as const) {
 			expect(publicCatalog.graph.models[modelId].aliases).toContain(alias);
@@ -457,17 +491,12 @@ describe('compiled catalog v3', () => {
 				.map((deployment) => deployment.modelId)
 		);
 		expect(fastModels).toEqual(new Set(['claude-opus-4-8', 'claude-opus-5']));
-		expect(publicCatalog.graph.models['claude-opus-4-1']).toMatchObject({
-			aliases: ['claude-opus-4.1'],
-			deprecationDate: '2026-08-05',
-			maxOutputTokens: 32000
-		});
 		expect(publicCatalog.graph.routes['anthropic-messages'].dataHandling).toEqual({
 			endToEndEncrypted: false
 		});
 		expect(publicCatalog.graph.providers.anthropic.pricing).toEqual({
 			anthropic_web_search_calls: {
-				per_1k_calls: '10000000000000000000'
+				per_1k_calls: '10'
 			}
 		});
 		expect(publicCatalog.graph.routes['anthropic-messages']).not.toHaveProperty('pricing');
@@ -533,94 +562,94 @@ describe('compiled catalog v3', () => {
 
 		expect(deployments['openai-gpt-5.6-luna'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '200000000000000000',
-				per_mill_context_gt_272k: '400000000000000000'
+				per_mill_context_lte_272k: '0.2',
+				per_mill_context_gt_272k: '0.4'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '20000000000000000',
-				per_mill_context_gt_272k: '40000000000000000'
+				per_mill_context_lte_272k: '0.02',
+				per_mill_context_gt_272k: '0.04'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '250000000000000000',
-				per_mill_context_gt_272k: '500000000000000000'
+				per_mill_context_lte_272k: '0.25',
+				per_mill_context_gt_272k: '0.5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '1200000000000000000',
-				per_mill_context_gt_272k: '1800000000000000000'
+				per_mill_context_lte_272k: '1.2',
+				per_mill_context_gt_272k: '1.8'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-flex'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '100000000000000000',
-				per_mill_context_gt_272k: '200000000000000000'
+				per_mill_context_lte_272k: '0.1',
+				per_mill_context_gt_272k: '0.2'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '10000000000000000',
-				per_mill_context_gt_272k: '20000000000000000'
+				per_mill_context_lte_272k: '0.01',
+				per_mill_context_gt_272k: '0.02'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '125000000000000000',
-				per_mill_context_gt_272k: '250000000000000000'
+				per_mill_context_lte_272k: '0.125',
+				per_mill_context_gt_272k: '0.25'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '600000000000000000',
-				per_mill_context_gt_272k: '900000000000000000'
+				per_mill_context_lte_272k: '0.6',
+				per_mill_context_gt_272k: '0.9'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '400000000000000000',
-				per_mill_context_gt_272k: '800000000000000000'
+				per_mill_context_lte_272k: '0.4',
+				per_mill_context_gt_272k: '0.8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '40000000000000000',
-				per_mill_context_gt_272k: '80000000000000000'
+				per_mill_context_lte_272k: '0.04',
+				per_mill_context_gt_272k: '0.08'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '500000000000000000',
-				per_mill_context_gt_272k: '1000000000000000000'
+				per_mill_context_lte_272k: '0.5',
+				per_mill_context_gt_272k: '1'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '2400000000000000000',
-				per_mill_context_gt_272k: '3600000000000000000'
+				per_mill_context_lte_272k: '2.4',
+				per_mill_context_gt_272k: '3.6'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-fast'].contextWindowTokens).toBe(1_050_000);
 
 		expect(deployments['openai-gpt-5.6-sol-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '8000000000000000000',
-				per_mill_context_gt_272k: '16000000000000000000'
+				per_mill_context_lte_272k: '8',
+				per_mill_context_gt_272k: '16'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '800000000000000000',
-				per_mill_context_gt_272k: '1600000000000000000'
+				per_mill_context_lte_272k: '0.8',
+				per_mill_context_gt_272k: '1.6'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '10000000000000000000',
-				per_mill_context_gt_272k: '20000000000000000000'
+				per_mill_context_lte_272k: '10',
+				per_mill_context_gt_272k: '20'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '40000000000000000000',
-				per_mill_context_gt_272k: '60000000000000000000'
+				per_mill_context_lte_272k: '40',
+				per_mill_context_gt_272k: '60'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-sol'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '4000000000000000000',
-				per_mill_context_gt_272k: '8000000000000000000'
+				per_mill_context_lte_272k: '4',
+				per_mill_context_gt_272k: '8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '400000000000000000',
-				per_mill_context_gt_272k: '800000000000000000'
+				per_mill_context_lte_272k: '0.4',
+				per_mill_context_gt_272k: '0.8'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '5000000000000000000',
-				per_mill_context_gt_272k: '10000000000000000000'
+				per_mill_context_lte_272k: '5',
+				per_mill_context_gt_272k: '10'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '20000000000000000000',
-				per_mill_context_gt_272k: '30000000000000000000'
+				per_mill_context_lte_272k: '20',
+				per_mill_context_gt_272k: '30'
 			}
 		});
 		for (const meter of [
@@ -630,9 +659,13 @@ describe('compiled catalog v3', () => {
 			'output_tokens'
 		] as const) {
 			for (const band of ['per_mill_context_lte_272k', 'per_mill_context_gt_272k'] as const) {
-				const standard = BigInt(deployments['openai-gpt-5.6-sol'].pricing[meter][band]);
-				const flex = BigInt(deployments['openai-gpt-5.6-sol-flex'].pricing[meter][band]);
-				const fast = BigInt(deployments['openai-gpt-5.6-sol-fast'].pricing[meter][band]);
+				const coefficient = (value: string) => {
+					const [whole, fraction = ''] = value.split('.');
+					return BigInt(whole! + fraction.padEnd(36, '0'));
+				};
+				const standard = coefficient(deployments['openai-gpt-5.6-sol'].pricing[meter][band]);
+				const flex = coefficient(deployments['openai-gpt-5.6-sol-flex'].pricing[meter][band]);
+				const fast = coefficient(deployments['openai-gpt-5.6-sol-fast'].pricing[meter][band]);
 				expect(flex * 2n).toBe(standard);
 				expect(fast).toBe(standard * 2n);
 			}
@@ -641,56 +674,56 @@ describe('compiled catalog v3', () => {
 
 		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '2000000000000000000',
-				per_mill_context_gt_272k: '4000000000000000000'
+				per_mill_context_lte_272k: '2',
+				per_mill_context_gt_272k: '4'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '200000000000000000',
-				per_mill_context_gt_272k: '400000000000000000'
+				per_mill_context_lte_272k: '0.2',
+				per_mill_context_gt_272k: '0.4'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '2500000000000000000',
-				per_mill_context_gt_272k: '5000000000000000000'
+				per_mill_context_lte_272k: '2.5',
+				per_mill_context_gt_272k: '5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '12000000000000000000',
-				per_mill_context_gt_272k: '18000000000000000000'
+				per_mill_context_lte_272k: '12',
+				per_mill_context_gt_272k: '18'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-flex'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '1000000000000000000',
-				per_mill_context_gt_272k: '2000000000000000000'
+				per_mill_context_lte_272k: '1',
+				per_mill_context_gt_272k: '2'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '100000000000000000',
-				per_mill_context_gt_272k: '200000000000000000'
+				per_mill_context_lte_272k: '0.1',
+				per_mill_context_gt_272k: '0.2'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '1250000000000000000',
-				per_mill_context_gt_272k: '2500000000000000000'
+				per_mill_context_lte_272k: '1.25',
+				per_mill_context_gt_272k: '2.5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '6000000000000000000',
-				per_mill_context_gt_272k: '9000000000000000000'
+				per_mill_context_lte_272k: '6',
+				per_mill_context_gt_272k: '9'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '4000000000000000000',
-				per_mill_context_gt_272k: '8000000000000000000'
+				per_mill_context_lte_272k: '4',
+				per_mill_context_gt_272k: '8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '400000000000000000',
-				per_mill_context_gt_272k: '800000000000000000'
+				per_mill_context_lte_272k: '0.4',
+				per_mill_context_gt_272k: '0.8'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '5000000000000000000',
-				per_mill_context_gt_272k: '10000000000000000000'
+				per_mill_context_lte_272k: '5',
+				per_mill_context_gt_272k: '10'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '24000000000000000000',
-				per_mill_context_gt_272k: '36000000000000000000'
+				per_mill_context_lte_272k: '24',
+				per_mill_context_gt_272k: '36'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-fast'].contextWindowTokens).toBe(1_050_000);

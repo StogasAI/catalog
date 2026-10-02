@@ -1,5 +1,6 @@
 models:
   authorId: deepseek
+  tokenizerFamily: deepseek
   name: DeepSeek V4 Flash 0731
   family: DeepSeek
   series: DeepSeek V4

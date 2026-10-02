@@ -3,11 +3,18 @@
 	"authors": {
 		"anthropic": ["https://platform.claude.com/docs/en/models/overview"],
 		"deepseek": ["https://huggingface.co/deepseek-ai"],
-		"google": ["https://ai.google.dev/gemma/docs/core/model_card_4"],
+		"google": [
+			"https://ai.google.dev/gemma/docs/core/model_card_4",
+			"https://huggingface.co/google/gemma-4-26B-A4B/blob/24548b62aa021d562695c04aaf7758a1ea47990b/tokenizer.json"
+		],
 		"minimax": ["https://huggingface.co/MiniMaxAI"],
 		"mistral-ai": ["https://docs.mistral.ai/getting-started/models/models_overview/"],
 		"moonshot-ai": ["https://huggingface.co/moonshotai"],
-		"nvidia": ["https://huggingface.co/nvidia"],
+		"nvidia": [
+			"https://huggingface.co/nvidia",
+			"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8/blob/744b1880a37996c5d56bf454ae164dfd74d77c4e/tokenizer.json",
+			"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16/blob/77df655d5e9f8362164ed14dd8b48f8bce657498/tokenizer.json"
+		],
 		"openai": ["https://developers.openai.com/api/docs/models"],
 		"qwen": ["https://huggingface.co/Qwen"],
 		"z-ai": ["https://huggingface.co/zai-org"]
@@ -15,23 +22,32 @@
 	"providers": {
 		"anthropic": [
 			"https://platform.claude.com/docs/en/models/overview",
+			"https://platform.claude.com/docs/en/about-claude/model-deprecations",
 			"https://platform.claude.com/docs/en/about-claude/pricing",
 			"https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
 			"https://platform.claude.com/docs/en/manage-claude/data-residency"
 		],
 		"azure": [
+			"https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule",
 			"https://azure.microsoft.com/en-us/pricing/details/azure-openai/",
+			"https://prices.azure.com/api/retail/prices",
+			"https://azure.microsoft.com/en-us/blog/gpt-5-6-now-available-in-microsoft-foundry/",
 			"https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure",
+			"https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models",
 			"https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/priority-processing",
 			"https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/openai/data-privacy"
 		],
 		"chutes": [
+			"https://llm.chutes.ai/v1/models",
+			"https://api.chutes.ai/chutes/761ccdab-2e3d-5268-ab03-55f8ba94a80c",
+			"https://docs.mistral.ai/models/mistral-nemo-12b-24-07",
 			"https://chutes.ai/docs/guides/starter-guide",
 			"https://chutes.ai/pricing",
 			"https://chutes.ai/privacy"
 		],
 		"openai": [
 			"https://developers.openai.com/api/docs/guides/your-data",
+			"https://developers.openai.com/api/docs/deprecations",
 			"https://developers.openai.com/api/docs/models",
 			"https://developers.openai.com/api/docs/pricing"
 		]

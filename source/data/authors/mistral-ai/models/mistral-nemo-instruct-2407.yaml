@@ -1,5 +1,6 @@
 models:
   authorId: mistral-ai
+  tokenizerFamily: tekken
   name: Mistral NeMo Instruct 2407
   family: Mistral NeMo
   series: Mistral NeMo

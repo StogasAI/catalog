@@ -1,5 +1,6 @@
 models:
   authorId: qwen
+  tokenizerFamily: qwen3
   name: Qwen3 32B
   family: Qwen
   series: Qwen3

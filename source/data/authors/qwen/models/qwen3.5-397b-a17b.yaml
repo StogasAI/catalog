@@ -1,5 +1,6 @@
 models:
   authorId: qwen
+  tokenizerFamily: qwen35
   name: Qwen3.5 397B A17B
   family: Qwen
   series: Qwen3.5

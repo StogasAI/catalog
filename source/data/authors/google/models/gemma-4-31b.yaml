@@ -1,5 +1,6 @@
 models:
   authorId: google
+  tokenizerFamily: gemma
   name: Gemma 4 31B
   family: Gemma
   series: Gemma 4

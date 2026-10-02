@@ -1,5 +1,6 @@
 models:
   authorId: anthropic
+  tokenizerFamily: anthropic
   name: Claude Opus 4.6
   aliases: [claude-opus-4.6]
   family: Claude

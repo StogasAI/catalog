@@ -1,5 +1,6 @@
 models:
   authorId: deepseek
+  tokenizerFamily: deepseek
   name: DeepSeek V3.2
   family: DeepSeek
   series: DeepSeek V3

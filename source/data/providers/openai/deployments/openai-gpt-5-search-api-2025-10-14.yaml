@@ -6,10 +6,10 @@ deployments:
     serviceTier: default
   pricing:
     input_tokens:
-      per_mill_tokens: '1250000000000000000'
+      per_mill_tokens: '1.25'
     cached_input_tokens:
-      per_mill_tokens: '125000000000000000'
+      per_mill_tokens: '0.125'
     output_tokens:
-      per_mill_tokens: '10000000000000000000'
+      per_mill_tokens: '10'
     openai_chat_completion_search_model_calls:
-      per_1k_calls: '10000000000000000000'
+      per_1k_calls: '10'

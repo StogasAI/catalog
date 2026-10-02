@@ -17,8 +17,8 @@ deployments:
       toolChoice: false
   pricing:
     input_tokens:
-      per_mill_tokens: '1740000000000000000'
+      per_mill_tokens: '1.74'
     cached_input_tokens:
-      per_mill_tokens: '145000000000000000'
+      per_mill_tokens: '0.145'
     output_tokens:
-      per_mill_tokens: '3480000000000000000'
+      per_mill_tokens: '3.48'

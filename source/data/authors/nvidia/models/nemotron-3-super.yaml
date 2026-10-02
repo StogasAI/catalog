@@ -1,5 +1,6 @@
 models:
   authorId: nvidia
+  tokenizerFamily: tekken
   name: NVIDIA Nemotron 3 Super 120B A12B
   family: Nemotron
   series: Nemotron 3

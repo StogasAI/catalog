@@ -1,4 +1,4 @@
-import { MarkerType, type Edge, type Node } from '@xyflow/svelte';
+import type { Edge, Node } from '@xyflow/svelte';
 import type {
 	Catalog,
 	CatalogFlow,
@@ -228,7 +228,7 @@ function edge(
 	role: string,
 	sourceHandle: string,
 	targetHandle: string
-) {
+): Edge {
 	return {
 		id: graphEdgeId(sourceType, sourceId, targetType, targetId),
 		source: nodeKey(sourceType, sourceId),
@@ -237,7 +237,7 @@ function edge(
 		targetHandle,
 		type: 'smoothstep',
 		class: `catalog-edge catalog-edge-${role}`,
-		markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 }
+		markerEnd: { type: 'arrowclosed', width: 14, height: 14 }
 	};
 }
 
@@ -266,6 +266,94 @@ export function concreteGraphChains(catalog: Catalog): GraphChain[] {
 		}
 	}
 	return chains;
+}
+
+export const GRAPH_PAGE_SIZE = 40;
+
+export function indexGraphPaths(catalog: Catalog) {
+	const paths = concreteGraphChains(catalog);
+	const covered = new Set(paths.flatMap((path) => path.nodeKeys));
+	const search = new Map<string, string>();
+	for (const type of graphChainNodeOrder) {
+		const collection = catalog.graph[`${type}s` as keyof CatalogGraph];
+		for (const [id, value] of Object.entries(collection)) {
+			const key = nodeKey(type, id);
+			search.set(
+				key,
+				[type, id, value.name, ...(Array.isArray(value.aliases) ? value.aliases : [])]
+					.join(' ')
+					.toLowerCase()
+			);
+		}
+	}
+	// Informational models and unused routes still need to be reachable.
+	for (const type of ['model', 'route', 'author', 'provider'] as const) {
+		for (const id of Object.keys(catalog.graph[`${type}s`])) {
+			const key = nodeKey(type, id);
+			if (covered.has(key)) continue;
+			const lineage = lineageForSelection(catalog, key, {});
+			const nodeKeys = lineage.map((node) => nodeKey(node.type, node.id));
+			const edgeIds: string[] = [];
+			if (type === 'route') edgeIds.push(graphEdgeId('provider', lineage[1].id, 'route', id));
+			if (type === 'model') edgeIds.push(graphEdgeId('author', lineage[0].id, 'model', id));
+			paths.push({ nodeKeys, edgeIds });
+			for (const nodeKey of nodeKeys) covered.add(nodeKey);
+		}
+	}
+	return { paths, search };
+}
+
+export function pageGraph(
+	catalog: Catalog,
+	index: ReturnType<typeof indexGraphPaths>,
+	options: {
+		page: number;
+		query: string;
+		visibleTypes: Record<NodeType, boolean>;
+		selectedKeys: string[];
+	}
+) {
+	const needle = options.query.trim().toLowerCase();
+	const paths = index.paths.filter(
+		(path) =>
+			options.selectedKeys.every((key) => path.nodeKeys.includes(key)) &&
+			path.nodeKeys.some((key) => {
+				const node = parseNodeKey(key);
+				return (
+					node &&
+					options.visibleTypes[node.type] &&
+					(!needle || index.search.get(key)?.includes(needle))
+				);
+			})
+	);
+	const pageCount = Math.max(1, Math.ceil(paths.length / GRAPH_PAGE_SIZE));
+	const page = Math.min(Math.max(0, Math.trunc(options.page) || 0), pageCount - 1);
+	const graph: CatalogGraph = {
+		authors: {},
+		models: {},
+		deployments: {},
+		routes: {},
+		providers: {}
+	};
+	const edgeIds = new Set<string>();
+	for (const path of paths.slice(page * GRAPH_PAGE_SIZE, (page + 1) * GRAPH_PAGE_SIZE)) {
+		for (const id of path.edgeIds) edgeIds.add(id);
+		for (const key of path.nodeKeys) {
+			const node = parseNodeKey(key);
+			if (!node) continue;
+			const collection = `${node.type}s` as keyof CatalogGraph;
+			graph[collection][node.id] = catalog.graph[collection][node.id];
+		}
+	}
+	for (const [id, deployment] of Object.entries(graph.deployments)) {
+		graph.deployments[id] = {
+			...deployment,
+			routeIds: routeIds(deployment).filter((id) => Object.hasOwn(graph.routes, id))
+		};
+	}
+	const flow = buildFlow(graph);
+	flow.edges = flow.edges.filter((edge) => edgeIds.has(edge.id));
+	return { flow, total: paths.length, page, pageCount };
 }
 
 export function decorateFlow(
@@ -492,6 +580,7 @@ export function effectiveDeploymentFacts(
 		value,
 		origins,
 		selectFacts(model, [
+			'tokenizerFamily',
 			'contextWindowTokens',
 			'deprecationDate',
 			'inputModalities',

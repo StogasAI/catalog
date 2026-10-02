@@ -1,5 +1,6 @@
 models:
   authorId: z-ai
+  tokenizerFamily: glm
   name: GLM-5.2
   family: GLM
   series: GLM-5

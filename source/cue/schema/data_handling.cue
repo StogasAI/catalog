@@ -4,8 +4,12 @@ package catalog
 	processingLocation: #ProcessingLocation
 	storageLocation:    #StorageLocation
 	endToEndEncrypted: bool
+	// Maximum retention of stored prompts and responses; null means unknown.
+	// Temporary in-memory prompt caching is excluded.
 	retentionDays:     null | (int & >=0)
 	trainingUse:       bool
+	// No persistent retention of prompts or responses for this offering.
+	// Temporary in-memory prompt caching is compatible with ZDR.
 	zeroDataRetention: bool
 	// tee means provider inference processes request content inside a TEE.
 	tee: bool

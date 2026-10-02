@@ -24,4 +24,4 @@ providers:
     teeVerified: false
   pricing:
     anthropic_web_search_calls:
-      per_1k_calls: '10000000000000000000'
+      per_1k_calls: '10'

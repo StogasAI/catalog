@@ -1,5 +1,6 @@
 models:
   authorId: deepseek
+  tokenizerFamily: deepseek
   name: DeepSeek V4 Pro
   family: DeepSeek
   series: DeepSeek V4

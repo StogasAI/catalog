@@ -1,5 +1,6 @@
 models:
   authorId: qwen
+  tokenizerFamily: qwen35
   name: Qwen3.6 27B
   family: Qwen
   series: Qwen3.6

@@ -1,5 +1,6 @@
 models:
   authorId: openai
+  tokenizerFamily: openai
   name: GPT-5.6 Luna
   family: GPT
   series: GPT-5.6

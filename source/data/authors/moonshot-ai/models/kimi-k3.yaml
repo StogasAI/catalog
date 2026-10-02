@@ -1,5 +1,6 @@
 models:
   authorId: moonshot-ai
+  tokenizerFamily: kimi
   name: Kimi K3
   family: Kimi
   series: Kimi K3

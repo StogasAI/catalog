@@ -178,6 +178,12 @@ export function assertProviderOnboardingContract(
 					? expected.reasoningMaxTokens
 					: (expected.modelReasoningMaxTokens ?? null),
 			routeIds: [...expected.routeIds].sort(),
+			chainHashes: Object.fromEntries(
+				expected.routeIds.map((routeId) => [
+					routeId,
+					expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
+				])
+			),
 			...(expected.routeOverrides ? { routeOverrides: expected.routeOverrides } : {}),
 			upstream: expected.upstream,
 			dataHandlingByRoute,
