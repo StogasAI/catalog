@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import {
 	chmodSync,
 	cpSync,
@@ -13,6 +13,9 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// These cases launch real compilers; use the same bound as each build process.
+setDefaultTimeout(60_000);
 
 const catalogRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temporaryParents = new Set<string>();
