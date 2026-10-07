@@ -1,9 +1,7 @@
 models:
   authorId: google
-  tokenizerFamily: gemma
   name: Gemma 4 31B
-  family: Gemma
-  series: Gemma 4
+  groupIds: [google-gemma-4]
   flavors: [instruct]
   contextWindowTokens: 262144
   maxOutputTokens: 262144

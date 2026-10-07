@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => {
 	return {
 		base,
 		root: editorRoot,
+		build: { assetsInlineLimit: 0 },
 		plugins: [catalogApi(base), svelte()],
 		server: {
 			allowedHosts: ['code.stogas.ai'],
@@ -169,6 +170,7 @@ function indexNodeSources(path: string, content: string, nodeSources: Record<str
 	}
 	const sectionTypes: Record<string, string> = {
 		authors: 'author',
+		groups: 'group',
 		deployments: 'deployment',
 		models: 'model',
 		providers: 'provider',
@@ -189,7 +191,7 @@ function fileOwnedNodeSource(path: string) {
 	const content = readFileSync(join(catalogRoot, path), 'utf8')
 		.replace(/^\uFEFF/, '')
 		.replace(/^---[ \t]*(?:\r?\n|$)/, '');
-	const match = /^(authors|deployments|models|providers|routes):\s*$/m.exec(content);
+	const match = /^(authors|deployments|groups|models|providers|routes):\s*$/m.exec(content);
 	if (!match) return null;
 	const type = singularNodeType(match[1]);
 	return { type, id: basename(path).replace(/\.ya?ml$/, '') };
@@ -198,6 +200,7 @@ function fileOwnedNodeSource(path: string) {
 function singularNodeType(type: string) {
 	const types: Record<string, string> = {
 		authors: 'author',
+		groups: 'group',
 		deployments: 'deployment',
 		models: 'model',
 		providers: 'provider',

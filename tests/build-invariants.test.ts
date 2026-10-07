@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { stableJson } from '../source/scripts/canonical-json.mjs';
+import { createHash } from 'node:crypto';
+import { canonicalJson } from '../source/scripts/canonical-json.mjs';
 import { buildCatalogs, main } from '../source/scripts/build.mjs';
+import { mergeCatalogArchive } from '../source/scripts/catalog-archive.mjs';
 
 type Source = ReturnType<typeof sourceFixture>;
 type Mutator = (source: Source) => void;
@@ -16,8 +18,7 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	urlContext: false,
-	pdfInput: false
+	urlContext: false
 };
 
 function sourceFixture() {
@@ -29,11 +30,9 @@ function sourceFixture() {
 			models: {
 				'gpt-test': {
 					authorId: 'openai',
-					tokenizerFamily: 'openai',
 					name: 'GPT Test',
-					family: 'GPT',
-					series: 'GPT Test',
 					contextWindowTokens: 1000,
+					maxInputTokens: undefined as number | undefined,
 					maxOutputTokens: 200,
 					inputModalities: ['text', 'image'],
 					outputModalities: ['text'],
@@ -64,6 +63,7 @@ function sourceFixture() {
 					providerId: 'openai',
 					endpoint: 'https://api.openai.com/v1/responses',
 					interfaces: ['responses'],
+					fileInputs: { extensions: [] as string[], mediaTypes: [] as string[] },
 					dataHandling: { endToEndEncrypted: false }
 				}
 			},
@@ -99,6 +99,7 @@ function addSecondOpenAIRoute(source: Source) {
 		providerId: 'openai',
 		endpoint: 'https://api.openai.com/v1/chat/completions',
 		interfaces: ['responses'],
+		fileInputs: { extensions: [], mediaTypes: [] },
 		dataHandling: { endToEndEncrypted: false }
 	};
 }
@@ -130,7 +131,6 @@ function asAzureClaude(source: Source) {
 	asAzure(source);
 	source.graph.authors.anthropic = { name: 'Anthropic' };
 	source.graph.models['gpt-test'].authorId = 'anthropic';
-	source.graph.models['gpt-test'].tokenizerFamily = 'anthropic';
 	source.graph.routes['azure-anthropic-messages'] = {
 		...source.graph.routes['azure-responses'],
 		interfaces: ['chat_completions', 'responses']
@@ -142,26 +142,126 @@ function asAzureClaude(source: Source) {
 }
 
 describe('catalog source compiler invariants', () => {
-	test.each([undefined, null, '', 'automatic', 'qwen', 'Qwen3', ' qwen3', 1])(
-		'rejects missing or unsupported tokenizer family %p',
-		(family) => {
-			const source = sourceFixture();
-			Object.assign(source.graph.models['gpt-test'], { tokenizerFamily: family });
-			expect(() => buildCatalogs(source)).toThrow('tokenizerFamily');
-		}
-	);
-
-	test('keeps explicit model tokenization independent of author and host', () => {
+	test('compiles nested groups with shared ancestors without changing execution identity', () => {
 		const source = sourceFixture();
-		source.graph.authors['new-author'] = { name: 'New author' };
-		source.graph.models['gpt-test'].authorId = 'new-author';
-		source.graph.models['gpt-test'].tokenizerFamily = 'qwen3';
-		asAzure(source);
-		const catalogs = buildCatalogs(source);
-		for (const artifact of [catalogs.public, catalogs.runtime]) {
-			expect(artifact.graph.models['gpt-test'].tokenizerFamily).toBe('qwen3');
-			expect(artifact.graph.deployments['azure-gpt-test']).not.toHaveProperty('tokenizerFamily');
+		const original = buildCatalogs(source);
+		source.graph.groups = {
+			root: { authorId: 'openai', name: 'Root' },
+			left: { authorId: 'openai', name: 'Left', parentIds: ['root'] },
+			right: { authorId: 'openai', name: 'Right', parentIds: ['root'] },
+			leaf: { authorId: 'openai', name: 'Leaf', parentIds: ['right', 'left'] }
+		};
+		source.graph.models['gpt-test'].groupIds = ['leaf'];
+		const grouped = buildCatalogs(source);
+		expect(grouped.public.graph.groups.leaf.parentIds).toEqual(['left', 'right']);
+		expect(grouped.public.graph.models['gpt-test'].groupIds).toEqual(['leaf']);
+		expect(grouped.runtime.graph.groups).toBeUndefined();
+		expect(grouped.runtime.graph.deployments['openai-gpt-test'].chainHashes).toEqual(
+			original.runtime.graph.deployments['openai-gpt-test'].chainHashes
+		);
+		for (const [mutate, message] of [
+			[
+				(value) => {
+					value.graph.groups.root.parentIds = ['leaf'];
+				},
+				'acyclic'
+			],
+			[
+				(value) => {
+					value.graph.groups.leaf.parentIds = ['missing'];
+				},
+				'missing parent'
+			],
+			[
+				(value) => {
+					value.graph.groups.leaf.parentIds = ['left', 'left'];
+				},
+				'unique list'
+			],
+			[
+				(value) => {
+					value.graph.models['gpt-test'].groupIds = ['missing'];
+				},
+				'missing referenced node'
+			],
+			[
+				(value) => {
+					value.graph.authors.other = { name: 'Other' };
+					value.graph.groups.leaf.authorId = 'other';
+				},
+				'another author'
+			]
+		] as const) {
+			const invalid = structuredClone(source);
+			mutate(invalid);
+			expect(() => buildCatalogs(invalid)).toThrow(message);
 		}
+	});
+
+	test('publishes retirement separately, keeps shared dependencies active, and commits exact archive bytes', () => {
+		const source = sourceFixture();
+		source.graph.groups = {
+			shared: { authorId: 'openai', name: 'Shared' },
+			old: { authorId: 'openai', name: 'Old', parentIds: ['shared'] }
+		};
+		source.graph.models['gpt-test'].groupIds = ['shared'];
+		source.graph.models.old = {
+			...source.graph.models['gpt-test'],
+			name: 'Old model',
+			groupIds: ['old'],
+			retired: true,
+			aliases: ['gpt-test']
+		};
+		source.graph.deployments.old = {
+			...source.graph.deployments['openai-gpt-test'],
+			modelId: 'old',
+			upstream: { model: 'old', serviceTier: 'default' }
+		};
+		const built = buildCatalogs(source);
+		expect(Object.keys(built.public.graph.models)).toEqual(['gpt-test']);
+		expect(Object.keys(built.public.graph.groups)).toEqual(['shared']);
+		expect(Object.keys(built.public.graph.routes)).toEqual(['openai-responses']);
+		expect(Object.keys(built.runtime.graph.deployments)).toEqual(['openai-gpt-test']);
+		expect(built.archive.graph.models.old.retired).toBe(true);
+		expect(built.archive.graph.deployments.old.retired).toBe(true);
+		expect(Object.keys(built.archive.graph.groups)).toEqual(['old']);
+		expect(built.archive.graph.authors).toEqual({});
+		expect(built.archive.graph.providers).toEqual({});
+		expect(built.archive.graph.routes).toEqual({});
+		const archiveBytes = canonicalJson(built.archive);
+		expect(built.public.archive).toEqual({
+			sha256: createHash('sha256').update(archiveBytes).digest('hex'),
+			size_bytes: Buffer.byteLength(archiveBytes)
+		});
+		const merged = mergeCatalogArchive(built.public, built.archive);
+		expect(Object.keys(merged.graph.models)).toEqual(['gpt-test', 'old']);
+		expect(merged.graph.groups.old.parentIds).toEqual(['shared']);
+		const duplicate = structuredClone(built.archive);
+		duplicate.graph.models['gpt-test'] = duplicate.graph.models.old;
+		expect(() => mergeCatalogArchive(built.public, duplicate)).toThrow('duplicates an active');
+		source.graph.models['gpt-test'].retired = true;
+		const allRetired = buildCatalogs(source);
+		expect(
+			Object.values(allRetired.public.graph).every((records) => Object.keys(records).length === 0)
+		).toBe(true);
+		expect(
+			Object.values(allRetired.runtime.graph).every((records) => Object.keys(records).length === 0)
+		).toBe(true);
+		expect(Object.keys(allRetired.archive.graph.providers)).toEqual(['openai']);
+	});
+
+	test('retiring one deployment preserves a model still served through another target', () => {
+		const source = sourceFixture();
+		source.graph.deployments.old = {
+			...source.graph.deployments['openai-gpt-test'],
+			upstream: { model: 'old', serviceTier: 'default' },
+			retired: true
+		};
+		const built = buildCatalogs(source);
+		expect(Object.keys(built.public.graph.models)).toEqual(['gpt-test']);
+		expect(Object.keys(built.public.graph.deployments)).toEqual(['openai-gpt-test']);
+		expect(Object.keys(built.archive.graph.deployments)).toEqual(['old']);
+		expect(Object.keys(built.runtime.graph.deployments)).toEqual(['openai-gpt-test']);
 	});
 
 	test.each(['0', '0.001', '0.042', '0.000000000000000000000000000000000001', '1000000000000'])(
@@ -203,7 +303,7 @@ describe('catalog source compiler invariants', () => {
 				Object.entries(reversed.graph[key]).reverse()
 			) as never;
 		}
-		expect(stableJson(buildCatalogs(reversed))).toBe(stableJson(buildCatalogs(source)));
+		expect(canonicalJson(buildCatalogs(reversed))).toBe(canonicalJson(buildCatalogs(source)));
 	});
 
 	describe('rejects invalid references and derivation graphs', () => {
@@ -376,6 +476,32 @@ describe('catalog source compiler invariants', () => {
 	]);
 
 	describe('permits only deployment narrowing and real overrides', () => {
+		test('keeps independent input and combined context limits', () => {
+			const source = sourceFixture();
+			const base = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+			expect(base.maxInputTokens).toBe(1000);
+			source.graph.models['gpt-test'].maxInputTokens = 900;
+			source.graph.deployments['openai-gpt-test'].overrides = { contextWindowTokens: 800 };
+			expect(
+				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].maxInputTokens
+			).toBe(800);
+			source.graph.deployments['openai-gpt-test'].overrides = { maxInputTokens: 700 };
+			expect(buildCatalogs(source).runtime.graph.deployments['openai-gpt-test']).toMatchObject({
+				contextWindowTokens: 1000,
+				maxInputTokens: 700,
+				maxOutputTokens: 200
+			});
+			source.graph.deployments['openai-gpt-test'].overrides = { maxInputTokens: 901 };
+			expect(() => buildCatalogs(source)).toThrow('input limit may only narrow');
+			source.graph.deployments['openai-gpt-test'].overrides = {
+				contextWindowTokens: 800,
+				maxInputTokens: 850
+			};
+			expect(() => buildCatalogs(source)).toThrow('input limit may only narrow');
+			source.graph.models['gpt-test'].maxInputTokens = 1001;
+			expect(() => buildCatalogs(source)).toThrow('input limit must fit inside');
+		});
+
 		test('materializes valid narrowing', () => {
 			const valid = changed((source) => {
 				source.graph.deployments['openai-gpt-test'].overrides = {
@@ -978,5 +1104,93 @@ describe('catalog source compiler invariants', () => {
 		await expect(main(['--check', '--validate-only'])).rejects.toThrow(
 			'--check and --validate-only cannot be combined'
 		);
+	});
+});
+
+describe('route-owned native file formats', () => {
+	const pdf = { extensions: ['.pdf'], mediaTypes: ['application/pdf'] };
+	const text = { extensions: ['.txt'], mediaTypes: ['text/plain'] };
+	const documents = { extensions: ['.pdf', '.txt'], mediaTypes: ['application/pdf', 'text/plain'] };
+
+	test('keeps route formats distinct and lets a deployment replace all attached route formats', () => {
+		const source = sourceFixture();
+		source.graph.routes['openai-responses'].fileInputs = documents;
+		addSecondOpenAIRoute(source);
+		source.graph.routes['openai-chat-completions'].fileInputs = pdf;
+		source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
+		const original = buildCatalogs(source);
+		expect(original.runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute).toEqual({
+			'openai-chat-completions': pdf,
+			'openai-responses': documents
+		});
+		source.graph.deployments['openai-gpt-test'].overrides = { fileInputs: pdf };
+		const narrowed = buildCatalogs(source);
+		expect(narrowed.runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute).toEqual({
+			'openai-chat-completions': pdf,
+			'openai-responses': pdf
+		});
+		expect(
+			narrowed.runtime.graph.deployments['openai-gpt-test'].chainHashes['openai-responses']
+		).not.toBe(
+			original.runtime.graph.deployments['openai-gpt-test'].chainHashes['openai-responses']
+		);
+		source.graph.deployments['openai-gpt-test'].overrides = { fileInputs: text };
+		expect(
+			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute
+		).toEqual({
+			'openai-chat-completions': text,
+			'openai-responses': text
+		});
+		const added = { extensions: ['.md'], mediaTypes: ['text/markdown'] };
+		source.graph.deployments['openai-gpt-test'].overrides = { fileInputs: added };
+		expect(
+			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute
+		).toEqual({
+			'openai-chat-completions': added,
+			'openai-responses': added
+		});
+	});
+
+	test('retains provider-processed PDFs for text-only models and deployment overrides', () => {
+		const source = sourceFixture();
+		source.graph.routes['openai-responses'].fileInputs = documents;
+		source.graph.models['gpt-test'].inputModalities = ['text'];
+		expect(
+			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute
+		).toEqual({
+			'openai-responses': documents
+		});
+		source.graph.deployments['openai-gpt-test'].overrides = {
+			fileInputs: { extensions: ['.md', '.pdf'], mediaTypes: ['application/pdf', 'text/markdown'] }
+		};
+		expect(
+			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].fileInputsByRoute
+		).toEqual({
+			'openai-responses': {
+				extensions: ['.md', '.pdf'],
+				mediaTypes: ['application/pdf', 'text/markdown']
+			}
+		});
+	});
+
+	test.each([
+		{ extensions: ['pdf'], mediaTypes: ['application/pdf'] },
+		{ extensions: ['.PDF'], mediaTypes: ['application/pdf'] },
+		{ extensions: ['.pdf'], mediaTypes: ['application/*'] },
+		{ extensions: ['.pdf'], mediaTypes: ['application/pdf', 'application/pdf'] },
+		{ extensions: ['.txt', '.pdf'], mediaTypes: ['application/pdf'] },
+		{ extensions: ['.pdf'], mediaTypes: [] },
+		{ extensions: ['.pdf'], mediaTypes: ['application/pdf'], unknown: true }
+	])('rejects ambiguous format facts %j', (formats) => {
+		const source = sourceFixture();
+		source.graph.routes['openai-responses'].fileInputs = formats;
+		expect(() => buildCatalogs(source)).toThrow(/file/);
+	});
+
+	test('rejects a deployment format override that repeats its route', () => {
+		const source = sourceFixture();
+		source.graph.routes['openai-responses'].fileInputs = documents;
+		source.graph.deployments['openai-gpt-test'].overrides = { fileInputs: documents };
+		expect(() => buildCatalogs(source)).toThrow('redundantly');
 	});
 });

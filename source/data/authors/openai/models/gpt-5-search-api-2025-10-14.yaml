@@ -1,12 +1,10 @@
 models:
   authorId: openai
-  tokenizerFamily: openai
   name: GPT-5 Search API
   aliases: [gpt-5-search-api]
-  family: GPT
-  series: GPT-5
+  groupIds: [openai-gpt-5]
   flavors: [search]
-  contextWindowTokens: 400000
+  contextWindowTokens: 200000
   maxOutputTokens: 128000
   inputModalities: [text, image]
   outputModalities: [text]

@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
+	catalogArchive,
 	catalogManifest,
+	parseCatalogReleaseEvidence,
 	parseSequence,
 	resolveDestructiveOutput,
 	sha256,
-	stableJson
+	canonicalJson
 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -38,12 +40,11 @@ const signingKeys = catalogSigningKeys(
 );
 
 const manifest = catalogManifest(repositoryRoot, sequence);
-const envelope = {
-	attested_builds: [attestation],
-	manifest,
-	schema: 'stogas.release-evidence.v1',
+const envelope = parseCatalogReleaseEvidence({
+	provenance: attestation,
+	document: manifest,
 	signature
-};
+});
 
 verifyCatalogReleaseSignature(envelope, signingKeys);
 
@@ -51,21 +52,26 @@ rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
+const archive = addBlob('catalog.archive.json');
 
 mkdirSync(join(outputRoot, 'releases'), { recursive: true });
-writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), stableJson(envelope));
-writeFileSync(join(outputRoot, 'latest.json'), stableJson(envelope));
+writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), canonicalJson(envelope));
+writeFileSync(join(outputRoot, 'latest.json'), canonicalJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),
 	[
-		`${sha256(stableJson(envelope))}  releases/${sequence}.json`,
+		`${sha256(canonicalJson(envelope))}  releases/${sequence}.json`,
 		`${runtime.digest.slice('sha256:'.length)}  ${runtime.path}`,
-		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`
+		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`,
+		`${archive.digest.slice('sha256:'.length)}  ${archive.path}`
 	].join('\n') + '\n'
 );
 
 function addBlob(filename) {
-	const artifact = catalogArtifact(repositoryRoot, filename);
+	const artifact =
+		filename === 'catalog.archive.json'
+			? catalogArchive(repositoryRoot)
+			: catalogArtifact(repositoryRoot, filename);
 	const { bytes } = artifact;
 	const digest = artifact.digest.slice('sha256:'.length);
 	const extension = filename.endsWith('.json') ? '.json' : '';

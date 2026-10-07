@@ -37,6 +37,7 @@ type ProviderRouteContract = {
 	endpoint?: string;
 	id: string;
 	interfaces: string[];
+	fileInputs: { extensions: string[]; mediaTypes: string[] };
 	pricing?: Record<string, Record<string, string>>;
 };
 
@@ -121,6 +122,7 @@ export function assertProviderOnboardingContract(
 			providerId
 		});
 		expect(published.routes[route.id]).toEqual({
+			fileInputs: route.fileInputs,
 			...(route.endpoint ? { endpoint: route.endpoint } : {}),
 			dataHandling,
 			interfaces: route.interfaces,
@@ -165,6 +167,7 @@ export function assertProviderOnboardingContract(
 			aliases: expected.aliases,
 			capabilities: expected.capabilities,
 			contextWindowTokens: expected.contextWindowTokens,
+			maxInputTokens: expected.contextWindowTokens,
 			deprecationDate: expected.deprecationDate,
 			inputModalities: expected.inputModalities,
 			maxOutputTokens: expected.maxOutputTokens,
@@ -187,6 +190,9 @@ export function assertProviderOnboardingContract(
 			...(expected.routeOverrides ? { routeOverrides: expected.routeOverrides } : {}),
 			upstream: expected.upstream,
 			dataHandlingByRoute,
+			fileInputsByRoute: Object.fromEntries(
+				routeContracts.map((route) => [route.id, route.fileInputs])
+			),
 			...(expected.weightPrecision ? { weightPrecision: expected.weightPrecision } : {})
 		};
 		expect(runtime.deployments[expected.id]).toEqual(runtimeDeployment);

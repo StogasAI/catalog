@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson } from './canonical-json.mjs';
+import { canonicalJsonValue } from './canonical-json.mjs';
 
 // Use the compiler's resolved execution facts, together with the public node
 // details. No release number enters the hash: unchanged paths keep their identity.
@@ -10,6 +10,7 @@ export function* resolvedCatalogChains(publicCatalog, runtimeCatalog) {
 		const source = requireNode(graph.deployments, deploymentId);
 		const modelId = compiled.modelId;
 		const model = requireNode(graph.models, modelId);
+		const { groupIds: _navigationGroups, ...modelData } = model;
 		const author = requireNode(graph.authors, model.authorId);
 		for (const routeId of [...compiled.routeIds].sort()) {
 			const route = requireNode(graph.routes, routeId);
@@ -18,13 +19,14 @@ export function* resolvedCatalogChains(publicCatalog, runtimeCatalog) {
 			const {
 				chainHashes: _chainHashes,
 				dataHandlingByRoute,
+				fileInputsByRoute,
 				routeOverrides,
 				...executionData
 			} = compiled;
 			const { overrides: routeSourceOverrides, ...routeData } = route;
 			const chain = {
 				author: { id: model.authorId, data: author },
-				model: { id: modelId, data: model },
+				model: { id: modelId, data: modelData },
 				deployment: {
 					id: deploymentId,
 					data: {
@@ -32,7 +34,8 @@ export function* resolvedCatalogChains(publicCatalog, runtimeCatalog) {
 						...executionData,
 						...routeOverrides?.[routeId],
 						routeIds: [routeId],
-						dataHandling: requireNode(dataHandlingByRoute, routeId)
+						dataHandling: requireNode(dataHandlingByRoute, routeId),
+						fileInputs: requireNode(fileInputsByRoute, routeId)
 					}
 				},
 				route: {
@@ -46,7 +49,7 @@ export function* resolvedCatalogChains(publicCatalog, runtimeCatalog) {
 				},
 				provider: { id: route.providerId, data: provider }
 			};
-			const json = canonicalJson(chain);
+			const json = canonicalJsonValue(chain);
 			yield {
 				deploymentId,
 				routeId,

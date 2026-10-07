@@ -2,5 +2,9 @@ routes:
   providerId: anthropic
   endpoint: https://api.anthropic.com/v1/messages
   interfaces: [chat_completions, responses]
+  # Native document formats reviewed 2026-10-05: https://platform.claude.com/docs/en/build-with-claude/files
+  fileInputs:
+    extensions: [.csv, .md, .pdf, .txt]
+    mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false

@@ -12,6 +12,7 @@
 	import '@xyflow/svelte/dist/style.css';
 	import { SvelteSet } from 'svelte/reactivity';
 	import catalogJson from '../../generated/catalog.public.json';
+	import { mergeCatalogArchive } from '../../source/scripts/catalog-archive.mjs';
 	import CatalogNode from './CatalogNode.svelte';
 	import {
 		completeUnambiguousGraphSelection,
@@ -30,11 +31,27 @@
 	import { readBoundedResponseText } from './http';
 	import { parseCatalog, type LineageNode, type NodeType, type SourcePayload } from './types';
 
-	const catalog = parseCatalog(catalogJson);
+	const activeCatalog = parseCatalog(catalogJson);
+	const archiveAssets = import.meta.glob('../../generated/blobs/sha256/*.json', {
+		query: '?url',
+		import: 'default',
+		eager: true
+	}) as Record<string, string>;
+	let archiveCatalog = $state<ReturnType<typeof parseCatalog> | null>(null);
+	let includeRetired = $state(false);
+	let archiveStatus = $state('');
+	const catalog = $derived(includeRetired && archiveCatalog ? archiveCatalog : activeCatalog);
 	const MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024;
 	const REQUEST_TIMEOUT_MS = 30_000;
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
-	const nodeTypeOptions: NodeType[] = ['author', 'model', 'deployment', 'route', 'provider'];
+	const nodeTypeOptions: NodeType[] = [
+		'author',
+		'group',
+		'model',
+		'deployment',
+		'route',
+		'provider'
+	];
 	type UiTheme = 'dark' | 'light';
 
 	let selectedKey = $state('');
@@ -49,6 +66,7 @@
 	let compatibleOnly = $state(false);
 	let visibleNodeTypes = $state<Record<NodeType, boolean>>({
 		author: true,
+		group: true,
 		model: true,
 		provider: true,
 		route: true,
@@ -62,8 +80,8 @@
 	let buildStatus = $state('');
 
 	const selected = $derived(parseNodeKey(selectedKey));
-	const graphIndex = indexGraphPaths(catalog);
-	const graphChains = graphIndex.paths;
+	const graphIndex = $derived(indexGraphPaths(catalog));
+	const graphChains = $derived(graphIndex.paths);
 	const graphPage = $derived(
 		pageGraph(catalog, graphIndex, {
 			page: graphPageNumber,
@@ -129,6 +147,42 @@
 
 	$effect(() => {
 		if (!sourcePaths.includes(activePath)) activePath = sourcePaths[0] ?? '';
+	});
+
+	$effect(() => {
+		if (!includeRetired || archiveCatalog || !activeCatalog.archive) return;
+		const controller = new AbortController();
+		const reference = activeCatalog.archive;
+		const url = archiveAssets[`../../generated/blobs/sha256/${reference.sha256}.json`];
+		archiveStatus = 'Loading retired nodes…';
+		void (async () => {
+			try {
+				if (!url) throw new Error('Retired catalog is unavailable.');
+				const response = await fetch(url, {
+					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+					redirect: 'error'
+				});
+				if (!response.ok) {
+					await response.body?.cancel();
+					throw new Error('Retired catalog is unavailable.');
+				}
+				const body = await readBoundedResponseText(response, reference.size_bytes);
+				const bytes = new TextEncoder().encode(body);
+				const digest = Array.from(
+					new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+					(byte) => byte.toString(16).padStart(2, '0')
+				).join('');
+				if (bytes.byteLength !== reference.size_bytes || digest !== reference.sha256)
+					throw new Error('Retired catalog digest differs.');
+				if (controller.signal.aborted) return;
+				archiveCatalog = parseCatalog(mergeCatalogArchive(activeCatalog, JSON.parse(body)));
+				archiveStatus = '';
+			} catch (error) {
+				if (!controller.signal.aborted)
+					archiveStatus = error instanceof Error ? error.message : String(error);
+			}
+		})();
+		return () => controller.abort();
 	});
 
 	function selectNode(event: { node: Node }) {
@@ -371,6 +425,7 @@
 			</div>
 			<div class="legend" aria-label="Node type legend">
 				<span data-type="author">author</span>
+				<span data-type="group">group</span>
 				<span data-type="model">model</span>
 				<span data-type="provider">provider</span>
 				<span data-type="route">route</span>
@@ -407,6 +462,17 @@
 				spellcheck={false}
 			/>
 			<div class="filter-chips" aria-label="Node type filters">
+				<label>
+					<input
+						type="checkbox"
+						bind:checked={includeRetired}
+						onchange={() => {
+							clearSelection();
+							graphPageNumber = 0;
+						}}
+					/>
+					<span>Include retired</span>
+				</label>
 				<label data-type="compatible">
 					<input type="checkbox" checked={compatibleOnly} onchange={toggleCompatibleOnly} />
 					<span>Compatible</span>
@@ -423,14 +489,10 @@
 				{/each}
 			</div>
 		</div>
+		{#if includeRetired && archiveStatus}<p class="bar-status" role="status">
+				{archiveStatus}
+			</p>{/if}
 		<div class="flow">
-			<div class="graph-guide" aria-hidden="true">
-				<span>author</span>
-				<span>model</span>
-				<span>deployment</span>
-				<span>route</span>
-				<span>provider</span>
-			</div>
 			{#if !graphPage.total}
 				<p class="graph-empty" role="status">No matching catalog paths.</p>
 			{:else}

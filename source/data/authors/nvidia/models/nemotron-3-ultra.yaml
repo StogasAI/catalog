@@ -1,9 +1,7 @@
 models:
   authorId: nvidia
-  tokenizerFamily: tekken
   name: NVIDIA Nemotron 3 Ultra 550B A55B
-  family: Nemotron
-  series: Nemotron 3
+  groupIds: [nvidia-nemotron-3]
   flavors: [instruct]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576

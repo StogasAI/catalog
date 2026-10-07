@@ -21,6 +21,8 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.deployment.data.dataHandling).toEqual(
 			deployment.dataHandlingByRoute[entry.routeId]
 		);
+		expect(chain.deployment.data.fileInputs).toEqual(deployment.fileInputsByRoute[entry.routeId]);
+		expect(chain.deployment.data.fileInputsByRoute).toBeUndefined();
 		expect(chain.deployment.data.pricing).toEqual(deployment.pricing);
 		expect(chain.deployment.data.reasoningEfforts).toEqual(
 			deployment.routeOverrides?.[entry.routeId]?.reasoningEfforts ?? deployment.reasoningEfforts

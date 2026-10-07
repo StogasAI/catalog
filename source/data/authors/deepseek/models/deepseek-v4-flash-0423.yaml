@@ -1,10 +1,8 @@
 models:
   authorId: deepseek
-  tokenizerFamily: deepseek
   name: DeepSeek V4 Flash 0423
   aliases: [deepseek-v4-flash]
-  family: DeepSeek
-  series: DeepSeek V4
+  groupIds: [deepseek-deepseek-v4]
   flavors: [instruct]
   contextWindowTokens: 1048576
   maxOutputTokens: 384000

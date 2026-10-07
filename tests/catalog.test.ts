@@ -9,33 +9,8 @@ const canonicalEfforts = new Set(canonicalEffortOrder);
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
 
 describe('compiled catalog v3', () => {
-	test('keeps reviewed tokenizer choices on every model in both artifacts', () => {
-		const expected: Record<string, string> = {
-			anthropic: 'anthropic',
-			deepseek: 'deepseek',
-			google: 'gemma',
-			minimax: 'minimax',
-			'mistral-ai': 'tekken',
-			'moonshot-ai': 'kimi',
-			nvidia: 'tekken',
-			openai: 'openai',
-			qwen: 'qwen35',
-			'z-ai': 'glm'
-		};
-		for (const [id, model] of Object.entries(publicCatalog.graph.models)) {
-			// This is the reviewed current inventory, not a production fallback.
-			expect(model.tokenizerFamily).toBe(id === 'qwen3-32b' ? 'qwen3' : expected[model.authorId]);
-		}
-		for (const [id, model] of Object.entries(runtimeCatalog.graph.models)) {
-			expect(model.tokenizerFamily).toBe(publicCatalog.graph.models[id].tokenizerFamily);
-		}
-		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment).not.toHaveProperty('tokenizerFamily');
-		}
-	});
-
-	test('contains exactly the five useful graph primitives', () => {
-		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
+	test('keeps model grouping in the public graph and execution facts in runtime', () => {
+		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes, 'groups'].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
 		expect(
 			Object.fromEntries(
@@ -206,6 +181,8 @@ describe('compiled catalog v3', () => {
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(reasoningValues.has(deployment.reasoning)).toBe(true);
 			expect(deployment.contextWindowTokens).toBeGreaterThan(0);
+			expect(deployment.maxInputTokens).toBeGreaterThan(0);
+			expect(deployment.maxInputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
 			expect(deployment.maxOutputTokens).toBeGreaterThan(0);
 			expect(deployment.maxOutputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
 			expect(deployment.inputModalities.length).toBeGreaterThan(0);
@@ -299,10 +276,9 @@ describe('compiled catalog v3', () => {
 			);
 		}
 		expect(publicCatalog.graph.models['mistral-nemo-instruct-2407']).toMatchObject({
-			family: 'Mistral NeMo',
+			groupIds: ['mistral-ai-mistral-nemo'],
 			knowledgeCutoff: '2024-04-01',
-			name: 'Mistral NeMo Instruct 2407',
-			series: 'Mistral NeMo'
+			name: 'Mistral NeMo Instruct 2407'
 		});
 		for (const [modelId, contextWindowTokens] of [
 			['qwen3-32b', 131_072],
@@ -530,7 +506,7 @@ describe('compiled catalog v3', () => {
 				functionCalling: false,
 				parallelFunctionCalling: false
 			},
-			contextWindowTokens: 400_000,
+			contextWindowTokens: 200_000,
 			maxOutputTokens: 128_000
 		});
 		for (const fastId of [
@@ -615,6 +591,7 @@ describe('compiled catalog v3', () => {
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-fast'].contextWindowTokens).toBe(1_050_000);
+		expect(deployments['openai-gpt-5.6-luna-fast'].maxInputTokens).toBe(922_000);
 
 		expect(deployments['openai-gpt-5.6-sol-fast'].pricing).toMatchObject({
 			input_tokens: {
@@ -671,6 +648,7 @@ describe('compiled catalog v3', () => {
 			}
 		}
 		expect(deployments['openai-gpt-5.6-sol-fast'].contextWindowTokens).toBe(1_050_000);
+		expect(deployments['openai-gpt-5.6-sol-fast'].maxInputTokens).toBe(922_000);
 
 		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({
 			input_tokens: {
@@ -727,6 +705,7 @@ describe('compiled catalog v3', () => {
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-fast'].contextWindowTokens).toBe(1_050_000);
+		expect(deployments['openai-gpt-5.6-terra-fast'].maxInputTokens).toBe(922_000);
 	});
 
 	test('publishes every GPT-5.6 Pro service tier as a Responses-only selector', () => {

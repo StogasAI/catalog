@@ -1,9 +1,7 @@
 models:
   authorId: deepseek
-  tokenizerFamily: deepseek
   name: DeepSeek V3.2
-  family: DeepSeek
-  series: DeepSeek V3
+  groupIds: [deepseek-deepseek-v3]
   flavors: [instruct]
   contextWindowTokens: 163840
   maxOutputTokens: 163840

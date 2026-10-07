@@ -107,6 +107,7 @@ jobs:
           assets=(
             "$release_dir/catalog.runtime.json"
             "$release_dir/catalog.public.json"
+            "$release_dir/catalog.archive.json"
             "$release_dir/catalog-release.json"
             "$release_dir/github-attestation.jsonl"
             "$release_dir/SHA256SUMS"

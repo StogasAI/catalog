@@ -19,15 +19,18 @@ import { r2WriteConditionETag } from './r2-etag.mjs';
 import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
+	catalogArchive,
 	catalogApprovalLedgerKey,
 	catalogManifest,
-	canonicalJson,
+	parseCatalogReleaseEvidence,
+	canonicalJsonValue,
 	parseSequence,
 	resolveDestructiveOutput,
 	sha256,
-	stableJson,
+	canonicalJson,
 	stagingDevelopmentProvenance
 } from './release-format.mjs';
+import { parseArchiveReference } from './catalog-archive.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const action = process.argv[2];
@@ -94,7 +97,7 @@ async function preparePlaceholderRelease() {
 		const proofPath = join(proofRoot, 'attestation.json');
 		writeFileSync(
 			proofPath,
-			stableJson(stagingDevelopmentProvenance(catalogManifest(repositoryRoot, sequence)))
+			canonicalJson(stagingDevelopmentProvenance(catalogManifest(repositoryRoot, sequence)))
 		);
 		run(
 			process.execPath,
@@ -149,7 +152,7 @@ async function prepareRelease() {
 		const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
 		const envelope = parseEnvelope(releasePath);
 		const proposedManifest = parseJsonFile(join(proposalRoot, 'catalog-release.json'));
-		if (canonicalJson(envelope.manifest) !== canonicalJson(proposedManifest)) {
+		if (canonicalJsonValue(envelope.document) !== canonicalJsonValue(proposedManifest)) {
 			throw new Error('The Stogas manifest differs from the GitHub Actions manifest.');
 		}
 
@@ -174,8 +177,8 @@ async function prepareRelease() {
 function writeApproval(approval) {
 	const approvalPath = join(outputRoot, 'approvals', `${sequence}.json`);
 	mkdirSync(join(outputRoot, 'approvals'), { recursive: true });
-	writeFileSync(approvalPath, stableJson(approval));
-	writeFileSync(join(outputRoot, 'catalog-approval.json'), stableJson(approval));
+	writeFileSync(approvalPath, canonicalJson(approval));
+	writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(approval));
 	appendChecksum(outputRoot, approvalPath);
 	verifyChecksums(outputRoot);
 	return approvalPath;
@@ -189,17 +192,22 @@ function readPreparedRelease() {
 	const latestPath = join(outputRoot, 'latest.json');
 	const envelope = parseEnvelope(releasePath);
 	const approval = parseJsonFile(approvalPath);
-	if (canonicalJson(approval) !== canonicalJson(envelope)) {
+	if (canonicalJsonValue(approval) !== canonicalJsonValue(envelope)) {
 		throw new Error('Catalog approval and signed release differ.');
 	}
-	if (!Array.isArray(approval.attested_builds) || approval.attested_builds.length !== 1) {
+	if (
+		!approval.provenance ||
+		typeof approval.provenance !== 'object' ||
+		Array.isArray(approval.provenance)
+	) {
 		throw new Error('Catalog approval requires one GitHub proof.');
 	}
-	const proof = approval.attested_builds[0];
+	const proof = approval.provenance;
 	if (proof?.predicateType === 'https://stogas.ai/attestations/staging-development/v1') {
 		if (
 			publicationEnvironment !== 'staging' ||
-			canonicalJson(proof) !== canonicalJson(stagingDevelopmentProvenance(envelope.manifest))
+			canonicalJsonValue(proof) !==
+				canonicalJsonValue(stagingDevelopmentProvenance(envelope.document))
 		) {
 			throw new Error('Catalog placeholder proof is invalid for this target.');
 		}
@@ -300,8 +308,7 @@ function requireCleanTaggedSource() {
 function verifySigningKey() {
 	verifyCatalogReleaseSignature(
 		{
-			schema: 'stogas.release-evidence.v1',
-			manifest: catalogManifest(repositoryRoot, sequence),
+			document: catalogManifest(repositoryRoot, sequence),
 			signature: JSON.parse(requiredEnvironment('CATALOG_SIGNATURE_JSON'))
 		},
 		signingKeys
@@ -328,6 +335,7 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 	for (const name of [
 		'catalog.runtime.json',
 		'catalog.public.json',
+		'catalog.archive.json',
 		'catalog-release.json',
 		'github-attestation.jsonl',
 		'SHA256SUMS'
@@ -360,11 +368,15 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 function verifyIndependentBuild(proposalRoot) {
 	const expectedManifest = catalogManifest(repositoryRoot, sequence);
 	const proposedManifest = parseJsonFile(join(proposalRoot, 'catalog-release.json'));
-	if (canonicalJson(proposedManifest) !== canonicalJson(expectedManifest)) {
+	if (canonicalJsonValue(proposedManifest) !== canonicalJsonValue(expectedManifest)) {
 		throw new Error('GitHub Actions and Stogas produced different catalog manifests.');
 	}
-	for (const filename of ['catalog.runtime.json', 'catalog.public.json']) {
-		const local = catalogArtifact(repositoryRoot, filename).bytes;
+	for (const filename of ['catalog.runtime.json', 'catalog.public.json', 'catalog.archive.json']) {
+		const local = (
+			filename === 'catalog.archive.json'
+				? catalogArchive(repositoryRoot)
+				: catalogArtifact(repositoryRoot, filename)
+		).bytes;
 		const github = readBoundedRegularFile(join(proposalRoot, filename));
 		if (!local.equals(github)) {
 			throw new Error(`GitHub Actions and Stogas produced different ${filename} bytes.`);
@@ -373,10 +385,10 @@ function verifyIndependentBuild(proposalRoot) {
 }
 
 function parseEnvelope(path) {
-	const envelope = parseJsonFile(path);
+	const envelope = parseCatalogReleaseEvidence(parseJsonFile(path));
 	if (
-		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
-		envelope.manifest.sequence !== sequence
+		envelope.document?.schema !== 'stogas.catalog.release.v1' ||
+		envelope.document.sequence !== sequence
 	) {
 		throw new Error('Generated catalog release is invalid.');
 	}
@@ -429,11 +441,30 @@ function artifactPaths(root) {
 	const directory = join(root, 'blobs', 'sha256');
 	assertContainedDirectory(root, 'blobs/sha256');
 	const entries = readdirSync(directory, { withFileTypes: true });
+	const envelope = parseEnvelope(join(root, 'releases', `${sequence}.json`));
+	const artifacts = Object.values(envelope.document.artifacts);
+	const publicArtifact = envelope.document.artifacts['catalog.public.json'];
+	const publicBytes = readContainedRegularFile(root, `blobs/sha256/${publicArtifact.sha256}.json`);
 	if (
-		entries.length !== 2 ||
-		entries.some((entry) => !entry.isFile() || !/^[0-9a-f]{64}\.json$/.test(entry.name))
+		publicBytes.byteLength !== publicArtifact.size_bytes ||
+		sha256(publicBytes) !== publicArtifact.sha256
 	) {
-		throw new Error('Catalog release must contain exactly two canonical catalog blobs.');
+		throw new Error('Catalog public blob differs from the signed release');
+	}
+	artifacts.push(parseArchiveReference(JSON.parse(publicBytes.toString('utf8')).archive));
+	const expected = new Set(artifacts.map((artifact) => `${artifact.sha256}.json`));
+	if (
+		entries.length !== expected.size ||
+		entries.some((entry) => !entry.isFile() || !expected.has(entry.name))
+	) {
+		throw new Error(
+			'Catalog release must contain exactly the blobs committed by its public and runtime roots.'
+		);
+	}
+	for (const artifact of artifacts) {
+		const bytes = readContainedRegularFile(root, `blobs/sha256/${artifact.sha256}.json`);
+		if (bytes.byteLength !== artifact.size_bytes || sha256(bytes) !== artifact.sha256)
+			throw new Error('Catalog blob differs from its approved digest');
 	}
 	return entries.map((entry) => join(directory, entry.name)).sort();
 }
@@ -518,8 +549,8 @@ function publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope)
 		`Catalog ${sequence}`,
 		'--notes',
 		[
-			`Runtime: ${envelope.manifest.runtime}`,
-			`Public: ${envelope.manifest.public}`,
+			`Runtime: ${envelope.document.artifacts['catalog.runtime.json'].sha256}`,
+			`Public: ${envelope.document.artifacts['catalog.public.json'].sha256}`,
 			'',
 			'GitHub Actions and Stogas independently built the catalog artifacts. The signed approval requires their SHA-256 values to match.'
 		].join('\n')
@@ -553,30 +584,30 @@ async function readLatest() {
 	for (let left = 0; left < published.length; left++) {
 		for (let right = left + 1; right < published.length; right++) {
 			if (
-				published[left].envelope.manifest.sequence ===
-					published[right].envelope.manifest.sequence &&
+				published[left].envelope.document.sequence ===
+					published[right].envelope.document.sequence &&
 				!published[left].current.bytes.equals(published[right].current.bytes)
 			) {
 				throw new Error(
-					`Catalog sequence ${published[left].envelope.manifest.sequence} is bound to different bytes in ${published[left].destination.name} and ${published[right].destination.name}.`
+					`Catalog sequence ${published[left].envelope.document.sequence} is bound to different bytes in ${published[left].destination.name} and ${published[right].destination.name}.`
 				);
 			}
 		}
 	}
 	published.sort(
-		(left, right) => right.envelope.manifest.sequence - left.envelope.manifest.sequence
+		(left, right) => right.envelope.document.sequence - left.envelope.document.sequence
 	);
 	return { bytes: published[0]?.current.bytes, envelope: published[0]?.envelope ?? null, states };
 }
 
 function assertMayPublishSequence(latest, releaseBytes) {
-	if (latest.envelope?.manifest.sequence > sequence) {
+	if (latest.envelope?.document.sequence > sequence) {
 		throw new Error(
-			`Catalog latest is already sequence ${latest.envelope.manifest.sequence}; ${sequence} would roll it back.`
+			`Catalog latest is already sequence ${latest.envelope.document.sequence}; ${sequence} would roll it back.`
 		);
 	}
 	if (
-		latest.envelope?.manifest.sequence === sequence &&
+		latest.envelope?.document.sequence === sequence &&
 		latest.bytes &&
 		!releaseBytes.equals(latest.bytes)
 	) {
@@ -589,7 +620,7 @@ async function activateLatest(latest, path) {
 	const key = objectKey('latest.json');
 	await Promise.all(
 		latest.states.map(async ({ current, destination, envelope }) => {
-			if (envelope?.manifest.sequence === sequence) {
+			if (envelope?.document.sequence === sequence) {
 				if (!bytes.equals(current.bytes)) {
 					throw new Error(
 						`Catalog sequence ${sequence} is already bound to different content in ${destination.name}.`
@@ -613,11 +644,10 @@ async function activateLatest(latest, path) {
 }
 
 function parsePublishedEnvelope(bytes, destination) {
-	const envelope = JSON.parse(bytes.toString('utf8'));
+	const envelope = parseCatalogReleaseEvidence(JSON.parse(bytes.toString('utf8')));
 	if (
-		envelope?.schema !== 'stogas.release-evidence.v1' ||
-		envelope.manifest?.schema !== 'stogas.catalog.release.v1' ||
-		!Number.isSafeInteger(envelope.manifest?.sequence)
+		envelope.document?.schema !== 'stogas.catalog.release.v1' ||
+		!Number.isSafeInteger(envelope.document?.sequence)
 	) {
 		throw new Error(`Published catalog latest.json in ${destination} is invalid.`);
 	}

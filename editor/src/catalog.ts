@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/svelte';
+import { ancestorGroupIds, orderModelGroups } from '../../source/scripts/model-groups.mjs';
 import type {
 	Catalog,
 	CatalogFlow,
@@ -10,7 +11,14 @@ import type {
 	NodeType
 } from './types';
 
-const graphChainNodeOrder: NodeType[] = ['author', 'model', 'deployment', 'route', 'provider'];
+const graphChainNodeOrder: NodeType[] = [
+	'author',
+	'group',
+	'model',
+	'deployment',
+	'route',
+	'provider'
+];
 
 export function nodeKey(type: NodeType, id: string) {
 	return `${type}:${id}`;
@@ -33,20 +41,38 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 		...Object.keys(graph.authors).map((id) =>
 			makeNode('author', id, positionFor(positions, 'author', id), { rightOut: true })
 		),
+		...Object.entries(graph.groups).map(([id, group]) =>
+			makeNode(
+				'group',
+				id,
+				positionFor(positions, 'group', id),
+				{ leftIn: true, rightOut: true },
+				{ label: group.name }
+			)
+		),
 		...Object.keys(graph.models).map((id) =>
 			makeNode(
 				'model',
 				id,
 				positionFor(positions, 'model', id),
 				{ leftIn: true, rightOut: true },
-				{ label: String(graph.models[id].name ?? id) }
+				{
+					label: String(graph.models[id].name ?? id),
+					subtitle: graph.models[id].retired ? 'Retired' : undefined
+				}
 			)
 		),
 		...Object.keys(graph.deployments).map((id) =>
-			makeNode('deployment', id, positionFor(positions, 'deployment', id), {
-				leftIn: true,
-				rightIn: true
-			})
+			makeNode(
+				'deployment',
+				id,
+				positionFor(positions, 'deployment', id),
+				{
+					leftIn: true,
+					rightIn: true
+				},
+				{ subtitle: graph.deployments[id].retired ? 'Retired' : undefined }
+			)
 		),
 		...Object.keys(graph.routes).map((id) =>
 			makeNode('route', id, positionFor(positions, 'route', id), {
@@ -65,10 +91,20 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 		)
 	];
 	const edges: Edge[] = [];
+	for (const [id, group] of Object.entries(graph.groups)) {
+		if (group.parentIds.length === 0)
+			edges.push(edge('author', group.authorId, 'group', id, 'groups', 'right-out', 'left-in'));
+		for (const parentId of group.parentIds)
+			edges.push(edge('group', parentId, 'group', id, 'contains', 'right-out', 'left-in'));
+	}
 	for (const [modelId, model] of Object.entries(graph.models)) {
-		edges.push(
-			edge('author', String(model.authorId), 'model', modelId, 'owns', 'right-out', 'left-in')
-		);
+		const groups = modelGroupIds(model);
+		if (groups.length === 0)
+			edges.push(
+				edge('author', String(model.authorId), 'model', modelId, 'owns', 'right-out', 'left-in')
+			);
+		for (const groupId of groups)
+			edges.push(edge('group', groupId, 'model', modelId, 'contains', 'right-out', 'left-in'));
 	}
 	for (const [routeId, route] of Object.entries(graph.routes)) {
 		edges.push(
@@ -106,6 +142,9 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 
 function groupedLayoutPositions(graph: CatalogGraph) {
 	const positions = new Map<string, { x: number; y: number }>();
+	const groupDepths = orderModelGroups(graph.groups);
+	let groupColumns = 0;
+	for (const depth of groupDepths.values()) groupColumns = Math.max(groupColumns, depth);
 	const deploymentsByModel = new Map<string, string[]>();
 	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
 		const modelId = String(deployment.modelId ?? '');
@@ -133,6 +172,28 @@ function groupedLayoutPositions(graph: CatalogGraph) {
 	const average = (values: number[]) =>
 		values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 180;
 	const y = (type: NodeType, id: string) => positions.get(nodeKey(type, id))?.y ?? 180;
+	const modelGroups = new Map(
+		Object.entries(graph.models).map(([id, model]) => [
+			id,
+			new Set(ancestorGroupIds(graph.groups, modelGroupIds(model)))
+		])
+	);
+	for (let depth = 1; depth <= groupColumns; depth++) {
+		placeNonOverlappingLane(
+			positions,
+			'group',
+			[...groupDepths]
+				.filter(([, value]) => value === depth)
+				.map(([id]) => ({
+					id,
+					y: average(
+						[...modelGroups]
+							.filter(([, groups]) => groups.has(id))
+							.map(([modelId]) => y('model', modelId))
+					)
+				}))
+		);
+	}
 
 	placeNonOverlappingLane(
 		positions,
@@ -170,7 +231,46 @@ function groupedLayoutPositions(graph: CatalogGraph) {
 			)
 		}))
 	);
+	for (const [key, position] of positions) {
+		const node = parseNodeKey(key)!;
+		const column =
+			node.type === 'author'
+				? 0
+				: node.type === 'group'
+					? groupDepths.get(node.id)!
+					: graphChainNodeOrder.indexOf(node.type) - 1 + groupColumns;
+		position.x = 80 + column * 280;
+	}
 	return positions;
+}
+
+function modelGroupIds(model: Record<string, unknown>) {
+	return Array.isArray(model.groupIds)
+		? model.groupIds.filter((id): id is string => typeof id === 'string')
+		: [];
+}
+
+function groupingPath(graph: CatalogGraph, modelId: string): GraphChain {
+	const model = graph.models[modelId];
+	const authorId = String(model.authorId);
+	const direct = modelGroupIds(model);
+	const groups = ancestorGroupIds(graph.groups, direct);
+	const edgeIds: string[] = [];
+	for (const id of groups) {
+		const group = graph.groups[id];
+		if (!group.parentIds.length) edgeIds.push(graphEdgeId('author', authorId, 'group', id));
+		for (const parent of group.parentIds) edgeIds.push(graphEdgeId('group', parent, 'group', id));
+	}
+	if (!direct.length) edgeIds.push(graphEdgeId('author', authorId, 'model', modelId));
+	for (const id of direct) edgeIds.push(graphEdgeId('group', id, 'model', modelId));
+	return {
+		nodeKeys: [
+			nodeKey('author', authorId),
+			...groups.map((id) => nodeKey('group', id)),
+			nodeKey('model', modelId)
+		],
+		edgeIds
+	};
 }
 
 function placeNonOverlappingLane(
@@ -245,19 +345,18 @@ export function concreteGraphChains(catalog: Catalog): GraphChain[] {
 	const chains: GraphChain[] = [];
 	for (const [deploymentId, deployment] of Object.entries(catalog.graph.deployments)) {
 		const modelId = String(deployment.modelId);
-		const authorId = String(catalog.graph.models[modelId]?.authorId ?? '');
+		const grouping = groupingPath(catalog.graph, modelId);
 		for (const routeId of routeIds(deployment)) {
 			const providerId = String(catalog.graph.routes[routeId]?.providerId ?? '');
 			chains.push({
 				nodeKeys: [
-					nodeKey('author', authorId),
-					nodeKey('model', modelId),
+					...grouping.nodeKeys,
 					nodeKey('deployment', deploymentId),
 					nodeKey('route', routeId),
 					nodeKey('provider', providerId)
 				],
 				edgeIds: [
-					graphEdgeId('author', authorId, 'model', modelId),
+					...grouping.edgeIds,
 					graphEdgeId('model', modelId, 'deployment', deploymentId),
 					graphEdgeId('route', routeId, 'deployment', deploymentId),
 					graphEdgeId('provider', providerId, 'route', routeId)
@@ -287,7 +386,7 @@ export function indexGraphPaths(catalog: Catalog) {
 		}
 	}
 	// Informational models and unused routes still need to be reachable.
-	for (const type of ['model', 'route', 'author', 'provider'] as const) {
+	for (const type of ['model', 'group', 'route', 'author', 'provider'] as const) {
 		for (const id of Object.keys(catalog.graph[`${type}s`])) {
 			const key = nodeKey(type, id);
 			if (covered.has(key)) continue;
@@ -295,7 +394,16 @@ export function indexGraphPaths(catalog: Catalog) {
 			const nodeKeys = lineage.map((node) => nodeKey(node.type, node.id));
 			const edgeIds: string[] = [];
 			if (type === 'route') edgeIds.push(graphEdgeId('provider', lineage[1].id, 'route', id));
-			if (type === 'model') edgeIds.push(graphEdgeId('author', lineage[0].id, 'model', id));
+			if (type === 'model') edgeIds.push(...groupingPath(catalog.graph, id).edgeIds);
+			if (type === 'group') {
+				for (const node of lineage.filter((node) => node.type === 'group')) {
+					const group = catalog.graph.groups[node.id];
+					if (!group.parentIds.length)
+						edgeIds.push(graphEdgeId('author', group.authorId, 'group', node.id));
+					for (const parent of group.parentIds)
+						edgeIds.push(graphEdgeId('group', parent, 'group', node.id));
+				}
+			}
 			paths.push({ nodeKeys, edgeIds });
 			for (const nodeKey of nodeKeys) covered.add(nodeKey);
 		}
@@ -330,6 +438,7 @@ export function pageGraph(
 	const page = Math.min(Math.max(0, Math.trunc(options.page) || 0), pageCount - 1);
 	const graph: CatalogGraph = {
 		authors: {},
+		groups: {},
 		models: {},
 		deployments: {},
 		routes: {},
@@ -342,7 +451,7 @@ export function pageGraph(
 			const node = parseNodeKey(key);
 			if (!node) continue;
 			const collection = `${node.type}s` as keyof CatalogGraph;
-			graph[collection][node.id] = catalog.graph[collection][node.id];
+			Object.assign(graph[collection], { [node.id]: catalog.graph[collection][node.id] });
 		}
 	}
 	for (const [id, deployment] of Object.entries(graph.deployments)) {
@@ -445,11 +554,16 @@ export function completeUnambiguousGraphSelection(
 	);
 	if (!matching.length) return selectedKeys;
 	const selectedByType = new Map<NodeType, string>();
+	const selectedGroups = matching[0].nodeKeys.filter(
+		(key) =>
+			parseNodeKey(key)?.type === 'group' && matching.every((chain) => chain.nodeKeys.includes(key))
+	);
 	for (const key of selectedKeys) {
 		const parsed = parseNodeKey(key);
 		if (parsed) selectedByType.set(parsed.type, key);
 	}
 	for (const type of graphChainNodeOrder) {
+		if (type === 'group') continue;
 		if (selectedByType.has(type)) continue;
 		const candidates = unique(
 			matching
@@ -459,6 +573,7 @@ export function completeUnambiguousGraphSelection(
 		if (candidates.length === 1) selectedByType.set(type, candidates[0]);
 	}
 	return graphChainNodeOrder.flatMap((type) => {
+		if (type === 'group') return selectedGroups;
 		const key = selectedByType.get(type);
 		return key ? [key] : [];
 	});
@@ -516,7 +631,20 @@ export function lineageForSelection(
 		const authorId = String(model.authorId);
 		return [
 			source('author', authorId, catalog.graph.authors[authorId]),
+			...ancestorGroupIds(catalog.graph.groups, modelGroupIds(model)).map((id) =>
+				source('group', id, catalog.graph.groups[id])
+			),
 			source('model', selected.id, model)
+		];
+	}
+	if (selected.type === 'group') {
+		const group = catalog.graph.groups[selected.id];
+		if (!group) return [];
+		return [
+			source('author', group.authorId, catalog.graph.authors[group.authorId]),
+			...ancestorGroupIds(catalog.graph.groups, [selected.id]).map((id) =>
+				source('group', id, catalog.graph.groups[id])
+			)
 		];
 	}
 	const value = selectedNodeValue(catalog.graph, selected.type, selected.id);
@@ -527,6 +655,8 @@ function selectedNodeValue(graph: CatalogGraph, type: NodeType, id: string) {
 	switch (type) {
 		case 'author':
 			return graph.authors[id];
+		case 'group':
+			return graph.groups[id];
 		case 'model':
 			return graph.models[id];
 		case 'deployment':
@@ -573,17 +703,17 @@ export function effectiveDeploymentFacts(
 		providerOrigin
 	);
 	const routeOverrides = objectAt(route, ['overrides']);
-	applyFactLayer(value, origins, { dataHandling: route.dataHandling }, routeOrigin);
+	applyFactLayer(value, origins, selectFacts(route, ['dataHandling', 'fileInputs']), routeOrigin);
 	applyFactLayer(value, origins, selectFacts(routeOverrides, ['capabilities']), routeOrigin);
 	applyFactLayer(value, origins, { pricing: route.pricing }, routeOrigin);
 	applyFactLayer(
 		value,
 		origins,
 		selectFacts(model, [
-			'tokenizerFamily',
 			'contextWindowTokens',
 			'deprecationDate',
 			'inputModalities',
+			'maxInputTokens',
 			'maxOutputTokens',
 			'outputModalities',
 			'reasoning',
@@ -606,7 +736,9 @@ export function effectiveDeploymentFacts(
 			'contextWindowTokens',
 			'dataHandling',
 			'deprecationDate',
+			'fileInputs',
 			'inputModalities',
+			'maxInputTokens',
 			'maxOutputTokens',
 			'outputModalities',
 			'pricing',
@@ -635,6 +767,17 @@ export function effectiveDeploymentFacts(
 		]),
 		deploymentOrigin
 	);
+
+	const inputLimit = valueAt(value, ['maxInputTokens']);
+	const contextLimit = valueAt(value, ['contextWindowTokens']);
+	if (
+		typeof inputLimit === 'number' &&
+		typeof contextLimit === 'number' &&
+		inputLimit > contextLimit
+	) {
+		setValueAt(value, ['maxInputTokens'], contextLimit);
+		origins.set('maxInputTokens', origins.get('contextWindowTokens') ?? deploymentOrigin);
+	}
 
 	return flattenFacts(value)
 		.map(({ path, value: factValue }) => ({
@@ -752,6 +895,9 @@ function deploymentLineage(catalog: Catalog, deploymentId: string, preferredRout
 	const providerId = String(route?.providerId ?? '');
 	return [
 		source('author', authorId, catalog.graph.authors[authorId]),
+		...ancestorGroupIds(catalog.graph.groups, modelGroupIds(model)).map((id) =>
+			source('group', id, catalog.graph.groups[id])
+		),
 		source('model', modelId, model),
 		source('deployment', deploymentId, deployment),
 		source('route', routeId, route),

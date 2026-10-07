@@ -1,9 +1,7 @@
 models:
   authorId: nvidia
-  tokenizerFamily: tekken
   name: Nemotron 3 Nano Omni 30B A3B Reasoning
-  family: Nemotron
-  series: Nemotron 3
+  groupIds: [nvidia-nemotron-3]
   flavors: [instruct]
   contextWindowTokens: 262144
   maxOutputTokens: 262144

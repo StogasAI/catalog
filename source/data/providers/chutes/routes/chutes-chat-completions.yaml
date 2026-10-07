@@ -2,5 +2,8 @@ routes:
   providerId: chutes
   endpoint: https://api.chutes.ai/e2e/invoke
   interfaces: [chat_completions]
+  fileInputs:
+    extensions: []
+    mediaTypes: []
   dataHandling:
     endToEndEncrypted: true

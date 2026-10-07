@@ -1,11 +1,20 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import {
 	catalogApprovalLedgerKey,
 	catalogManifest,
+	canonicalJsonValue,
+	parseCatalogReleaseEvidence,
 	resolveDestructiveOutput,
 	stagingDevelopmentProvenance
 } from '../source/scripts/release-format.mjs';
@@ -76,8 +85,10 @@ describe('catalog release metadata', () => {
 
 	test('creates exact staging-only provenance for the catalog release manifest', () => {
 		const manifest = {
-			public: `sha256:${'11'.repeat(32)}`,
-			runtime: `sha256:${'22'.repeat(32)}`
+			artifacts: {
+				'catalog.public.json': { sha256: '11'.repeat(32), size_bytes: 1 },
+				'catalog.runtime.json': { sha256: '22'.repeat(32), size_bytes: 1 }
+			}
 		};
 		const statement = stagingDevelopmentProvenance(manifest);
 		expect(statement).toEqual({
@@ -88,7 +99,7 @@ describe('catalog release metadata', () => {
 				{
 					digest: {
 						sha256: createHash('sha256')
-							.update(`${canonicalJson(manifest)}\n`)
+							.update(`${canonicalJsonValue(manifest)}\n`)
 							.digest('hex')
 					},
 					name: 'catalog-release.json'
@@ -99,8 +110,10 @@ describe('catalog release metadata', () => {
 		});
 		expect(() =>
 			stagingDevelopmentProvenance({
-				public: `sha256:${'11'.repeat(32)}`,
-				runtime: 'sha256:INVALID'
+				artifacts: {
+					'catalog.public.json': { sha256: '11'.repeat(32), size_bytes: 1 },
+					'catalog.runtime.json': { sha256: 'INVALID', size_bytes: 1 }
+				}
 			})
 		).toThrow('valid runtime and public digests');
 	});
@@ -129,23 +142,20 @@ describe('catalog release metadata', () => {
 			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(Object.keys(envelope).sort()).toEqual([
-				'attested_builds',
-				'manifest',
-				'schema',
-				'signature'
-			]);
-			expect(envelope.schema).toBe('stogas.release-evidence.v1');
-			expect(envelope.attested_builds).toEqual([proof]);
+			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance', 'signature']);
+			expect(envelope.provenance).toEqual(proof);
 			expect(envelope.signature.key_id).toBe('test-key');
 			const keys = {
 				'test-key': publicKey
 			};
 			expect(() => verifyCatalogReleaseSignature(envelope, keys)).not.toThrow();
-			for (const schema of [undefined, null, 1, '', 'stogas.release-evidence.v2']) {
-				expect(() => verifyCatalogReleaseSignature({ ...envelope, schema }, keys)).toThrow(
-					'evidence schema is unsupported'
-				);
+			for (const schema of [undefined, null, 1, '', 'stogas.catalog.release.v2']) {
+				expect(() =>
+					verifyCatalogReleaseSignature(
+						{ ...envelope, document: { ...envelope.document, schema } },
+						keys
+					)
+				).toThrow('evidence schema is unsupported');
 			}
 			for (const changed of [
 				{ ...envelope, signature: { ...envelope.signature, key_id: 'unknown-key' } },
@@ -154,18 +164,42 @@ describe('catalog release metadata', () => {
 					...envelope,
 					signature: { ...envelope.signature, signature: envelope.signature.signature + '==' }
 				},
-				{ ...envelope, manifest: { ...envelope.manifest, sequence: 8 } }
+				{ ...envelope, document: { ...envelope.document, minimum_gateway_sequence: 8 } }
 			]) {
 				expect(() => verifyCatalogReleaseSignature(changed, keys)).toThrow('signature is invalid');
 			}
 			expect(() => verifyCatalogReleaseSignature(envelope, {})).toThrow('key is not trusted');
-			expect(envelope.manifest.schema).toBe('stogas.catalog.release.v1');
-			expect(envelope.manifest.catalogSchema).toBe(1);
-			expect(envelope.manifest.minimumGatewaySequence).toBe(1_000_005_000_052);
-			expect(envelope.manifest.sequence).toBe(7);
-			expect(envelope.manifest.runtime).toMatch(/^sha256:[0-9a-f]{64}$/);
-			expect(envelope.manifest.public).toMatch(/^sha256:[0-9a-f]{64}$/);
-			expect(envelope.manifest.source).toMatchObject({
+			expect(envelope.document.schema).toBe('stogas.catalog.release.v1');
+			expect(envelope.document.minimum_gateway_sequence).toBe(1_000_005_000_061);
+			expect(envelope.document.sequence).toBe(7);
+			expect(envelope.document.artifacts['catalog.runtime.json'].sha256).toMatch(/^[0-9a-f]{64}$/);
+			expect(envelope.document.artifacts['catalog.public.json'].sha256).toMatch(/^[0-9a-f]{64}$/);
+			for (const name of ['catalog.runtime.json', 'catalog.public.json']) {
+				expect(envelope.document.artifacts[name].size_bytes).toBe(
+					readFileSync(join('generated', name)).byteLength
+				);
+			}
+			const publicBytes = readFileSync(
+				join(
+					output,
+					'blobs/sha256',
+					`${envelope.document.artifacts['catalog.public.json'].sha256}.json`
+				)
+			);
+			const archive = JSON.parse(publicBytes.toString()).archive;
+			const archiveBytes = readFileSync(join(output, 'blobs/sha256', `${archive.sha256}.json`));
+			expect(archiveBytes.byteLength).toBe(archive.size_bytes);
+			expect(createHash('sha256').update(archiveBytes).digest('hex')).toBe(archive.sha256);
+			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(3);
+			for (const changed of [
+				{ ...envelope, schema: 'extra' },
+				{ ...envelope, provenance: [proof] },
+				{ ...envelope, manifest: envelope.document },
+				{ ...envelope, document: { ...envelope.document, extra: true } }
+			]) {
+				expect(() => parseCatalogReleaseEvidence(changed)).toThrow();
+			}
+			expect(envelope.document.source).toMatchObject({
 				repository: 'https://github.com/StogasAI/catalog',
 				tag: 'catalog-v7'
 			});
@@ -173,7 +207,7 @@ describe('catalog release metadata', () => {
 			expect(
 				verify(
 					null,
-					Buffer.from(`stogas signed document v1\n${canonicalJson(envelope.manifest)}`),
+					Buffer.from(`stogas signed document v1\n${canonicalJsonValue(envelope.document)}`),
 					{ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' },
 					Buffer.from(envelope.signature.signature, 'base64url')
 				)
@@ -183,10 +217,6 @@ describe('catalog release metadata', () => {
 		}
 	});
 });
-
-function canonicalJson(value: unknown) {
-	return JSON.stringify(stableValue(value));
-}
 
 // Node provides ML-DSA signing; Bun currently verifies it but cannot generate these keys.
 function signManifest(manifest: unknown): {
@@ -209,18 +239,8 @@ function signManifest(manifest: unknown): {
 		}));
 	`
 		],
-		{ stdin: Buffer.from(canonicalJson(manifest)) }
+		{ stdin: Buffer.from(canonicalJsonValue(manifest)) }
 	);
 	if (result.exitCode !== 0) throw Error(result.stderr.toString());
 	return JSON.parse(result.stdout.toString());
-}
-
-function stableValue(value: unknown): unknown {
-	if (Array.isArray(value)) return value.map(stableValue);
-	if (!value || typeof value !== 'object') return value;
-	return Object.fromEntries(
-		Object.entries(value as Record<string, unknown>)
-			.sort(([left], [right]) => left.localeCompare(right))
-			.map(([key, child]) => [key, stableValue(child)])
-	);
 }

@@ -1,19 +1,18 @@
 package catalog
 
-#TokenizerFamily: "openai" | "anthropic" | "deepseek" | "qwen3" | "qwen35" | "gemma" | "minimax" | "tekken" | "kimi" | "glm"
-
 #Model: close({
 	authorId: #Id
 	// Selects the gateway's local estimator; implementations and buffers are code-owned.
-	tokenizerFamily!: #TokenizerFamily
 	name:     string & !=""
 	aliases?: [...#Slug]
-	family: string & !=""
-	series: string & !=""
+	groupIds?: [...#Id]
+	retired?: true
 	derivedFrom?: [...#Id]
 	flavors?: [...#Flavor]
 	// Maximum active sequence for one generation: provider-counted input plus output.
 	contextWindowTokens: int & >0
+	// Independent input ceiling; omitted when no narrower ceiling is documented.
+	maxInputTokens?: int & >0
 	// Maximum generated output inside contextWindowTokens; it does not extend the window.
 	maxOutputTokens: int & >0
 	inputModalities: [#Modality, ...#Modality]
@@ -29,7 +28,6 @@ package catalog
 		systemMessages?:          bool
 		toolChoice?:              bool
 		urlContext?:              bool
-		pdfInput?:                bool
 	})
 	reasoning:          #Reasoning
 	reasoningEfforts:   [...#ReasoningEffort]

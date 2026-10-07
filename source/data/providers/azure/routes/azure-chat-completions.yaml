@@ -1,5 +1,8 @@
 routes:
   providerId: azure
   interfaces: [chat_completions]
+  fileInputs:
+    extensions: []
+    mediaTypes: []
   dataHandling:
     endToEndEncrypted: false

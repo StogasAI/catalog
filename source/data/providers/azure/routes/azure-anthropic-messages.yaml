@@ -1,10 +1,13 @@
 routes:
   providerId: azure
   interfaces: [chat_completions, responses]
+  # Native document formats reviewed 2026-10-05: https://platform.claude.com/docs/en/build-with-claude/files
+  fileInputs:
+    extensions: [.csv, .md, .pdf, .txt]
+    mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false
   overrides:
     capabilities:
       implicitPromptCaching: false
       explicitPromptCaching: true
-      pdfInput: true

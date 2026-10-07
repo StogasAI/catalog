@@ -21,6 +21,53 @@ import { parseCatalog } from '../editor/src/types';
 const catalog = parseCatalog(catalogJson);
 
 describe('effective catalog facts', () => {
+	test('keeps a nested group diamond as real edges and one execution choice', () => {
+		const fixture = parseCatalog({
+			schema: 'stogas.catalog.public.v3',
+			graph: {
+				authors: { author: { name: 'Author' } },
+				groups: {
+					root: { authorId: 'author', name: 'Root', parentIds: [] },
+					left: { authorId: 'author', name: 'Left', parentIds: ['root'] },
+					right: { authorId: 'author', name: 'Right', parentIds: ['root'] },
+					leaf: { authorId: 'author', name: 'Leaf', parentIds: ['left', 'right'] }
+				},
+				models: { model: { authorId: 'author', name: 'Model', groupIds: ['leaf'] } },
+				providers: { provider: { name: 'Provider' } },
+				routes: { route: { providerId: 'provider' } },
+				deployments: { deployment: { modelId: 'model', routeIds: ['route'] } }
+			}
+		});
+		const flow = buildFlow(fixture.graph);
+		expect(flow.edges.map((edge) => `${edge.source}->${edge.target}`).sort()).toEqual(
+			[
+				'author:author->group:root',
+				'group:root->group:left',
+				'group:root->group:right',
+				'group:left->group:leaf',
+				'group:right->group:leaf',
+				'group:leaf->model:model',
+				'model:model->deployment:deployment',
+				'route:route->deployment:deployment',
+				'provider:provider->route:route'
+			].sort()
+		);
+		const positions = new Map(flow.nodes.map((node) => [node.id, node.position]));
+		expect(positions.get('group:left')!.x).toBe(positions.get('group:right')!.x);
+		expect(positions.get('group:left')!.y).not.toBe(positions.get('group:right')!.y);
+		expect(positions.get('group:leaf')!.x).toBeGreaterThan(positions.get('group:left')!.x);
+		const paths = concreteGraphChains(fixture);
+		expect(paths).toHaveLength(1);
+		expect(new Set(paths[0].edgeIds)).toEqual(new Set(flow.edges.map((edge) => edge.id)));
+		expect(lineageForSelection(fixture, 'model:model', {}).map((node) => node.id)).toEqual([
+			'author',
+			'root',
+			'left',
+			'right',
+			'leaf',
+			'model'
+		]);
+	});
 	test('rejects malformed generated catalog collections', () => {
 		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
 		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
@@ -96,9 +143,10 @@ describe('effective catalog facts', () => {
 		);
 		expect(chains).toHaveLength(routeReferences);
 		for (const chain of chains) {
-			expect(chain.nodeKeys).toHaveLength(5);
-			expect(chain.edgeIds).toHaveLength(4);
-			expect(new Set(chain.nodeKeys).size).toBe(5);
+			expect(chain.nodeKeys.filter((key) => !key.startsWith('group:'))).toHaveLength(5);
+			expect(new Set(chain.nodeKeys).size).toBe(chain.nodeKeys.length);
+			for (const edge of chain.edgeIds)
+				for (const key of edge.split('>')) expect(chain.nodeKeys).toContain(key);
 		}
 	});
 
@@ -112,15 +160,23 @@ describe('effective catalog facts', () => {
 			page: 0,
 			query: '',
 			selectedKeys: [],
-			visibleTypes: { author: true, model: true, deployment: true, route: true, provider: true }
+			visibleTypes: {
+				author: true,
+				group: true,
+				model: true,
+				deployment: true,
+				route: true,
+				provider: true
+			}
 		};
 		const first = pageGraph(fixture, index, options);
 		const nodes = new Set<string>();
 		const edges = new Set<string>();
 		for (let page = 0; page < first.pageCount; page++) {
 			const result = pageGraph(fixture, index, { ...options, page });
-			expect(result.flow.nodes.length).toBeLessThanOrEqual(GRAPH_PAGE_SIZE * 5);
-			expect(result.flow.edges.length).toBeLessThanOrEqual(GRAPH_PAGE_SIZE * 4);
+			expect(
+				result.flow.nodes.filter((node) => node.data.type === 'deployment').length
+			).toBeLessThanOrEqual(GRAPH_PAGE_SIZE);
 			const pageNodes = new Set(result.flow.nodes.map((node) => node.id));
 			for (const id of pageNodes) nodes.add(id);
 			for (const edge of result.flow.edges) {
@@ -141,7 +197,14 @@ describe('effective catalog facts', () => {
 			page: 999,
 			query: 'OPEN-AI',
 			selectedKeys: [],
-			visibleTypes: { author: true, model: true, deployment: true, route: true, provider: true }
+			visibleTypes: {
+				author: true,
+				group: true,
+				model: true,
+				deployment: true,
+				route: true,
+				provider: true
+			}
 		};
 		const result = pageGraph(catalog, index, options);
 		expect(result.total).toBeGreaterThan(0);
@@ -184,12 +247,19 @@ describe('effective catalog facts', () => {
 		expect(extendGraphSelection(flow, chains, [model], route)).toEqual([model, deployment, route]);
 		expect(completeUnambiguousGraphSelection(chains, [deployment, route])).toEqual([
 			'author:openai',
+			'group:openai-gpt',
+			'group:openai-gpt-5.6',
 			model,
 			deployment,
 			route,
 			'provider:openai'
 		]);
-		expect(completeUnambiguousGraphSelection(chains, [model])).toEqual(['author:openai', model]);
+		expect(completeUnambiguousGraphSelection(chains, [model])).toEqual([
+			'author:openai',
+			'group:openai-gpt',
+			'group:openai-gpt-5.6',
+			model
+		]);
 		expect(completeUnambiguousGraphSelection(chains, ['model:missing'])).toEqual(['model:missing']);
 	});
 
@@ -198,6 +268,7 @@ describe('effective catalog facts', () => {
 		const chains = concreteGraphChains(catalog);
 		const visibleTypes = {
 			author: true,
+			group: true,
 			model: true,
 			deployment: true,
 			route: true,
@@ -267,6 +338,8 @@ describe('effective catalog facts', () => {
 			})
 		).toMatchObject([
 			{ type: 'author', id: 'z-ai' },
+			{ type: 'group', id: 'z-ai-glm' },
+			{ type: 'group', id: 'z-ai-glm-5' },
 			{ type: 'model', id: 'glm-5.2' },
 			{ type: 'deployment', id: 'chutes-glm-5.2' },
 			{ type: 'route', id: 'chutes-chat-completions' },
@@ -278,6 +351,8 @@ describe('effective catalog facts', () => {
 		]);
 		expect(lineageForSelection(catalog, 'model:gpt-5.6-sol', {})).toMatchObject([
 			{ type: 'author', id: 'openai' },
+			{ type: 'group', id: 'openai-gpt' },
+			{ type: 'group', id: 'openai-gpt-5.6' },
 			{ type: 'model', id: 'gpt-5.6-sol' }
 		]);
 		expect(lineageForSelection(catalog, 'author:openai', {})).toMatchObject([
@@ -296,11 +371,6 @@ describe('effective catalog facts', () => {
 		const byPath = new Map(facts.map((fact) => [fact.path, fact]));
 
 		expect(byPath.get('contextWindowTokens')?.origin.type).toBe('model');
-		expect(byPath.get('tokenizerFamily')).toEqual({
-			path: 'tokenizerFamily',
-			value: 'glm',
-			origin: { type: 'model', id: 'glm-5.2' }
-		});
 		expect(byPath.get('reasoning')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningEfforts')?.origin.type).toBe('model');
 		expect(byPath.get('reasoningMaxTokens')?.origin.type).toBe('model');
@@ -401,5 +471,41 @@ describe('effective catalog facts', () => {
 		expect((value?.upstream as Record<string, unknown>)?.model).toBe('gpt-5.6-sol');
 		const pricing = value?.pricing as Record<string, unknown>;
 		expect(pricing.openai_responses_web_search_calls).toBeUndefined();
+	});
+});
+
+test('attributes provider file formats to routes and deployment overrides independently of model modalities', () => {
+	const fixture = structuredClone(catalog);
+	const id = 'openai-gpt-5.6-luna';
+	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
+		path: 'fileInputs.extensions',
+		value: ['.pdf'],
+		origin: { type: 'route', id: 'openai-chat-completions' }
+	});
+	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
+		path: 'fileInputs.extensions',
+		value: expect.arrayContaining(['.csv', '.pdf', '.txt']),
+		origin: { type: 'route', id: 'openai-responses' }
+	});
+	fixture.graph.deployments[id].overrides = { fileInputs: { extensions: [], mediaTypes: [] } };
+	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
+		path: 'fileInputs.extensions',
+		value: [],
+		origin: { type: 'deployment', id }
+	});
+	fixture.graph.deployments[id].overrides = {
+		fileInputs: { extensions: ['.md'], mediaTypes: ['text/markdown'] }
+	};
+	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
+		path: 'fileInputs.extensions',
+		value: ['.md'],
+		origin: { type: 'deployment', id }
+	});
+	delete fixture.graph.deployments[id].overrides;
+	fixture.graph.models['gpt-5.6-luna'].inputModalities = ['text'];
+	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
+		path: 'fileInputs.extensions',
+		value: ['.pdf'],
+		origin: { type: 'route', id: 'openai-chat-completions' }
 	});
 });

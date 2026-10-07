@@ -150,28 +150,6 @@ small,
 	--xy-minimap-node-stroke-color: #5b6878;
 }
 
-.graph-guide {
-	display: grid;
-	grid-template-columns: 0.8fr 0.8fr 1fr 1.2fr 0.8fr;
-	left: 1rem;
-	pointer-events: none;
-	position: absolute;
-	right: 1rem;
-	top: 0.55rem;
-	z-index: 5;
-}
-
-.graph-guide span {
-	background: rgb(15 23 32 / 0.82);
-	border: 1px solid #2d3b4f;
-	border-radius: 999px;
-	color: #d4dbe6;
-	font-size: 0.7rem;
-	font-weight: 750;
-	justify-self: center;
-	padding: 0.12rem 0.5rem;
-}
-
 .legend {
 	align-items: center;
 	display: flex;
@@ -197,6 +175,8 @@ small,
 	color: #ffffff;
 }
 
+.legend span[data-type='group'],
+.catalog-node-group,
 .legend span[data-type='model'],
 .catalog-node-model {
 	background: #166534;
@@ -578,6 +558,8 @@ input {
 	color: #ffffff;
 }
 
+.chain-node[data-type='group'],
+.chain-row span[data-type='group'],
 .chain-node[data-type='model'],
 .chain-row span[data-type='model'] {
 	background: #166534;
@@ -828,15 +810,10 @@ button.secondary {
 	--xy-minimap-node-stroke-color: var(--muted);
 }
 
-.shell .graph-guide span,
 .shell .filter-chips label,
 .shell .segmented {
 	background: var(--control-bg);
 	border-color: var(--border);
-	color: var(--muted-strong);
-}
-
-.shell .graph-guide span {
 	color: var(--muted-strong);
 }
 

@@ -7,6 +7,7 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	rmdirSync,
 	writeFileSync
@@ -14,8 +15,10 @@ import {
 import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stableJson } from './canonical-json.mjs';
+import { canonicalJson } from './canonical-json.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
+import { orderModelGroups } from './model-groups.mjs';
+import { partitionPublicGraph, catalogPublicSizeLimit } from './catalog-archive.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
@@ -36,25 +39,13 @@ const canonicalInterfaceRanks = new Map(
 	['chat_completions', 'responses'].map((value, index) => [value, index])
 );
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
-const tokenizerFamilies = new Set([
-	'openai',
-	'anthropic',
-	'deepseek',
-	'qwen3',
-	'qwen35',
-	'gemma',
-	'minimax',
-	'tekken',
-	'kimi',
-	'glm'
-]);
 const canonicalCredentialModes = ['managed', 'byok'];
 const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
 const runtimeSizeLimit = 16 * 1024 * 1024;
-const publicSizeLimit = 64 * 1024 * 1024;
+const publicSizeLimit = catalogPublicSizeLimit;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;
@@ -99,7 +90,7 @@ function fileOwnedNodeSource(path) {
 	if (!/\.ya?ml$/.test(path)) return null;
 	const content = readFileSync(path, 'utf8').replace(/^\uFEFF/, '');
 	const body = content.replace(/^---[ \t]*(?:\r?\n|$)/, '');
-	const match = /^(authors|deployments|models|providers|routes):\s*$/m.exec(body);
+	const match = /^(authors|deployments|groups|models|providers|routes):\s*$/m.exec(body);
 	return match ? { type: match[1], id: basename(path).replace(/\.ya?ml$/, '') } : null;
 }
 
@@ -257,7 +248,7 @@ async function resolveCueCommand() {
 }
 
 function same(left, right) {
-	return stableJson(left) === stableJson(right);
+	return canonicalJson(left) === canonicalJson(right);
 }
 
 function validDate(value) {
@@ -300,6 +291,15 @@ function rejectRedundantOverride(base, override, owner) {
 
 function normalizeSourceGraph(sourceGraph) {
 	return {
+		groups: Object.fromEntries(
+			Object.entries(sourceGraph.groups ?? {}).map(([id, group]) => [
+				id,
+				{
+					...group,
+					parentIds: [...(group.parentIds ?? [])].sort()
+				}
+			])
+		),
 		authors: Object.fromEntries(
 			Object.entries(sourceGraph.authors).map(([id, author]) => [
 				id,
@@ -311,6 +311,8 @@ function normalizeSourceGraph(sourceGraph) {
 				id,
 				{
 					...model,
+					groupIds: [...(model.groupIds ?? [])].sort(),
+					maxInputTokens: model.maxInputTokens ?? model.contextWindowTokens,
 					aliases: [...(model.aliases ?? [])],
 					capabilities: model.capabilities ?? {},
 					deprecationDate: model.deprecationDate ?? null,
@@ -481,6 +483,16 @@ function effectiveTokenLimits(deploymentId, model, deployment) {
 		`${deploymentId}.overrides.maxOutputTokens`
 	);
 	const contextWindowTokens = overrides.contextWindowTokens ?? model.contextWindowTokens;
+	const inheritedMaxInputTokens = Math.min(model.maxInputTokens, contextWindowTokens);
+	rejectRedundantOverride(
+		inheritedMaxInputTokens,
+		overrides.maxInputTokens,
+		`${deploymentId}.overrides.maxInputTokens`
+	);
+	const maxInputTokens = overrides.maxInputTokens ?? inheritedMaxInputTokens;
+	if (maxInputTokens > inheritedMaxInputTokens) {
+		throw new Error(`${deploymentId}: input limit may only narrow the model and context limits`);
+	}
 	const maxOutputTokens = overrides.maxOutputTokens ?? model.maxOutputTokens;
 	if (contextWindowTokens > model.contextWindowTokens) {
 		throw new Error(`${deploymentId}: context limit may only narrow the model limit`);
@@ -491,7 +503,7 @@ function effectiveTokenLimits(deploymentId, model, deployment) {
 	if (maxOutputTokens > contextWindowTokens) {
 		throw new Error(`${deploymentId}: output limit must fit inside the context window`);
 	}
-	return { contextWindowTokens, maxOutputTokens };
+	return { contextWindowTokens, maxInputTokens, maxOutputTokens };
 }
 
 function effectiveCapabilities(graph, deploymentId, model, deployment) {
@@ -678,6 +690,47 @@ function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
 	);
 }
 
+function validateFileInputs(value, owner) {
+	if (!isPlainObject(value) || Object.keys(value).sort().join(',') !== 'extensions,mediaTypes') {
+		throw new Error(`${owner}: fileInputs requires extensions and mediaTypes`);
+	}
+	for (const [field, pattern] of [
+		['extensions', /^\.[a-z0-9][a-z0-9._+-]*$/],
+		['mediaTypes', /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/]
+	]) {
+		const values = value[field];
+		if (
+			!Array.isArray(values) ||
+			values.some(
+				(entry, i) =>
+					typeof entry !== 'string' || !pattern.test(entry) || (i > 0 && values[i - 1] >= entry)
+			)
+		) {
+			throw new Error(`${owner}: fileInputs.${field} must be sorted, unique and lowercase`);
+		}
+	}
+	if (value.mediaTypes.length === 0 && value.extensions.length !== 0) {
+		throw new Error(`${owner}: file extensions require native media types`);
+	}
+}
+
+function effectiveFileInputsByRoute(graph, deploymentId, deployment) {
+	const override = deployment.overrides?.fileInputs;
+	if (override !== undefined) validateFileInputs(override, deploymentId);
+	let changed = false;
+	const result = Object.fromEntries(
+		deployment.routeIds.map((routeId) => {
+			const inherited = graph.routes[routeId].fileInputs;
+			const effective = override ?? inherited;
+			changed ||= !same(inherited, effective);
+			return [routeId, structuredClone(effective)];
+		})
+	);
+	if (override !== undefined && !changed)
+		throw new Error(`${deploymentId}: fileInputs redundantly repeats its inherited value`);
+	return result;
+}
+
 function effectiveDeprecationDate(deploymentId, model, deployment) {
 	if (deployment.overrides && 'deprecationDate' in deployment.overrides) {
 		rejectRedundantOverride(
@@ -692,6 +745,25 @@ function effectiveDeprecationDate(deploymentId, model, deployment) {
 
 export function buildCatalogs(source) {
 	const sourceGraph = normalizeSourceGraph(source.graph);
+	orderModelGroups(sourceGraph.groups);
+	for (const [id, group] of Object.entries(sourceGraph.groups)) {
+		requireNode(sourceGraph.authors, group.authorId, id);
+		for (const parentId of group.parentIds) {
+			if (sourceGraph.groups[parentId].authorId !== group.authorId) {
+				throw new Error(`Group ${id}: parent ${parentId} belongs to another author`);
+			}
+		}
+	}
+	for (const [id, model] of Object.entries(sourceGraph.models)) {
+		if (new Set(model.groupIds).size !== model.groupIds.length) {
+			throw new Error(`Model ${id}: groupIds must be unique`);
+		}
+		for (const groupId of model.groupIds) {
+			if (requireNode(sourceGraph.groups, groupId, id).authorId !== model.authorId) {
+				throw new Error(`Model ${id}: group ${groupId} belongs to another author`);
+			}
+		}
+	}
 	const graph = {
 		...sourceGraph,
 		routes: Object.fromEntries(
@@ -700,6 +772,7 @@ export function buildCatalogs(source) {
 				validateCanonicalList(route.interfaces, canonicalInterfaceRanks, `${routeId}: interfaces`);
 				validateRouteEndpoint(routeId, route.endpoint);
 				const overrides = route.overrides ?? {};
+				validateFileInputs(route.fileInputs, routeId);
 				rejectRedundantOverride(
 					provider.capabilities,
 					overrides.capabilities,
@@ -716,8 +789,7 @@ export function buildCatalogs(source) {
 					'structuredOutputs',
 					'systemMessages',
 					'toolChoice',
-					'urlContext',
-					'pdfInput'
+					'urlContext'
 				];
 				for (const capability of capabilityNames) {
 					if (typeof capabilities[capability] !== 'boolean') capabilities[capability] = false;
@@ -745,6 +817,7 @@ export function buildCatalogs(source) {
 						providerId: route.providerId,
 						endpoint: route.endpoint,
 						interfaces: [...route.interfaces],
+						fileInputs: route.fileInputs,
 						capabilities,
 						dataHandling,
 						pricing
@@ -758,7 +831,10 @@ export function buildCatalogs(source) {
 	const publicDeployments = {};
 	const baseByModelRoute = new Map();
 	const deploymentsByModelRoute = new Map();
+	const retiredDeployment = (deployment) =>
+		deployment.retired === true || graph.models[deployment.modelId]?.retired === true;
 	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
+		if (retiredDeployment(deployment)) continue;
 		for (const routeId of deployment.routeIds) {
 			const key = `${deployment.modelId}\0${routeId}`;
 			const deploymentIds = deploymentsByModelRoute.get(key) ?? [];
@@ -805,10 +881,11 @@ export function buildCatalogs(source) {
 		}
 	}
 
-	function addSelector(selector, kind, id) {
+	function addSelector(selector, kind, id, retired = false) {
 		if (selector.trim() !== selector || selector.includes('/')) {
 			throw new Error(`${kind} ${id}: selector ${selector} is not canonical`);
 		}
+		if (retired) return;
 		const owner = selectors.get(selector);
 		if (owner) throw new Error(`${selector} selects both ${owner} and ${kind}:${id}`);
 		selectors.set(selector, `${kind}:${id}`);
@@ -828,14 +905,14 @@ export function buildCatalogs(source) {
 	for (const [modelId, model] of Object.entries(graph.models)) {
 		validateAliasCount(model.aliases, 'model', modelId);
 		requireNode(graph.authors, model.authorId, modelId);
-		if (!tokenizerFamilies.has(model.tokenizerFamily)) {
-			throw new Error(`${modelId}: tokenizerFamily must select a supported local estimator`);
-		}
 		const parents = model.derivedFrom ?? [];
 		if (new Set(parents).size !== parents.length) {
 			throw new Error(`${modelId}: derivedFrom must not repeat`);
 		}
 		for (const parentId of parents) requireNode(graph.models, parentId, modelId);
+		if (model.maxInputTokens > model.contextWindowTokens) {
+			throw new Error(`${modelId}: input limit must fit inside the context window`);
+		}
 		if (model.maxOutputTokens > model.contextWindowTokens) {
 			throw new Error(`${modelId}: output limit must fit inside the context window`);
 		}
@@ -891,13 +968,14 @@ export function buildCatalogs(source) {
 		) {
 			throw new Error(`${modelId}: invalid manual reasoning token bounds`);
 		}
-		addSelector(modelId, 'model', modelId);
-		for (const alias of model.aliases) addSelector(alias, 'model', modelId);
+		addSelector(modelId, 'model', modelId, model.retired);
+		for (const alias of model.aliases) addSelector(alias, 'model', modelId, model.retired);
 	}
 	validateModelDerivation(graph.models);
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
+		const retired = retiredDeployment(deployment);
 		validateAliasCount(deployment.aliases ?? [], 'deployment', deploymentId);
 		if (new Set(deployment.routeIds).size !== deployment.routeIds.length) {
 			throw new Error(`${deploymentId}: routeIds must not repeat`);
@@ -1034,7 +1112,7 @@ export function buildCatalogs(source) {
 		) {
 			throw new Error(`${deploymentId}: fixed reasoning mode requires an OpenAI Responses model`);
 		}
-		const { contextWindowTokens, maxOutputTokens } = effectiveTokenLimits(
+		const { contextWindowTokens, maxInputTokens, maxOutputTokens } = effectiveTokenLimits(
 			deploymentId,
 			model,
 			deployment
@@ -1106,20 +1184,22 @@ export function buildCatalogs(source) {
 			throw new Error(`${deploymentId}: split deployments whose routes have different bases`);
 		}
 
-		addSelector(deploymentId, 'deployment', deploymentId);
+		addSelector(deploymentId, 'deployment', deploymentId, retired);
 		for (const alias of deployment.aliases ?? []) {
 			if (alias === deployment.modelId) {
 				throw new Error(`${deploymentId}: deployment alias duplicates model slug ${alias}`);
 			}
-			addSelector(alias, 'deployment', deploymentId);
+			addSelector(alias, 'deployment', deploymentId, retired);
 		}
 
 		const common = {
 			aliases: [...(deployment.aliases ?? [])],
 			capabilities,
 			contextWindowTokens,
+			maxInputTokens,
 			deprecationDate,
 			inputModalities: [...inputModalities],
+			fileInputsByRoute: effectiveFileInputsByRoute(graph, deploymentId, deployment),
 			maxOutputTokens,
 			modelId: deployment.modelId,
 			outputModalities: [...outputModalities],
@@ -1134,6 +1214,7 @@ export function buildCatalogs(source) {
 			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};
 		publicDeployments[deploymentId] = {
+			...(retired ? { retired: true } : {}),
 			aliases: [...(deployment.aliases ?? [])],
 			modelId: deployment.modelId,
 			pricing: structuredClone(deployment.pricing),
@@ -1142,19 +1223,33 @@ export function buildCatalogs(source) {
 			...(deployment.overrides ? { overrides: structuredClone(deployment.overrides) } : {}),
 			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
 		};
-		runtimeDeployments[deploymentId] = common;
+		if (!retired) runtimeDeployments[deploymentId] = common;
 
 		requireNode(graph.providers, providerId, deploymentId);
 	}
 
+	const partition = partitionPublicGraph({
+		...sourceGraph,
+		models: graph.models,
+		deployments: publicDeployments
+	});
+	const archive = { schema: 'stogas.catalog.archive.v1', graph: partition.retired };
+	const archiveJson = canonicalJson(archive);
+	assertSize('catalog archive', archiveJson, publicSizeLimit);
+	const archiveReference = {
+		sha256: createHash('sha256').update(archiveJson).digest('hex'),
+		size_bytes: Buffer.byteLength(archiveJson)
+	};
 	const runtimeRoutes = Object.fromEntries(
-		Object.entries(graph.routes).map(([id, route]) => [
-			id,
-			{
-				providerId: route.providerId,
-				interfaces: route.interfaces
-			}
-		])
+		Object.entries(graph.routes)
+			.filter(([id]) => Object.hasOwn(partition.active.routes, id))
+			.map(([id, route]) => [
+				id,
+				{
+					providerId: route.providerId,
+					interfaces: route.interfaces
+				}
+			])
 	);
 	const runtimeModelIds = new Set(
 		Object.values(runtimeDeployments).map((deployment) => deployment.modelId)
@@ -1166,7 +1261,6 @@ export function buildCatalogs(source) {
 				id,
 				{
 					authorId: model.authorId,
-					tokenizerFamily: model.tokenizerFamily,
 					aliases: model.aliases,
 					maxOutputTokens: model.maxOutputTokens,
 					name: model.name,
@@ -1178,13 +1272,13 @@ export function buildCatalogs(source) {
 			])
 	);
 	const runtimeAuthors = Object.fromEntries(
-		Object.entries(graph.authors).map(([id, author]) => [
+		Object.entries(partition.active.authors).map(([id, author]) => [
 			id,
 			{ aliases: author.aliases, name: author.name }
 		])
 	);
 	const runtimeProviders = Object.fromEntries(
-		Object.entries(graph.providers).map(([id, provider]) => [
+		Object.entries(partition.active.providers).map(([id, provider]) => [
 			id,
 			{
 				aliases: provider.aliases,
@@ -1195,6 +1289,7 @@ export function buildCatalogs(source) {
 	);
 
 	const catalogs = {
+		archive,
 		runtime: {
 			schema: 'stogas.catalog.runtime.v3',
 			graph: {
@@ -1207,13 +1302,8 @@ export function buildCatalogs(source) {
 		},
 		public: {
 			schema: 'stogas.catalog.public.v3',
-			graph: {
-				authors: graph.authors,
-				models: graph.models,
-				providers: sourceGraph.providers,
-				routes: sourceGraph.routes,
-				deployments: publicDeployments
-			}
+			archive: archiveReference,
+			graph: partition.active
 		}
 	};
 	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(
@@ -1228,8 +1318,20 @@ export function buildCatalogs(source) {
 }
 
 function writeIfChanged(path, content) {
-	if (existsSync(path) && readFileSync(path, 'utf8') === content) return;
-	writeFileSync(path, content);
+	if (existsSync(path)) {
+		const stats = lstatSync(path);
+		if (!stats.isFile() || stats.isSymbolicLink())
+			throw new Error(`${path} must be a regular artifact file`);
+		if (readFileSync(path, 'utf8') === content) return;
+	}
+	const directory = mkdtempSync(`${path}.tmp-`);
+	try {
+		const temporary = join(directory, 'artifact');
+		writeFileSync(temporary, content);
+		renameSync(temporary, path);
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
 }
 
 function assertSize(name, content, limit) {
@@ -1255,10 +1357,15 @@ export async function main(argv = process.argv.slice(2)) {
 		return;
 	}
 
-	if (existsSync(generatedRoot)) {
-		const stats = lstatSync(generatedRoot);
+	for (const directory of [
+		generatedRoot,
+		join(generatedRoot, 'blobs'),
+		join(generatedRoot, 'blobs', 'sha256')
+	]) {
+		if (!existsSync(directory)) continue;
+		const stats = lstatSync(directory);
 		if (stats.isSymbolicLink() || !stats.isDirectory()) {
-			throw new Error('generated must be a regular directory');
+			throw new Error(`${relative(repositoryRoot, directory)} must be a regular directory`);
 		}
 	}
 
@@ -1292,9 +1399,16 @@ export async function main(argv = process.argv.slice(2)) {
 			'json'
 		]);
 		const catalogs = buildCatalogs(JSON.parse(exported));
-		const publicJson = stableJson(catalogs.public);
+		const archiveJson = canonicalJson(catalogs.archive);
+		const archivePath = join(
+			generatedRoot,
+			'blobs',
+			'sha256',
+			`${catalogs.public.archive.sha256}.json`
+		);
+		const publicJson = canonicalJson(catalogs.public);
 		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
-		const runtimeJson = stableJson(catalogs.runtime);
+		const runtimeJson = canonicalJson(catalogs.runtime);
 		assertSize('runtime catalog', runtimeJson, runtimeSizeLimit);
 		assertSize('public catalog', publicJson, publicSizeLimit);
 
@@ -1302,13 +1416,27 @@ export async function main(argv = process.argv.slice(2)) {
 			if (args.has('--check')) {
 				const currentRuntime = existsSync(runtimePath) ? readFileSync(runtimePath, 'utf8') : null;
 				const currentPublic = existsSync(publicPath) ? readFileSync(publicPath, 'utf8') : null;
-				if (currentRuntime !== runtimeJson || currentPublic !== publicJson) {
+				const currentArchive = existsSync(archivePath) ? readFileSync(archivePath, 'utf8') : null;
+				if (
+					currentRuntime !== runtimeJson ||
+					currentPublic !== publicJson ||
+					currentArchive !== archiveJson ||
+					readdirSync(join(generatedRoot, 'blobs', 'sha256')).some(
+						(entry) => join(generatedRoot, 'blobs', 'sha256', entry) !== archivePath
+					)
+				) {
 					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
 				}
 			} else {
 				mkdirSync(generatedRoot, { recursive: true });
 				writeIfChanged(runtimePath, runtimeJson);
 				writeIfChanged(publicPath, publicJson);
+				mkdirSync(join(generatedRoot, 'blobs', 'sha256'), { recursive: true });
+				writeIfChanged(archivePath, archiveJson);
+				for (const entry of readdirSync(join(generatedRoot, 'blobs', 'sha256'))) {
+					const path = join(generatedRoot, 'blobs', 'sha256', entry);
+					if (path !== archivePath) rmSync(path);
+				}
 			}
 		}
 	} finally {

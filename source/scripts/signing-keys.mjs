@@ -1,5 +1,6 @@
 import { createPublicKey, verify } from 'node:crypto';
-import { canonicalJson } from './canonical-json.mjs';
+import { canonicalJsonValue } from './canonical-json.mjs';
+import { parseCatalogReleaseManifest } from './release-format.mjs';
 
 export function catalogSigningKeys(environment, encodedKeys) {
 	if (environment !== 'staging' && environment !== 'prod') {
@@ -13,7 +14,7 @@ export function catalogSigningKeys(environment, encodedKeys) {
 	if (!keys || typeof keys !== 'object' || Array.isArray(keys) || Object.keys(keys).length !== 1)
 		throw new Error('Exactly one current catalog signing key is required.');
 	for (const [id, value] of Object.entries(keys)) {
-		if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || typeof value !== 'string')
+		if (!/^[A-Za-z0-9._-]{1,128}$/.test(id) || typeof value !== 'string')
 			throw new Error('Invalid current catalog signing key.');
 		const bytes = Buffer.from(value, 'base64');
 		const key = createPublicKey({ key: bytes, format: 'der', type: 'spki' });
@@ -28,9 +29,10 @@ export function catalogSigningKeys(environment, encodedKeys) {
 }
 
 export function verifyCatalogReleaseSignature(envelope, keys) {
-	if (envelope?.schema !== 'stogas.release-evidence.v1') {
+	if (envelope?.document?.schema !== 'stogas.catalog.release.v1') {
 		throw new Error('Catalog release evidence schema is unsupported.');
 	}
+	parseCatalogReleaseManifest(envelope.document);
 	try {
 		const encodedKey = keys[envelope.signature.key_id];
 		if (
@@ -52,7 +54,7 @@ export function verifyCatalogReleaseSignature(envelope, keys) {
 			signature.toString('base64url') !== envelope.signature.signature ||
 			!verify(
 				null,
-				Buffer.from(`stogas signed document v1\n${canonicalJson(envelope.manifest)}`),
+				Buffer.from(`stogas signed document v1\n${canonicalJsonValue(envelope.document)}`),
 				key,
 				signature
 			)

@@ -1,0 +1,4 @@
+groups:
+  authorId: minimax
+  name: 'MiniMax M3'
+  parentIds: [minimax-minimax]

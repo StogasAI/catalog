@@ -269,39 +269,39 @@ exit 1
 
 	for (const fixture of [
 		{
-			name: 'missing model tokenizer family',
-			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
-			from: '  tokenizerFamily: openai\n',
-			to: '',
-			error: 'tokenizerFamily'
+			name: 'unknown native file property',
+			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
+			from: '  fileInputs:',
+			to: '  fileInputs:\n    unknown: true',
+			error: 'unknown'
 		},
 		{
-			name: 'unknown model tokenizer family',
-			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
-			from: '  tokenizerFamily: openai',
-			to: '  tokenizerFamily: automatic',
-			error: 'tokenizerFamily'
+			name: 'provider-owned native file formats',
+			path: 'source/data/providers/openai/openai.yaml',
+			from: '  name: OpenAI',
+			to: '  name: OpenAI\n  fileInputs: {extensions: [], mediaTypes: []}',
+			error: 'fileInputs'
 		},
 		{
-			name: 'deployment tokenizer override',
-			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
-			from: '  overrides:\n',
-			to: '  overrides:\n    tokenizerFamily: qwen3\n',
-			error: 'tokenizerFamily'
+			name: 'native file formats below route overrides',
+			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
+			from: '  providerId: openai',
+			to: '  providerId: openai\n  overrides:\n    fileInputs: {extensions: [], mediaTypes: []}',
+			error: 'fileInputs'
 		},
 		{
-			name: 'empty model family',
-			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
-			from: '  family: gpt-oss',
-			to: "  family: ''",
-			error: 'family'
+			name: 'empty group name',
+			path: 'source/data/authors/openai/groups/openai-gpt-oss.yaml',
+			from: "  name: 'gpt-oss'",
+			to: "  name: ''",
+			error: 'name'
 		},
 		{
-			name: 'empty model series',
-			path: 'source/data/authors/openai/models/gpt-oss-120b.yaml',
-			from: '  series: gpt-oss',
-			to: "  series: ''",
-			error: 'series'
+			name: 'group execution facts',
+			path: 'source/data/authors/openai/groups/openai-gpt-oss.yaml',
+			from: '  authorId: openai',
+			to: '  authorId: openai\n  dataHandling: {zeroDataRetention: true}',
+			error: 'dataHandling'
 		},
 		{
 			name: 'legacy provider moderation field',

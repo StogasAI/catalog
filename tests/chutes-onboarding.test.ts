@@ -10,7 +10,6 @@ const capabilities = {
 	cancellation: true,
 	functionCalling: true,
 	parallelFunctionCalling: false,
-	pdfInput: false,
 	implicitPromptCaching: true,
 	explicitPromptCaching: false,
 	streaming: true,
@@ -344,6 +343,7 @@ describe('Chutes provider onboarding contract', () => {
 				{
 					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					id: 'chutes-chat-completions',
+					fileInputs: { extensions: [], mediaTypes: [] },
 					interfaces: ['chat_completions']
 				}
 			]

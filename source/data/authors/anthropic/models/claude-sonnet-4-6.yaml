@@ -1,10 +1,8 @@
 models:
   authorId: anthropic
-  tokenizerFamily: anthropic
   name: Claude Sonnet 4.6
   aliases: [claude-sonnet-4.6]
-  family: Claude
-  series: Claude Sonnet
+  groupIds: [anthropic-claude-sonnet]
   contextWindowTokens: 1000000
   maxOutputTokens: 128000
   inputModalities: [text, image]

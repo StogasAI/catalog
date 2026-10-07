@@ -53,7 +53,6 @@ package catalog
 	systemMessages?:          bool
 	toolChoice?:              bool
 	urlContext?:              bool
-	pdfInput?:                bool
 })
 
 #DeploymentRouteOverride: close({
@@ -61,6 +60,7 @@ package catalog
 })
 
 #Deployment: close({
+	retired?: true
 	modelId: #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
@@ -68,10 +68,12 @@ package catalog
 	weightPrecision?: #WeightPrecision
 	overrides?: close({
 		contextWindowTokens?: int & >0
+		maxInputTokens?:      int & >0
 		maxOutputTokens?:     int & >0
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
 		capabilities?:          #DeploymentCapabilityOverrides
+		fileInputs?:            #FileInputs
 		reasoning?:          #Reasoning
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens

@@ -4,6 +4,8 @@
 	"private": true,
 	"type": "module",
 	"exports": {
+		"./archive": "./source/scripts/catalog-archive.mjs",
+		"./groups": "./source/scripts/model-groups.mjs",
 		"./viewer": "./editor/src/catalog.ts",
 		"./viewer/types": "./editor/src/types.ts",
 		"./public": "./generated/catalog.public.json"

@@ -1,9 +1,7 @@
 models:
   authorId: z-ai
-  tokenizerFamily: glm
   name: GLM-5.2
-  family: GLM
-  series: GLM-5
+  groupIds: [z-ai-glm-5]
   flavors: [instruct]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576

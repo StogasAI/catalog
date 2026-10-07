@@ -1,9 +1,7 @@
 models:
   authorId: mistral-ai
-  tokenizerFamily: tekken
   name: Mistral NeMo Instruct 2407
-  family: Mistral NeMo
-  series: Mistral NeMo
+  groupIds: [mistral-ai-mistral-nemo]
   flavors: [instruct]
   contextWindowTokens: 131072
   maxOutputTokens: 131072

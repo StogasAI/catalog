@@ -1,9 +1,7 @@
 models:
   authorId: openai
-  tokenizerFamily: openai
   name: gpt-oss-120b
-  family: gpt-oss
-  series: gpt-oss
+  groupIds: [openai-gpt-oss]
   flavors: [instruct]
   contextWindowTokens: 131072
   maxOutputTokens: 131072

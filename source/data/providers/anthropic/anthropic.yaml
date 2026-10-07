@@ -13,7 +13,6 @@ providers:
     systemMessages: true
     toolChoice: true
     urlContext: false
-    pdfInput: false
   dataHandling:
     processingLocation: global
     storageLocation: none

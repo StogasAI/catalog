@@ -1,9 +1,7 @@
 models:
   authorId: qwen
-  tokenizerFamily: qwen35
   name: Qwen3.5 397B A17B
-  family: Qwen
-  series: Qwen3.5
+  groupIds: [qwen-qwen3.5]
   flavors: [instruct]
   contextWindowTokens: 1010000
   maxOutputTokens: 1010000

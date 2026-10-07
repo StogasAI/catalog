@@ -1,15 +1,27 @@
 package catalog
 
 authors: [#Id]:     #Author
+groups: [#Id]:      #Group
 models: [#Id]:      #Model
 providers: [#Id]:   #Provider
 routes: [#Id]:      #Route
 deployments: [#Id]: #Deployment
 
 #Catalog: {
+	_groupRefs: {
+		for id, group in groups {
+			"\(id):author": authors[group.authorId]
+			for parentId in group.parentIds {
+				"\(id):parent:\(parentId)": groups[parentId]
+			}
+		}
+	}
 	_modelRefs: {
 		for id, model in models {
 			"\(id):author": authors[model.authorId]
+			for groupId in model.groupIds {
+				"\(id):group:\(groupId)": groups[groupId]
+			}
 			for parentId in model.derivedFrom {
 				"\(id):derivedFrom:\(parentId)": models[parentId]
 			}

@@ -1,10 +1,8 @@
 models:
   authorId: anthropic
-  tokenizerFamily: anthropic
   name: Claude Haiku 4.5
   aliases: [claude-haiku-4.5]
-  family: Claude
-  series: Claude Haiku
+  groupIds: [anthropic-claude-haiku]
   contextWindowTokens: 200000
   maxOutputTokens: 64000
   inputModalities: [text, image]

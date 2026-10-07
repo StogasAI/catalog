@@ -1,9 +1,7 @@
 models:
   authorId: moonshot-ai
-  tokenizerFamily: kimi
   name: Kimi K2.6
-  family: Kimi
-  series: Kimi K2
+  groupIds: [moonshot-ai-kimi-k2]
   flavors: [instruct]
   contextWindowTokens: 262144
   maxOutputTokens: 262144
