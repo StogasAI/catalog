@@ -19,7 +19,6 @@ package catalog
 	outputModalities: [#Modality, ...#Modality]
 	capabilities?: close({
 		streaming?:               bool
-		cancellation?:            bool
 		functionCalling?:         bool
 		parallelFunctionCalling?: bool
 		implicitPromptCaching?:   bool

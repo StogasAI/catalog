@@ -8,7 +8,6 @@ package catalog
 
 #RouteCapabilities: close({
 	streaming:               bool
-	cancellation:            bool
 	functionCalling:         bool
 	parallelFunctionCalling: bool
 	implicitPromptCaching:   bool
@@ -21,7 +20,6 @@ package catalog
 
 #RouteCapabilityOverrides: close({
 	streaming?:               bool
-	cancellation?:            bool
 	functionCalling?:         bool
 	parallelFunctionCalling?: bool
 	implicitPromptCaching?:   bool

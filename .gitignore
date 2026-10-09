@@ -1,6 +1,7 @@
 node_modules/
 editor/node_modules/
 editor/dist/
+test-results/
 source/.tmp-catalog-build/
 release/
 .DS_Store

@@ -3,7 +3,6 @@ providers:
   credentialModes: [managed, byok]
   capabilities:
     streaming: true
-    cancellation: true
     functionCalling: true
     parallelFunctionCalling: false
     implicitPromptCaching: true

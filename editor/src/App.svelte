@@ -6,14 +6,17 @@
 		MiniMap,
 		SvelteFlow,
 		type Edge,
-		type Node,
 		type NodeTypes
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import catalogJson from '../../generated/catalog.public.json';
 	import { mergeCatalogArchive } from '../../source/scripts/catalog-archive.mjs';
 	import CatalogNode from './CatalogNode.svelte';
+	import PanelResizer from './PanelResizer.svelte';
+	import SourceEditor from './SourceEditor.svelte';
+	import { setNodeSelection } from './node-selection';
+	import { isRecord, requestJson, REQUEST_TIMEOUT_MS } from './api';
 	import {
 		completeUnambiguousGraphSelection,
 		decorateFlow,
@@ -41,9 +44,9 @@
 	let includeRetired = $state(false);
 	let archiveStatus = $state('');
 	const catalog = $derived(includeRetired && archiveCatalog ? archiveCatalog : activeCatalog);
-	const MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024;
-	const REQUEST_TIMEOUT_MS = 30_000;
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
+	const compact = new MediaQuery('(max-width: 640px)');
+	setNodeSelection(selectGraphNode);
 	const nodeTypeOptions: NodeType[] = [
 		'author',
 		'group',
@@ -74,10 +77,10 @@
 	});
 	let inspectorWidth = $state(500);
 	let sources = $state<SourcePayload | null>(null);
-	let activePath = $state('');
-	let draft = $derived(sourceContent(activePath));
 	let sourceStatus = $state('');
 	let buildStatus = $state('');
+	let building = $state(false);
+	let buildFailed = $state(false);
 
 	const selected = $derived(parseNodeKey(selectedKey));
 	const graphIndex = $derived(indexGraphPaths(catalog));
@@ -105,48 +108,66 @@
 		effectiveDeploymentValue(catalog, contextDeploymentId, contextRouteId)
 	);
 	const effectiveJSON = $derived(effectiveValue ? JSON.stringify(effectiveValue, null, 2) : '');
+	const deploymentRoutes = $derived(catalog.graph.deployments[contextDeploymentId]?.routeIds);
 	const effectiveRouteRequired = $derived(
 		contextDeploymentId !== '' &&
 			!contextRouteId &&
-			Array.isArray(catalog.graph.deployments[contextDeploymentId]?.routeIds) &&
-			catalog.graph.deployments[contextDeploymentId].routeIds.length > 1
+			Array.isArray(deploymentRoutes) &&
+			deploymentRoutes.length > 1
 	);
 	const decoratedFlow = $derived(
 		decorateFlow(flow, selectedKey, selectedEdgeId, selectedGraphKeys, graphChains)
 	);
 	const filteredFlow = $derived(filterFlow(decoratedFlow, visibleNodeTypes, ''));
+	const editorNodes = $derived(
+		filteredFlow.nodes.map((node) => ({
+			...node,
+			ariaRole: 'group' as const,
+			data: {
+				...node.data,
+				current: node.id === selectedKey
+			}
+		}))
+	);
 	const visiblePageKey = $derived(filteredFlow.nodes.map((node) => node.id).join('|'));
 	const sourcePaths = $derived(sources?.nodeSources[selectedKey] ?? []);
 	const flowEvents = {
 		onedgeclick: selectEdge,
-		onnodeclick: selectNode,
 		onpaneclick: clearSelection
 	};
 
 	$effect(() => {
 		if (themeLoaded) return;
-		const stored = globalThis.localStorage?.getItem('catalog-editor-theme');
-		if (stored === 'dark' || stored === 'light') uiTheme = stored;
+		try {
+			const stored = localStorage.getItem('catalog-editor-theme');
+			if (stored === 'dark' || stored === 'light') uiTheme = stored;
+		} catch {
+			// Theme changes remain available when browser storage is disabled.
+		}
 		themeLoaded = true;
 	});
 
 	$effect(() => {
 		if (!themeLoaded) return;
-		globalThis.localStorage?.setItem('catalog-editor-theme', uiTheme);
+		document.documentElement.dataset.theme = uiTheme;
+		try {
+			localStorage.setItem('catalog-editor-theme', uiTheme);
+		} catch {
+			// Retain the current in-memory preference.
+		}
 	});
 
 	$effect(() => {
-		requestJson('api/catalog/sources')
+		const controller = new AbortController();
+		requestJson('api/catalog/sources', { signal: controller.signal })
 			.then((payload) => {
 				sources = parseSourcePayload(payload);
 			})
 			.catch((error) => {
-				sourceStatus = error instanceof Error ? error.message : String(error);
+				if (!controller.signal.aborted)
+					sourceStatus = error instanceof Error ? error.message : String(error);
 			});
-	});
-
-	$effect(() => {
-		if (!sourcePaths.includes(activePath)) activePath = sourcePaths[0] ?? '';
+		return () => controller.abort();
 	});
 
 	$effect(() => {
@@ -185,10 +206,6 @@
 		return () => controller.abort();
 	});
 
-	function selectNode(event: { node: Node }) {
-		selectGraphNode(event.node.id);
-	}
-
 	function selectChainNode(type: NodeType, id: string) {
 		const key = nodeKey(type, id);
 		if (selectedGraphKeys.includes(key)) {
@@ -202,8 +219,6 @@
 	function setCurrentKey(key: string) {
 		selectedKey = key;
 		selectedEdgeId = '';
-		sourceStatus = '';
-		buildStatus = '';
 	}
 
 	function replaceSelection(key: string) {
@@ -264,72 +279,25 @@
 	}
 
 	function syncGraphContext(keys: string[]) {
-		const parsed = keys.map(parseNodeKey).filter(Boolean);
+		const parsed = keys.map(parseNodeKey).filter((node) => node !== null);
 		contextDeploymentId = parsed.find((node) => node.type === 'deployment')?.id ?? '';
 		contextRouteId = parsed.find((node) => node.type === 'route')?.id ?? '';
 	}
 
-	function sourceContent(path: string) {
-		return sources?.files.find((file) => file.path === path)?.content ?? '';
-	}
-
 	async function buildCatalog() {
-		buildStatus = 'Building...';
+		if (building) return;
+		building = true;
+		buildFailed = false;
+		buildStatus = 'Building…';
 		try {
 			const payload = parseBuildResult(await requestJson('api/catalog/build', { method: 'POST' }));
 			buildStatus = payload.ok ? 'Build passed' : payload.output;
+			buildFailed = !payload.ok;
 		} catch (error) {
 			buildStatus = error instanceof Error ? error.message : String(error);
-		}
-	}
-
-	async function saveSource() {
-		if (!activePath) return;
-		const savedPath = activePath;
-		const savedContent = draft;
-		sourceStatus = 'Saving...';
-		try {
-			await requestJson('api/catalog/source', {
-				body: JSON.stringify({ path: savedPath, content: savedContent }),
-				headers: { 'content-type': 'application/json' },
-				method: 'PUT'
-			});
-			if (sources) {
-				sources = {
-					...sources,
-					files: sources.files.map((file) =>
-						file.path === savedPath ? { ...file, content: savedContent } : file
-					)
-				};
-			}
-			if (activePath === savedPath) sourceStatus = 'Saved';
-		} catch (error) {
-			sourceStatus = error instanceof Error ? error.message : String(error);
-		}
-	}
-
-	async function requestJson(input: string, init: RequestInit = {}): Promise<unknown> {
-		const response = await fetch(input, {
-			...init,
-			redirect: 'error',
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-		});
-		const text = await readBoundedResponseText(response, MAX_API_RESPONSE_BYTES);
-		if (!response.ok) {
-			let message = text;
-			try {
-				const payload: unknown = JSON.parse(text);
-				if (isRecord(payload) && typeof payload.error === 'string') message = payload.error;
-			} catch {
-				// Preserve the response text when the server did not return JSON.
-			}
-			throw new Error(message || `Request failed with HTTP ${response.status}`);
-		}
-		try {
-			const value: unknown = JSON.parse(text);
-			return value;
-		} catch {
-			throw new Error('Catalog editor API returned invalid JSON');
+			buildFailed = true;
+		} finally {
+			building = false;
 		}
 	}
 
@@ -363,10 +331,6 @@
 		return { ok: value.ok, output: value.output };
 	}
 
-	function isRecord(value: unknown): value is Record<string, unknown> {
-		return typeof value === 'object' && value !== null && !Array.isArray(value);
-	}
-
 	function attributeLabel(value: string) {
 		return value
 			.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -388,23 +352,6 @@
 			visible.push(node);
 		}
 		return visible;
-	}
-
-	function startResize(event: PointerEvent) {
-		event.preventDefault();
-		const startX = event.clientX;
-		const startWidth = inspectorWidth;
-		const move = (moveEvent: PointerEvent) => {
-			inspectorWidth = Math.max(360, Math.min(840, startWidth - (moveEvent.clientX - startX)));
-		};
-		const stop = () => {
-			window.removeEventListener('pointermove', move);
-			window.removeEventListener('pointerup', stop);
-			window.removeEventListener('pointercancel', stop);
-		};
-		window.addEventListener('pointermove', move);
-		window.addEventListener('pointerup', stop);
-		window.addEventListener('pointercancel', stop);
 	}
 </script>
 
@@ -432,8 +379,7 @@
 				<span data-type="deployment">deployment</span>
 			</div>
 			<div class="toolbar-actions">
-				{#if buildStatus}<p class="bar-status">{buildStatus}</p>{/if}
-				<div class="segmented theme-switch" aria-label="Theme">
+				<div class="segmented theme-switch" role="group" aria-label="Theme">
 					<button
 						type="button"
 						class:active={uiTheme === 'dark'}
@@ -447,20 +393,36 @@
 						onclick={() => setTheme('light')}>Light</button
 					>
 				</div>
-				<button type="button" onclick={buildCatalog}>Build</button>
+				<button type="button" onclick={buildCatalog} disabled={building} aria-busy={building}
+					>Build</button
+				>
 			</div>
 		</div>
 		<div class="graph-filters" aria-label="Graph filters">
-			<input
-				type="search"
-				name="catalog-search"
-				bind:value={nodeFilter}
-				oninput={() => (graphPageNumber = 0)}
-				placeholder="Search names, aliases, or IDs…"
-				aria-label="Search catalog"
-				autocomplete="off"
-				spellcheck={false}
-			/>
+			<div class="graph-search">
+				<input
+					type="search"
+					name="catalog-search"
+					bind:value={nodeFilter}
+					oninput={() => (graphPageNumber = 0)}
+					placeholder="Search names, aliases, or IDs…"
+					aria-label="Search catalog"
+					autocomplete="off"
+					spellcheck={false}
+				/>
+				<label class="node-picker">
+					Node on this page
+					<select
+						value={filteredFlow.nodes.some((node) => node.id === selectedKey) ? selectedKey : ''}
+						onchange={(event) => selectGraphNode(event.currentTarget.value)}
+					>
+						<option value="">Select a node</option>
+						{#each filteredFlow.nodes as node (node.id)}<option value={node.id}
+								>{node.data.type} · {node.data.label}</option
+							>{/each}
+					</select>
+				</label>
+			</div>
 			<div class="filter-chips" aria-label="Node type filters">
 				<label>
 					<input
@@ -489,23 +451,33 @@
 				{/each}
 			</div>
 		</div>
-		{#if includeRetired && archiveStatus}<p class="bar-status" role="status">
-				{archiveStatus}
-			</p>{/if}
+		<div class="graph-status">
+			{#if buildStatus}<p
+					class="status"
+					class:error={buildFailed}
+					role={buildFailed ? 'alert' : 'status'}
+				>
+					{buildStatus}
+				</p>{/if}
+			{#if includeRetired && archiveStatus}<p class="status" role="status">
+					{archiveStatus}
+				</p>{/if}
+		</div>
 		<div class="flow">
 			{#if !graphPage.total}
 				<p class="graph-empty" role="status">No matching catalog paths.</p>
 			{:else}
 				{#key visiblePageKey}
 					<SvelteFlow
-						nodes={filteredFlow.nodes}
+						nodes={editorNodes}
 						edges={filteredFlow.edges}
 						{nodeTypes}
 						fitView
 						fitViewOptions={{ padding: 0.13 }}
-						minZoom={0.2}
+						minZoom={24 / 40}
 						maxZoom={1.8}
 						nodesDraggable={false}
+						nodesFocusable={false}
 						nodesConnectable={false}
 						elementsSelectable={false}
 						onlyRenderVisibleElements
@@ -513,7 +485,13 @@
 						{...flowEvents}
 					>
 						<Controls />
-						<MiniMap pannable zoomable nodeStrokeWidth={3} />
+						<MiniMap
+							pannable
+							zoomable
+							nodeStrokeWidth={3}
+							width={compact.current ? 100 : 200}
+							height={compact.current ? 75 : 150}
+						/>
 						<Background variant={BackgroundVariant.Lines} />
 					</SvelteFlow>
 				{/key}
@@ -540,14 +518,9 @@
 		</nav>
 	</section>
 
-	<button
-		class="splitter"
-		type="button"
-		aria-label="Resize details panel"
-		onpointerdown={startResize}
-	></button>
+	<PanelResizer bind:value={inspectorWidth} />
 
-	<aside class="inspector" aria-label="Selected node details">
+	<aside id="catalog-inspector" class="inspector" aria-label="Selected node details">
 		<header class="inspector-head">
 			<div>
 				<span>{selected ? nodeTypeLabel(selected.type) : 'node'}</span>
@@ -600,29 +573,6 @@
 			</section>
 		{/if}
 
-		<section class="source-card" aria-label="Raw source file">
-			<div class="source-head">
-				<div>
-					<span>Raw file</span>
-					<strong>{activePath ? 'Source' : 'No source file'}</strong>
-				</div>
-				<div class="source-actions">
-					<button type="button" onclick={saveSource} disabled={!activePath}>Save</button>
-				</div>
-			</div>
-			{#if sourcePaths.length > 1}
-				<select bind:value={activePath} aria-label="Raw source file">
-					{#each sourcePaths as path (path)}
-						<option value={path}>{path}</option>
-					{/each}
-				</select>
-			{/if}
-			{#if activePath}
-				<textarea bind:value={draft} spellcheck="false" aria-label="Raw catalog source"></textarea>
-			{:else}
-				<p class="empty">Select a graph node with a source file.</p>
-			{/if}
-			{#if sourceStatus}<p class="status">{sourceStatus}</p>{/if}
-		</section>
+		<SourceEditor {sources} paths={sourcePaths} loadError={sourceStatus} />
 	</aside>
 </main>

@@ -4,7 +4,6 @@ providers:
   headquarteredCountry: US
   capabilities:
     streaming: true
-    cancellation: true
     functionCalling: true
     parallelFunctionCalling: true
     implicitPromptCaching: false

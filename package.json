@@ -24,17 +24,20 @@
 	"scripts": {
 		"build": "node source/scripts/build.mjs",
 		"build:editor": "bun run --cwd editor build",
-		"check": "bun run format:check && bun run typecheck && bun run build --check && bun test",
+		"check": "bun run format:check && bun run typecheck && bun run build --check && bun run test",
 		"clean": "node source/scripts/build.mjs --clean",
 		"create-release": "node source/scripts/create-release.mjs",
 		"editor": "bun run --cwd editor dev",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"publish-release": "node source/scripts/publish-release.mjs",
-		"test": "bun test",
+		"test": "bun test ./tests",
+		"test:browser": "playwright test --config editor/browser/playwright.config.ts",
 		"typecheck": "bun run --cwd editor typecheck"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "4.13.0",
+		"@playwright/test": "1.62.1",
 		"prettier": "3.9.6",
 		"prettier-plugin-svelte": "4.1.1",
 		"typescript": "6.0.3"

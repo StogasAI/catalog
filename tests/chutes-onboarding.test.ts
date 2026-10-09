@@ -7,7 +7,6 @@ import {
 } from './provider-onboarding';
 
 const capabilities = {
-	cancellation: true,
 	functionCalling: true,
 	parallelFunctionCalling: false,
 	implicitPromptCaching: true,

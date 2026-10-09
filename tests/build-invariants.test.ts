@@ -10,7 +10,6 @@ type RejectionCase = readonly [name: string, mutate: Mutator, message: string | 
 
 const capabilities = {
 	streaming: true,
-	cancellation: true,
 	functionCalling: true,
 	parallelFunctionCalling: true,
 	implicitPromptCaching: true,

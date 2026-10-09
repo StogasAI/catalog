@@ -781,7 +781,6 @@ export function buildCatalogs(source) {
 				const capabilities = mergeFacts(provider.capabilities, overrides.capabilities ?? {});
 				const capabilityNames = [
 					'streaming',
-					'cancellation',
 					'functionCalling',
 					'parallelFunctionCalling',
 					'implicitPromptCaching',

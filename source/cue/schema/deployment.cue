@@ -44,7 +44,6 @@ package catalog
 
 #DeploymentCapabilityOverrides: close({
 	streaming?:               bool
-	cancellation?:            bool
 	functionCalling?:         bool
 	parallelFunctionCalling?: bool
 	implicitPromptCaching?:   bool
