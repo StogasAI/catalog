@@ -248,6 +248,7 @@ describe('effective catalog facts', () => {
 		expect(completeUnambiguousGraphSelection(chains, [deployment, route])).toEqual([
 			'author:openai',
 			'group:openai-gpt',
+			'group:openai-gpt-5',
 			'group:openai-gpt-5.6',
 			model,
 			deployment,
@@ -257,6 +258,7 @@ describe('effective catalog facts', () => {
 		expect(completeUnambiguousGraphSelection(chains, [model])).toEqual([
 			'author:openai',
 			'group:openai-gpt',
+			'group:openai-gpt-5',
 			'group:openai-gpt-5.6',
 			model
 		]);
@@ -352,6 +354,7 @@ describe('effective catalog facts', () => {
 		expect(lineageForSelection(catalog, 'model:gpt-5.6-sol', {})).toMatchObject([
 			{ type: 'author', id: 'openai' },
 			{ type: 'group', id: 'openai-gpt' },
+			{ type: 'group', id: 'openai-gpt-5' },
 			{ type: 'group', id: 'openai-gpt-5.6' },
 			{ type: 'model', id: 'gpt-5.6-sol' }
 		]);

@@ -3,7 +3,6 @@ import publicCatalog from '../generated/catalog.public.json';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 
 type AzureTarget = {
-	aliases?: string[];
 	id: string;
 	modelId: string;
 	routeIds: string[];
@@ -55,7 +54,6 @@ function gptTargets(tier: 'luna' | 'sol' | 'terra'): AzureTarget[] {
 	if (tier !== 'luna') {
 		targets.push(
 			{
-				aliases: [`${base}-priority`],
 				id: `${base}-fast`,
 				modelId,
 				routeIds: ['azure-chat-completions', 'azure-responses'],
@@ -69,7 +67,6 @@ function gptTargets(tier: 'luna' | 'sol' | 'terra'): AzureTarget[] {
 				}
 			},
 			{
-				aliases: [`${base}-pro-priority`],
 				id: `${base}-pro-fast`,
 				modelId,
 				routeIds: ['azure-responses'],
@@ -89,8 +86,14 @@ function gptTargets(tier: 'luna' | 'sol' | 'terra'): AzureTarget[] {
 }
 
 const otherTargets: AzureTarget[] = [
-	['azure-claude-fable-5', 'claude-fable-5', '1', 'anthropic', 'global_standard'],
-	['azure-claude-opus-4-7', 'claude-opus-4-7', '1', 'anthropic', 'global_standard'],
+	['azure-claude-fable-5-anthropic-hosted', 'claude-fable-5', '1', 'anthropic', 'global_standard'],
+	[
+		'azure-claude-opus-4-7-anthropic-hosted',
+		'claude-opus-4-7',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
 	['azure-claude-opus-4-8', 'claude-opus-4-8', '2', 'azure', 'global_standard'],
 	[
 		'azure-claude-opus-4-8-anthropic-hosted',
@@ -103,7 +106,13 @@ const otherTargets: AzureTarget[] = [
 	['azure-claude-opus-5', 'claude-opus-5', '2', 'azure', 'global_standard'],
 	['azure-claude-opus-5-anthropic-hosted', 'claude-opus-5', '1', 'anthropic', 'global_standard'],
 	['azure-claude-opus-5-us', 'claude-opus-5', '2', 'azure', 'data_zone_standard_us'],
-	['azure-claude-sonnet-4-6', 'claude-sonnet-4-6', '1', 'anthropic', 'global_standard'],
+	[
+		'azure-claude-sonnet-4-6-anthropic-hosted',
+		'claude-sonnet-4-6',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
 	['azure-claude-sonnet-5', 'claude-sonnet-5', '2', 'azure', 'global_standard'],
 	[
 		'azure-claude-sonnet-5-anthropic-hosted',
@@ -164,7 +173,7 @@ otherTargets.push(
 		}
 	})),
 	{
-		id: 'azure-deepseek-v4-pro-fireworks',
+		id: 'azure-deepseek-v4-pro-fireworks-hosted-us',
 		modelId: 'deepseek-v4-pro',
 		routeIds: ['azure-chat-completions'],
 		upstream: {
@@ -272,12 +281,9 @@ describe('Azure provider onboarding contract', () => {
 			...gptTargets('sol'),
 			...gptTargets('terra'),
 			...otherTargets
-		]
-			.map((target) => ({ ...target, aliases: target.aliases ?? [] }))
-			.sort((left, right) => left.id.localeCompare(right.id));
+		].sort((left, right) => left.id.localeCompare(right.id));
 		const actual = azureDeployments()
 			.map(([id, deployment]) => ({
-				aliases: deployment.aliases,
 				id,
 				modelId: deployment.modelId,
 				routeIds: [...deployment.routeIds].sort(),
@@ -370,7 +376,10 @@ describe('Azure provider onboarding contract', () => {
 			expect(deployment.upstream).not.toHaveProperty('speed');
 			expect(deployment.upstream).not.toHaveProperty('serviceTier');
 		}
-		expect(runtimeCatalog.graph.deployments['azure-claude-sonnet-4-6'].reasoningMaxTokens).toEqual({
+		expect(
+			runtimeCatalog.graph.deployments['azure-claude-sonnet-4-6-anthropic-hosted']
+				.reasoningMaxTokens
+		).toEqual({
 			minimum: 1024,
 			maximum: 127_999
 		});
@@ -383,7 +392,7 @@ describe('Azure provider onboarding contract', () => {
 			'azure-deepseek-v4-flash-0423-eu': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-flash-0423-us': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-pro': ['1.74', '0.145', '3.48'],
-			'azure-deepseek-v4-pro-fireworks': ['1.925', '0.165', '3.828'],
+			'azure-deepseek-v4-pro-fireworks-hosted-us': ['1.925', '0.165', '3.828'],
 			'azure-deepseek-v4-pro-us': ['1.91', '0.16', '3.83'],
 			'azure-glm-5.2': ['1.54', '0.15', '4.84'],
 			'azure-minimax-m3': ['0.33', '0.066', '1.32']

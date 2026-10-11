@@ -67,7 +67,7 @@ describe('compiled catalog v3', () => {
 			'azure-deepseek-v3.2': 'DeepSeek-V3.2',
 			'azure-deepseek-v4-flash-0423-eu': 'DeepSeek-V4-Flash',
 			'azure-deepseek-v4-pro': 'DeepSeek-V4-Pro',
-			'azure-deepseek-v4-pro-fireworks': 'FW-DeepSeek-V4-Pro',
+			'azure-deepseek-v4-pro-fireworks-hosted-us': 'FW-DeepSeek-V4-Pro',
 			'azure-glm-5.2': 'FW-GLM-5.2',
 			'azure-gpt-5.6-luna-instant': 'gpt-5.6-luna',
 			'azure-gpt-5.6-sol-fast': 'gpt-5.6-sol',
@@ -519,22 +519,6 @@ describe('compiled catalog v3', () => {
 				upstream: { serviceTier: 'priority' }
 			});
 		}
-		for (const retiredId of [
-			'openai-gpt-5.5-2026-04-23-priority',
-			'openai-gpt-5.6-luna-priority',
-			'openai-gpt-5.6-sol-priority',
-			'openai-gpt-5.6-terra-priority'
-		]) {
-			expect(Object.keys(deployments)).not.toContain(retiredId);
-		}
-		for (const [fastId, priorityAlias] of [
-			['openai-gpt-5.5-2026-04-23-fast', 'gpt-5.5-priority'],
-			['openai-gpt-5.6-luna-fast', 'gpt-5.6-luna-priority'],
-			['openai-gpt-5.6-sol-fast', 'gpt-5.6-priority'],
-			['openai-gpt-5.6-terra-fast', 'gpt-5.6-terra-priority']
-		] as const) {
-			expect(deployments[fastId].aliases).toContain(priorityAlias);
-		}
 
 		expect(deployments['openai-gpt-5.6-luna'].pricing).toMatchObject({
 			input_tokens: {
@@ -708,28 +692,18 @@ describe('compiled catalog v3', () => {
 		expect(deployments['openai-gpt-5.6-terra-fast'].maxInputTokens).toBe(922_000);
 	});
 
-	test('publishes every GPT-5.6 Pro service tier as a Responses-only selector', () => {
+	test('publishes every GPT-5.6 Pro service tier as a Responses-only deployment', () => {
 		const deployments = runtimeCatalog.graph.deployments;
-		for (const [modelTier, baseAliases] of [
-			['sol', ['gpt-5.6-pro', 'gpt-5.6-sol-pro']],
-			['terra', ['gpt-5.6-terra-pro']],
-			['luna', ['gpt-5.6-luna-pro']]
-		] as const) {
-			for (const [selectorSuffix, peerSuffix, serviceTier] of [
-				['', '', 'default'],
-				['-flex', '-flex', 'flex'],
-				['-fast', '-fast', 'priority']
+		for (const modelTier of ['sol', 'terra', 'luna'] as const) {
+			for (const [suffix, serviceTier] of [
+				['', 'default'],
+				['-flex', 'flex'],
+				['-fast', 'priority']
 			] as const) {
-				const deploymentId = `openai-gpt-5.6-${modelTier}-pro${selectorSuffix}`;
-				const peer = deployments[`openai-gpt-5.6-${modelTier}${peerSuffix}`];
-				const aliases = baseAliases.flatMap((alias) =>
-					selectorSuffix === '-fast'
-						? [`${alias}-fast`, `${alias}-priority`]
-						: [`${alias}${selectorSuffix}`]
-				);
+				const deploymentId = `openai-gpt-5.6-${modelTier}-pro${suffix}`;
+				const peer = deployments[`openai-gpt-5.6-${modelTier}${suffix}`];
 				const pro = deployments[deploymentId];
 				expect(pro).toMatchObject({
-					aliases,
 					modelId: `gpt-5.6-${modelTier}`,
 					routeIds: ['openai-responses'],
 					upstream: {

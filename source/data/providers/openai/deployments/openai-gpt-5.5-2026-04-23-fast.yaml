@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-5.5-2026-04-23
   routeIds: [openai-chat-completions, openai-responses]
-  aliases: [gpt-5.5-priority]
   upstream:
     model: gpt-5.5-2026-04-23
     serviceTier: priority

@@ -13,7 +13,7 @@ deployments:
     dataHandling:
       processingLocation: europe
       storageLocation: europe
-    deprecationDate: 2027-07-09
+    deprecationDate: 2028-01-11
   pricing:
     input_tokens:
       per_mill_context_lte_272k: '4.4'

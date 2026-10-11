@@ -2,7 +2,6 @@ package catalog
 
 #Model: close({
 	authorId: #Id
-	// Selects the gateway's local estimator; implementations and buffers are code-owned.
 	name:     string & !=""
 	aliases?: [...#Slug]
 	groupIds?: [...#Id]

@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-5.6-terra
   routeIds: [openai-responses]
-  aliases: [gpt-5.6-terra-pro-flex]
   upstream:
     model: gpt-5.6-terra
     reasoningMode: pro
