@@ -1,7 +1,6 @@
 import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
 	catalogArchive,
@@ -33,20 +32,10 @@ const attestation = JSON.parse(readFileSync(attestationPath, 'utf8'));
 if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
 	throw new Error('Exactly one build attestation is required.');
 }
-const signature = JSON.parse(requiredEnvironment('CATALOG_SIGNATURE_JSON'));
-const signingKeys = catalogSigningKeys(
-	requiredEnvironment('CATALOG_PUBLICATION_ENVIRONMENT'),
-	requiredEnvironment('CATALOG_AUTHORIZED_SIGNING_KEYS_JSON')
-);
-
-const manifest = catalogManifest(repositoryRoot, sequence);
 const envelope = parseCatalogReleaseEvidence({
-	provenance: attestation,
-	document: manifest,
-	signature
+	document: catalogManifest(repositoryRoot, sequence),
+	provenance: attestation
 });
-
-verifyCatalogReleaseSignature(envelope, signingKeys);
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
@@ -81,10 +70,4 @@ function addBlob(filename) {
 		digest: `sha256:${digest}`,
 		path: relativePath
 	};
-}
-
-function requiredEnvironment(name) {
-	const value = process.env[name]?.trim();
-	if (!value) throw new Error(`${name} is required.`);
-	return value;
 }

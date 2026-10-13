@@ -1,12 +1,11 @@
-export function catalogManifest(
-	repositoryRoot: string,
-	sequenceInput: string | number
-): {
-	schema: 'stogas.catalog.release.v1';
-	catalogSchema: 1;
-	minimumGatewaySequence: number;
-	sequence: number;
-	public: string;
-	runtime: string;
-	source: { commit: string; repository: string; tag: string; tree: string };
+type ReleaseArtifact = { sha256: string; size_bytes: number };
+
+/** The staging build proof for a catalog release manifest and its two artifacts. */
+export function stagingDevelopmentProvenance(manifest: {
+	artifacts: Record<'catalog.public.json' | 'catalog.runtime.json', ReleaseArtifact>;
+}): {
+	_type: 'https://in-toto.io/Statement/v1';
+	predicate: { environment: 'staging' };
+	predicateType: 'https://stogas.ai/attestations/staging-development/v1';
+	subject: { digest: { sha256: string }; name: string }[];
 };

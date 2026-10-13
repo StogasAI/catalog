@@ -14,11 +14,12 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 	catalogArchive(repositoryRoot);
 	const sequence = parseSequence(sequenceInput);
 	const releasePolicy = catalogReleasePolicy(repositoryRoot);
+	const commit = git(repositoryRoot, ['rev-parse', 'HEAD']);
 	const source = {
-		commit: git(repositoryRoot, ['rev-parse', 'HEAD']),
+		commit,
 		repository: 'https://github.com/StogasAI/catalog',
-		tag: `catalog-v${sequence}`,
-		tree: git(repositoryRoot, ['rev-parse', 'HEAD^{tree}'])
+		sha256: sourceDigest(repositoryRoot, commit),
+		tag: `catalog-v${sequence}`
 	};
 	return {
 		minimum_gateway_sequence: gatewayReleaseSequence(releasePolicy.minimum_gateway_release),
@@ -36,41 +37,32 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 
 /** Closed Stogas metadata; the external build proof keeps its own signed format. */
 export function parseCatalogReleaseEvidence(value) {
-	if (!hasKeys(value, ['document', 'provenance', 'signature']) || !isObject(value.provenance)) {
-		throw new Error(
-			'Catalog release evidence must contain one document, signature and provenance object.'
-		);
+	if (!hasKeys(value, ['document', 'provenance']) || !isObject(value.provenance)) {
+		throw new Error('Catalog release evidence must contain one document and provenance object.');
 	}
 	parseCatalogReleaseManifest(value.document);
-	if (
-		!hasKeys(value.signature, ['key_id', 'signature']) ||
-		!/^[A-Za-z0-9._-]{1,128}$/.test(value.signature.key_id ?? '') ||
-		!/^[A-Za-z0-9_-]{4412}$/.test(value.signature.signature ?? '')
-	) {
-		throw new Error('Catalog release signature format is invalid.');
-	}
 	return value;
 }
 
 export function parseCatalogReleaseManifest(value) {
-	const digest = (input) => typeof input === 'string' && /^[0-9a-f]{64}$/.test(input);
+	const hex = (input, length) =>
+		typeof input === 'string' && input.length === length && /^[0-9a-f]+$/.test(input);
 	const sequence = (input) => Number.isSafeInteger(input) && input > 0;
 	if (
 		!hasKeys(value, ['artifacts', 'minimum_gateway_sequence', 'schema', 'sequence', 'source']) ||
 		value.schema !== 'stogas.catalog.release.v1' ||
 		!sequence(value.sequence) ||
 		!sequence(value.minimum_gateway_sequence) ||
-		!hasKeys(value.source, ['commit', 'repository', 'tag', 'tree']) ||
+		!hasKeys(value.source, ['commit', 'repository', 'sha256', 'tag']) ||
 		value.source.repository !== 'https://github.com/StogasAI/catalog' ||
 		value.source.tag !== `catalog-v${value.sequence}` ||
-		![value.source.commit, value.source.tree].every(
-			(hash) => typeof hash === 'string' && /^[0-9a-f]{40}$/.test(hash)
-		) ||
+		!hex(value.source.commit, 40) ||
+		!hex(value.source.sha256, 64) ||
 		!hasKeys(value.artifacts, ['catalog.public.json', 'catalog.runtime.json']) ||
 		!Object.values(value.artifacts).every(
 			(artifact) =>
 				hasKeys(artifact, ['sha256', 'size_bytes']) &&
-				digest(artifact.sha256) &&
+				hex(artifact.sha256, 64) &&
 				sequence(artifact.size_bytes) &&
 				artifact.size_bytes <= MAX_CATALOG_ARTIFACT_BYTES
 		)
@@ -209,14 +201,55 @@ export function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
+/**
+ * Stogas releases identify source by the SHA-256 of the canonical JSON list of
+ * each committed file's path, executable mode and SHA-256, sorted by path. It
+ * reads the local object database, so the result never depends on SHA-1 alone.
+ */
+export function sourceDigest(repositoryRoot, revision) {
+	const files = gitBytes(repositoryRoot, ['ls-tree', '-r', '-z', '--full-tree', revision])
+		.toString('utf8')
+		.split('\0')
+		.filter(Boolean)
+		.map((row) => {
+			const [, mode, object, path] = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/s.exec(row) ?? [];
+			if (!path) throw new Error(`Catalog source may contain only regular files: ${row}`);
+			return { mode: mode === '100755' ? 0o755 : 0o644, object, path };
+		});
+	const contents = gitBytes(
+		repositoryRoot,
+		['cat-file', '--batch'],
+		files.map(({ object }) => `${object}\n`).join('')
+	);
+	let offset = 0;
+	const entries = files.map(({ mode, object, path }) => {
+		const header = contents.indexOf(10, offset);
+		const [id, type, size] = contents.subarray(offset, header).toString('utf8').split(' ');
+		const start = header + 1;
+		const end = start + Number(size);
+		if (id !== object || type !== 'blob' || contents[end] !== 10) {
+			throw new Error('Git returned an unexpected catalog source object.');
+		}
+		offset = end + 1;
+		return { mode, path, sha256: sha256(contents.subarray(start, end)) };
+	});
+	entries.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+	return sha256(JSON.stringify(entries));
+}
+
 function git(repositoryRoot, args) {
+	return gitBytes(repositoryRoot, args).toString('utf8').trim();
+}
+
+function gitBytes(repositoryRoot, args, input) {
 	return execFileSync('git', args, {
 		cwd: repositoryRoot,
-		encoding: 'utf8',
 		env: minimalProcessEnvironment(),
-		maxBuffer: 64 * 1024,
-		stdio: ['ignore', 'pipe', 'inherit']
-	}).trim();
+		input,
+		// Every tracked generated artifact is bounded, and the source is far smaller.
+		maxBuffer: 4 * MAX_CATALOG_ARTIFACT_BYTES,
+		stdio: ['pipe', 'pipe', 'inherit']
+	});
 }
 
 function isWithin(root, candidate) {

@@ -1,5 +1,6 @@
-import { createHash, generateKeyPairSync, verify } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
@@ -16,37 +17,44 @@ import {
 	canonicalJsonValue,
 	parseCatalogReleaseEvidence,
 	resolveDestructiveOutput,
+	sourceDigest,
 	stagingDevelopmentProvenance
 } from '../source/scripts/release-format.mjs';
-import {
-	catalogSigningKeys,
-	verifyCatalogReleaseSignature
-} from '../source/scripts/signing-keys.mjs';
 
 describe('catalog release metadata', () => {
-	test('uses explicit current signing authorization without committed online keys', () => {
-		const { publicKey } = signManifest({ test: true });
-		const classicalKey = generateKeyPairSync('ed25519')
-			.publicKey.export({ format: 'der', type: 'spki' })
-			.toString('base64');
-		for (const environment of ['staging', 'prod']) {
-			expect(catalogSigningKeys(environment, JSON.stringify({ rotated_key: publicKey }))).toEqual({
-				rotated_key: publicKey
-			});
-			for (const input of [
-				undefined,
-				'null',
-				'[]',
-				'{}',
-				JSON.stringify({ a: publicKey, b: publicKey }),
-				JSON.stringify({ a: classicalKey }),
-				'{"a":"invalid"}'
-			]) {
-				expect(() => catalogSigningKeys(environment, input)).toThrow();
+	test('identifies committed source with the shared release digest', () => {
+		const root = mkdtempSync(join(tmpdir(), 'stogas-catalog-source-'));
+		const git = (...args: string[]) => {
+			const result = Bun.spawnSync(['git', ...args], { cwd: root });
+			if (result.exitCode !== 0) throw Error(result.stderr.toString());
+			return result.stdout.toString().trim();
+		};
+		try {
+			git('init', '-q');
+			mkdirSync(join(root, 'dir'));
+			writeFileSync(join(root, 'a'), 'first');
+			writeFileSync(join(root, 'dir.txt'), '');
+			writeFileSync(join(root, 'dir', 'z'), Buffer.from('payload\0\xff', 'latin1'));
+			git('add', 'a', 'dir.txt', 'dir/z');
+			git('update-index', '--chmod=+x', 'a');
+			// The same value the verifier and gateway release tooling compute.
+			expect(sourceDigest(root, git('write-tree'))).toBe(
+				'887904a1ae03e4449f05e05fb147314cf9c8c428d3eec00179e0d7f56fc3a853'
+			);
+			git('update-index', '--chmod=-x', 'a');
+			expect(sourceDigest(root, git('write-tree'))).not.toBe(
+				'887904a1ae03e4449f05e05fb147314cf9c8c428d3eec00179e0d7f56fc3a853'
+			);
+			if (process.platform !== 'win32') {
+				symlinkSync('a', join(root, 'link'));
+				git('add', 'link');
+				expect(() => sourceDigest(root, git('write-tree'))).toThrow('only regular files');
 			}
+		} finally {
+			rmSync(root, { force: true, recursive: true });
 		}
-		expect(() => catalogSigningKeys('local', '{}')).toThrow('must be staging or prod');
 	});
+
 	test('publishes approvals under the shared ledger path only', () => {
 		expect(catalogApprovalLedgerKey('approvals/32.json')).toBe('ledger/v1/catalogs/32.json');
 		expect(catalogApprovalLedgerKey('releases/32.json')).toBeNull();
@@ -118,57 +126,23 @@ describe('catalog release metadata', () => {
 		).toThrow('valid runtime and public digests');
 	});
 
-	test('builds one compact authorization over content-addressed artifacts', () => {
+	test('builds one compact release over content-addressed artifacts', () => {
 		const output = mkdtempSync(join(tmpdir(), 'stogas-catalog-release-'));
-		const { publicKey, signature } = signManifest(catalogManifest(process.cwd(), 7));
 		try {
 			const proofPath = join(output, 'attestation.json');
 			const proof = { testAttestation: true };
 			writeFileSync(proofPath, JSON.stringify(proof));
 			const result = Bun.spawnSync(
 				['node', 'source/scripts/create-release.mjs', '7', output, proofPath],
-				{
-					cwd: process.cwd(),
-					env: {
-						...process.env,
-						CATALOG_SIGNATURE_JSON: JSON.stringify(signature),
-						CATALOG_PUBLICATION_ENVIRONMENT: 'staging',
-						CATALOG_AUTHORIZED_SIGNING_KEYS_JSON: JSON.stringify({ 'test-key': publicKey })
-					}
-				}
+				{ cwd: process.cwd() }
 			);
 			expect(result.exitCode).toBe(0);
 
 			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance', 'signature']);
+			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance']);
 			expect(envelope.provenance).toEqual(proof);
-			expect(envelope.signature.key_id).toBe('test-key');
-			const keys = {
-				'test-key': publicKey
-			};
-			expect(() => verifyCatalogReleaseSignature(envelope, keys)).not.toThrow();
-			for (const schema of [undefined, null, 1, '', 'stogas.catalog.release.v2']) {
-				expect(() =>
-					verifyCatalogReleaseSignature(
-						{ ...envelope, document: { ...envelope.document, schema } },
-						keys
-					)
-				).toThrow('evidence schema is unsupported');
-			}
-			for (const changed of [
-				{ ...envelope, signature: { ...envelope.signature, key_id: 'unknown-key' } },
-				{ ...envelope, signature: { ...envelope.signature, signature: 'AA' } },
-				{
-					...envelope,
-					signature: { ...envelope.signature, signature: envelope.signature.signature + '==' }
-				},
-				{ ...envelope, document: { ...envelope.document, minimum_gateway_sequence: 8 } }
-			]) {
-				expect(() => verifyCatalogReleaseSignature(changed, keys)).toThrow('signature is invalid');
-			}
-			expect(() => verifyCatalogReleaseSignature(envelope, {})).toThrow('key is not trusted');
 			expect(envelope.document.schema).toBe('stogas.catalog.release.v1');
 			expect(envelope.document.minimum_gateway_sequence).toBe(1_000_005_000_061);
 			expect(envelope.document.sequence).toBe(7);
@@ -191,56 +165,35 @@ describe('catalog release metadata', () => {
 			expect(archiveBytes.byteLength).toBe(archive.size_bytes);
 			expect(createHash('sha256').update(archiveBytes).digest('hex')).toBe(archive.sha256);
 			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(3);
+			const source = envelope.document.source;
 			for (const changed of [
 				{ ...envelope, schema: 'extra' },
+				{ ...envelope, signature: { key_id: 'key', signature: 'AA' } },
 				{ ...envelope, provenance: [proof] },
 				{ ...envelope, manifest: envelope.document },
-				{ ...envelope, document: { ...envelope.document, extra: true } }
+				{ ...envelope, document: { ...envelope.document, extra: true } },
+				{ ...envelope, document: { ...envelope.document, schema: 'stogas.catalog.release.v2' } },
+				{
+					...envelope,
+					document: { ...envelope.document, source: { ...source, tree: source.commit } }
+				},
+				{
+					...envelope,
+					document: { ...envelope.document, source: { ...source, sha256: [source.sha256] } }
+				}
 			]) {
 				expect(() => parseCatalogReleaseEvidence(changed)).toThrow();
 			}
-			expect(envelope.document.source).toMatchObject({
+			const head = Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim();
+			expect(source).toEqual({
+				commit: head,
 				repository: 'https://github.com/StogasAI/catalog',
+				sha256: sourceDigest(process.cwd(), head),
 				tag: 'catalog-v7'
 			});
 			expect(readFileSync(join(output, 'latest.json'))).toEqual(envelopeBytes);
-			expect(
-				verify(
-					null,
-					Buffer.from(`stogas signed document v1\n${canonicalJsonValue(envelope.document)}`),
-					{ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' },
-					Buffer.from(envelope.signature.signature, 'base64url')
-				)
-			).toBe(true);
 		} finally {
 			rmSync(output, { force: true, recursive: true });
 		}
 	});
 });
-
-// Node provides ML-DSA signing; Bun currently verifies it but cannot generate these keys.
-function signManifest(manifest: unknown): {
-	publicKey: string;
-	signature: { key_id: string; signature: string };
-} {
-	const result = Bun.spawnSync(
-		[
-			'node',
-			'--input-type=module',
-			'-e',
-			`
-		import {generateKeyPairSync, sign} from 'node:crypto';
-		import {readFileSync} from 'node:fs';
-		const {privateKey, publicKey} = generateKeyPairSync('ml-dsa-65');
-		const payload = Buffer.concat([Buffer.from('stogas signed document v1\\n'), readFileSync(0)]);
-		process.stdout.write(JSON.stringify({
-			publicKey: publicKey.export({format:'der', type:'spki'}).toString('base64'),
-			signature: {key_id:'test-key', signature:sign(null, payload, privateKey).toString('base64url')}
-		}));
-	`
-		],
-		{ stdin: Buffer.from(canonicalJsonValue(manifest)) }
-	);
-	if (result.exitCode !== 0) throw Error(result.stderr.toString());
-	return JSON.parse(result.stdout.toString());
-}

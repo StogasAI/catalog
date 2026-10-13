@@ -3,8 +3,8 @@
 Report vulnerabilities through GitHub private vulnerability reporting. Do not disclose security
 issues in public issues.
 
-Catalog releases are data, never executable configuration. The gateway verifies the release
-signature, content digest, monotonically increasing sequence, bounded response size, and semantic
-invariants before atomic activation. The public bundle may describe route endpoints, but the
-runtime bundle cannot configure network hosts, credentials, authentication, or request
-transformations.
+Catalog releases are data, never executable configuration. The gateway loads only releases that
+Stogas's signed evidence approves, and verifies their content digest, monotonically increasing
+sequence, bounded response size, and semantic invariants before atomic activation. The public
+bundle may describe route endpoints, but the runtime bundle cannot configure network hosts,
+credentials, authentication, or request transformations.

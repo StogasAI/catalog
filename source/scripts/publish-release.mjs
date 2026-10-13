@@ -16,7 +16,6 @@ import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import { r2WriteConditionETag } from './r2-etag.mjs';
-import { catalogSigningKeys, verifyCatalogReleaseSignature } from './signing-keys.mjs';
 import {
 	catalogArtifact,
 	catalogArchive,
@@ -39,11 +38,9 @@ const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
 const targetBucket = process.argv[5]?.trim();
 const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
-const signingKeys = catalogSigningKeys(
-	publicationEnvironment,
-	process.env.CATALOG_AUTHORIZED_SIGNING_KEYS_JSON
-);
-const verificationKeys = signingKeys;
+if (publicationEnvironment !== 'staging' && publicationEnvironment !== 'prod') {
+	throw new Error('CATALOG_PUBLICATION_ENVIRONMENT must be staging or prod.');
+}
 const latestBrowserCacheControl = 'public, max-age=0, must-revalidate, stale-if-error=0';
 const latestEdgeCacheControl = 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0';
 const immutableCacheControl = 'public, max-age=31536000, immutable';
@@ -84,14 +81,12 @@ if (action === 'prepare') {
 async function preparePlaceholderRelease() {
 	requireCommands(['bun', 'git']);
 	requireStorageEnvironment();
-	requiredEnvironment('CATALOG_SIGNATURE_JSON');
 	if (publicationEnvironment !== 'staging') {
 		throw new Error('Placeholder proof is allowed only for staging.');
 	}
 
 	run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
 	run('bun', ['run', 'check'], catalogCheckEnvironment());
-	verifySigningKey();
 	const proofRoot = mkdtempSync(join(tmpdir(), 'stogas-catalog-proof-'));
 	try {
 		const proofPath = join(proofRoot, 'attestation.json');
@@ -102,7 +97,7 @@ async function preparePlaceholderRelease() {
 		run(
 			process.execPath,
 			['source/scripts/create-release.mjs', String(sequence), outputRoot, proofPath],
-			signingEnvironment()
+			commandEnvironment(process.execPath)
 		);
 	} finally {
 		rmSync(proofRoot, { recursive: true, force: true });
@@ -125,14 +120,12 @@ async function preparePlaceholderRelease() {
 async function prepareRelease() {
 	requireCommands(['bun', 'gh', 'git']);
 	requireStorageEnvironment();
-	requiredEnvironment('CATALOG_SIGNATURE_JSON');
 	requireCleanTaggedSource();
 
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 	try {
 		run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
 		run('bun', ['run', 'check'], catalogCheckEnvironment());
-		verifySigningKey();
 
 		const proposalRoot = join(workRoot, 'github-proposal');
 		downloadAndVerifyGitHubProposal(proposalRoot);
@@ -146,7 +139,7 @@ async function prepareRelease() {
 				outputRoot,
 				join(proposalRoot, 'github-attestation.jsonl')
 			],
-			signingEnvironment()
+			commandEnvironment(process.execPath)
 		);
 		verifyChecksums(outputRoot);
 		const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
@@ -165,7 +158,7 @@ async function prepareRelease() {
 			await publishImmutable(path, outputRoot);
 		}
 		if (publicationEnvironment === 'prod') {
-			publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope);
+			publishGitHubRelease(envelope);
 		}
 		console.log(`Prepared catalog ${sequence}.`);
 		console.log(`  approval ${approvalPath}`);
@@ -193,7 +186,7 @@ function readPreparedRelease() {
 	const envelope = parseEnvelope(releasePath);
 	const approval = parseJsonFile(approvalPath);
 	if (canonicalJsonValue(approval) !== canonicalJsonValue(envelope)) {
-		throw new Error('Catalog approval and signed release differ.');
+		throw new Error('Catalog approval and release differ.');
 	}
 	if (
 		!approval.provenance ||
@@ -213,7 +206,7 @@ function readPreparedRelease() {
 		}
 	}
 	if (!readBoundedRegularFile(latestPath).equals(readBoundedRegularFile(releasePath))) {
-		throw new Error('Catalog latest candidate and signed release differ.');
+		throw new Error('Catalog latest candidate and release differ.');
 	}
 	return { approvalPath, latestPath, releasePath };
 }
@@ -305,16 +298,6 @@ function requireCleanTaggedSource() {
 		throw new Error(`${tag} must be published at origin before publication.`);
 }
 
-function verifySigningKey() {
-	verifyCatalogReleaseSignature(
-		{
-			document: catalogManifest(repositoryRoot, sequence),
-			signature: JSON.parse(requiredEnvironment('CATALOG_SIGNATURE_JSON'))
-		},
-		signingKeys
-	);
-}
-
 function downloadAndVerifyGitHubProposal(proposalRoot) {
 	const release = JSON.parse(
 		output('gh', [
@@ -392,7 +375,6 @@ function parseEnvelope(path) {
 	) {
 		throw new Error('Generated catalog release is invalid.');
 	}
-	verifyCatalogReleaseSignature(envelope, verificationKeys);
 	return envelope;
 }
 
@@ -449,7 +431,7 @@ function artifactPaths(root) {
 		publicBytes.byteLength !== publicArtifact.size_bytes ||
 		sha256(publicBytes) !== publicArtifact.sha256
 	) {
-		throw new Error('Catalog public blob differs from the signed release');
+		throw new Error('Catalog public blob differs from the release');
 	}
 	artifacts.push(parseArchiveReference(JSON.parse(publicBytes.toString('utf8')).archive));
 	const expected = new Set(artifacts.map((artifact) => `${artifact.sha256}.json`));
@@ -512,32 +494,7 @@ async function requireImmutableReadbacks(paths, root) {
 	);
 }
 
-function publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope) {
-	const signedReleaseAsset = join(proposalRoot, 'catalog-signed-release.json');
-	const approvalAsset = join(proposalRoot, 'catalog-approval.json');
-	const checksumAsset = join(proposalRoot, 'STOGAS-SHA256SUMS');
-	writeReleaseAsset(signedReleaseAsset, readBoundedRegularFile(releasePath));
-	writeReleaseAsset(approvalAsset, readBoundedRegularFile(approvalPath));
-	writeReleaseAsset(
-		checksumAsset,
-		Buffer.from(
-			[
-				`${sha256(readBoundedRegularFile(signedReleaseAsset))}  ${basename(signedReleaseAsset)}`,
-				`${sha256(readBoundedRegularFile(approvalAsset))}  ${basename(approvalAsset)}`
-			].join('\n') + '\n'
-		)
-	);
-	run('gh', [
-		'release',
-		'upload',
-		tag,
-		signedReleaseAsset,
-		approvalAsset,
-		checksumAsset,
-		'--clobber',
-		'--repo',
-		'StogasAI/catalog'
-	]);
+function publishGitHubRelease(envelope) {
 	run('gh', [
 		'release',
 		'edit',
@@ -552,19 +509,9 @@ function publishGitHubRelease(proposalRoot, releasePath, approvalPath, envelope)
 			`Runtime: ${envelope.document.artifacts['catalog.runtime.json'].sha256}`,
 			`Public: ${envelope.document.artifacts['catalog.public.json'].sha256}`,
 			'',
-			'GitHub Actions and Stogas independently built the catalog artifacts. The signed approval requires their SHA-256 values to match.'
+			'Stogas rebuilt these artifacts from its own copy of the source and got the same SHA-256 values before approving them.'
 		].join('\n')
 	]);
-}
-
-function writeReleaseAsset(path, bytes) {
-	if (existsSync(path)) {
-		const existing = readBoundedRegularFile(path);
-		if (!existing.equals(bytes)) {
-			throw new Error(`GitHub release ${tag} contains different ${basename(path)} bytes.`);
-		}
-	}
-	writeFileSync(path, bytes);
 }
 
 async function readLatest() {
@@ -933,7 +880,6 @@ function commandEnvironment(command) {
 		'AWS_REGION',
 		'AWS_SECRET_ACCESS_KEY',
 		'AWS_SESSION_TOKEN',
-		'CATALOG_SIGNATURE_JSON',
 		'CLOUDFLARE_ACCOUNT_ID',
 		'CLOUDFLARE_API_TOKEN',
 		'R2_BUCKET',
@@ -946,13 +892,4 @@ function commandEnvironment(command) {
 		delete environment.GITHUB_TOKEN;
 	}
 	return environment;
-}
-
-function signingEnvironment() {
-	return {
-		...commandEnvironment(process.execPath),
-		CATALOG_SIGNATURE_JSON: requiredEnvironment('CATALOG_SIGNATURE_JSON'),
-		CATALOG_PUBLICATION_ENVIRONMENT: publicationEnvironment,
-		CATALOG_AUTHORIZED_SIGNING_KEYS_JSON: JSON.stringify(signingKeys)
-	};
 }

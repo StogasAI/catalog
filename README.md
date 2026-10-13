@@ -22,7 +22,7 @@ bun run editor
 
 ## Releases
 
-Each release has an increasing sequence number and a manifest of artifact hashes and sizes. GitHub attests the manifest and artifacts. Stogas rebuilds the same bytes independently and signs the manifest with ML-DSA-65.
+Each release has an increasing sequence number and a manifest with the source commit, a source digest, and each artifact's hash and size. The source digest is the SHA-256 of the canonical JSON list of every committed file's path, executable mode (493 or 420) and SHA-256, sorted by path. GitHub attests the manifest and artifacts. Stogas rebuilds the same bytes from its own copy of the source, then approves the manifest in its signed evidence. Gateways load only approved catalogs.
 
 ## License
 
