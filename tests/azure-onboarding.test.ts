@@ -331,6 +331,7 @@ describe('Azure provider onboarding contract', () => {
 		expect(runtimeCatalog.graph.providers.azure).toEqual({
 			aliases: ['azure-ai-foundry', 'azure-openai'],
 			credentialModes: ['byok'],
+			headquarteredCountry: 'US',
 			name: 'Azure'
 		});
 		expect(

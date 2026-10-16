@@ -1280,7 +1280,11 @@ function compileGraph(source) {
 	const runtimeAuthors = Object.fromEntries(
 		Object.entries(graph.authors).map(([id, author]) => [
 			id,
-			{ aliases: author.aliases, name: author.name }
+			{
+				aliases: author.aliases,
+				...(author.headquarteredCountry && { headquarteredCountry: author.headquarteredCountry }),
+				name: author.name
+			}
 		])
 	);
 	const runtimeProviders = Object.fromEntries(
@@ -1289,6 +1293,9 @@ function compileGraph(source) {
 			{
 				aliases: provider.aliases,
 				credentialModes: provider.credentialModes,
+				...(provider.headquarteredCountry && {
+					headquarteredCountry: provider.headquarteredCountry
+				}),
 				name: provider.name
 			}
 		])

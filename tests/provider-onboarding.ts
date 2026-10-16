@@ -101,7 +101,10 @@ export function assertProviderOnboardingContract(
 	expect(runtime.providers[providerId]).toEqual({
 		aliases: contract.provider.aliases,
 		credentialModes: contract.provider.credentialModes,
-		name: contract.provider.name
+		name: contract.provider.name,
+		...(contract.provider.headquarteredCountry
+			? { headquarteredCountry: contract.provider.headquarteredCountry }
+			: {})
 	});
 	expect(published.providers[providerId]).toEqual({
 		aliases: contract.provider.aliases,
