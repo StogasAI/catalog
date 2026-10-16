@@ -4,4 +4,5 @@ package catalog
 	name: string & !=""
 	aliases?: [...#Slug]
 	headquarteredCountry?: #CountryCode
+	periods?: [#Period, ...#Period]
 })

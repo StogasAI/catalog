@@ -5,7 +5,6 @@ deployments:
     model: google/gemma-4-31B-turbo-TEE
     chuteId: 42ee92ba-a537-5a73-8741-876067750db7
     gpuCount: 1
-  aliases: [gemma-4-31b-turbo-tee]
   weightPrecision: nvfp4
   overrides:
     contextWindowTokens: 131072

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
+	cpSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -9,11 +11,10 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import {
 	catalogApprovalLedgerKey,
-	catalogManifest,
 	canonicalJsonValue,
 	parseCatalogReleaseEvidence,
 	resolveDestructiveOutput,
@@ -22,6 +23,58 @@ import {
 } from '../source/scripts/release-format.mjs';
 
 describe('catalog release metadata', () => {
+	test('publication runs no installation or check scripts', () => {
+		const root = mkdtempSync(join(tmpdir(), 'stogas-catalog-publisher-'));
+		try {
+			// Skip the `.tmp-` paths of builds running in this checkout.
+			cpSync('source', join(root, 'source'), {
+				recursive: true,
+				filter: (path) => !basename(path).includes('.tmp-')
+			});
+			writeFileSync(
+				join(root, 'package.json'),
+				JSON.stringify({
+					name: 'catalog-publisher-fixture',
+					scripts: { postinstall: 'node probe.mjs', check: 'node probe.mjs' }
+				})
+			);
+			writeFileSync(
+				join(root, 'probe.mjs'),
+				"import {writeFileSync} from 'node:fs'; writeFileSync('executed-build-code', '');"
+			);
+			const result = Bun.spawnSync(
+				[
+					'node',
+					'source/scripts/publish-release.mjs',
+					'prepare-placeholder',
+					'7',
+					'release/catalog-v7'
+				],
+				{
+					cwd: root,
+					env: {
+						...process.env,
+						CATALOG_PUBLICATION_ENVIRONMENT: 'staging',
+						CLOUDFLARE_ACCOUNT_ID: 'test-account',
+						CLOUDFLARE_API_TOKEN: 'test-token',
+						AWS_ACCESS_KEY_ID: 'test-access',
+						AWS_SECRET_ACCESS_KEY: 'test-secret',
+						AWS_BUCKET: 'test-bucket',
+						AWS_REGION: 'us-east-1',
+						R2_BUCKET: 'test-bucket'
+					}
+				}
+			);
+			// The isolated build was skipped, so publication stops at the missing artifacts before
+			// any storage request.
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain('catalog.public.json');
+			expect(existsSync(join(root, 'executed-build-code'))).toBe(false);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	test('identifies committed source with the shared release digest', () => {
 		const root = mkdtempSync(join(tmpdir(), 'stogas-catalog-source-'));
 		const git = (...args: string[]) => {
@@ -144,7 +197,13 @@ describe('catalog release metadata', () => {
 			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance']);
 			expect(envelope.provenance).toEqual(proof);
 			expect(envelope.document.schema).toBe('stogas.catalog.release.v1');
-			expect(envelope.document.minimum_gateway_sequence).toBe(1_000_005_000_061);
+			const { minimum_gateway_release } = JSON.parse(
+				readFileSync('source/release-policy.json', 'utf8')
+			);
+			const [major, minor, patch] = minimum_gateway_release.slice(1).split('.').map(Number);
+			expect(envelope.document.minimum_gateway_sequence).toBe(
+				major * 1_000_000_000_000 + minor * 1_000_000 + patch
+			);
 			expect(envelope.document.sequence).toBe(7);
 			expect(envelope.document.artifacts['catalog.runtime.json'].sha256).toMatch(/^[0-9a-f]{64}$/);
 			expect(envelope.document.artifacts['catalog.public.json'].sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -153,18 +212,7 @@ describe('catalog release metadata', () => {
 					readFileSync(join('generated', name)).byteLength
 				);
 			}
-			const publicBytes = readFileSync(
-				join(
-					output,
-					'blobs/sha256',
-					`${envelope.document.artifacts['catalog.public.json'].sha256}.json`
-				)
-			);
-			const archive = JSON.parse(publicBytes.toString()).archive;
-			const archiveBytes = readFileSync(join(output, 'blobs/sha256', `${archive.sha256}.json`));
-			expect(archiveBytes.byteLength).toBe(archive.size_bytes);
-			expect(createHash('sha256').update(archiveBytes).digest('hex')).toBe(archive.sha256);
-			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(3);
+			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(2);
 			const source = envelope.document.source;
 			for (const changed of [
 				{ ...envelope, schema: 'extra' },

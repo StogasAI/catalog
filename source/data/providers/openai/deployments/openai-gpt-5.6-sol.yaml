@@ -3,21 +3,16 @@ deployments:
   routeIds: [openai-chat-completions, openai-responses]
   upstream:
     model: gpt-5.6-sol
-    serviceTier: default
-  overrides:
-    routes:
-      openai-chat-completions:
-        reasoningEfforts: [low, medium, high, xhigh]
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '4'
+      per_mill_tokens: '4'
       per_mill_context_gt_272k: '8'
     cached_input_tokens:
-      per_mill_context_lte_272k: '0.4'
+      per_mill_tokens: '0.4'
       per_mill_context_gt_272k: '0.8'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '5'
+      per_mill_tokens: '5'
       per_mill_context_gt_272k: '10'
     output_tokens:
-      per_mill_context_lte_272k: '20'
+      per_mill_tokens: '20'
       per_mill_context_gt_272k: '30'

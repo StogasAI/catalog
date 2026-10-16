@@ -10,6 +10,7 @@ deployments:
   overrides:
     capabilities:
       parallelFunctionCalling: false
+      explicitPromptCaching: false
       structuredOutputs: false
     dataHandling:
       processingLocation: unknown

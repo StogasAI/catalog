@@ -1,9 +1,5 @@
 import type { Edge, Node } from '@xyflow/svelte';
 import { orderModelGroups, type ModelGroup } from '../../source/scripts/model-groups.mjs';
-import {
-	parseArchiveReference,
-	type ArchiveReference
-} from '../../source/scripts/catalog-archive.mjs';
 
 export type NodeType = 'author' | 'group' | 'model' | 'provider' | 'route' | 'deployment';
 
@@ -16,32 +12,33 @@ export type CatalogGraph = {
 	deployments: Record<string, Record<string, unknown>>;
 };
 
+// The editor shows the base graph; each node's dated periods appear in its source.
 export type Catalog = {
-	schema: 'stogas.catalog.public.v3';
-	archive?: ArchiveReference;
+	schema: 'stogas.catalog.public.v4';
 	graph: CatalogGraph;
 };
 
 export function parseCatalog(value: unknown): Catalog {
-	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v3' || !isObject(value.graph)) {
+	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v4' || !isObject(value.graph)) {
 		throw new TypeError('The generated public catalog is invalid.');
 	}
-
+	const graph = value.graph;
+	const groups = parseGroupEntries(graph.groups);
+	orderModelGroups(groups);
 	return {
 		schema: value.schema,
-		...(value.archive ? { archive: parseArchiveReference(value.archive) } : {}),
 		graph: {
-			authors: parseCatalogCollection(value.graph.authors, 'authors'),
-			groups: parseModelGroups(value.graph.groups),
-			deployments: parseCatalogCollection(value.graph.deployments, 'deployments'),
-			models: parseCatalogCollection(value.graph.models, 'models'),
-			providers: parseCatalogCollection(value.graph.providers, 'providers'),
-			routes: parseCatalogCollection(value.graph.routes, 'routes')
+			authors: parseCatalogCollection(graph.authors, 'authors'),
+			groups,
+			deployments: parseCatalogCollection(graph.deployments, 'deployments'),
+			models: parseCatalogCollection(graph.models, 'models'),
+			providers: parseCatalogCollection(graph.providers, 'providers'),
+			routes: parseCatalogCollection(graph.routes, 'routes')
 		}
 	};
 }
 
-function parseModelGroups(value: unknown): Record<string, ModelGroup> {
+function parseGroupEntries(value: unknown): Record<string, ModelGroup> {
 	const groups = parseCatalogCollection(value, 'groups');
 	const result: Record<string, ModelGroup> = {};
 	for (const [id, group] of Object.entries(groups)) {
@@ -55,7 +52,6 @@ function parseModelGroups(value: unknown): Record<string, ModelGroup> {
 		}
 		result[id] = { authorId: group.authorId, name: group.name, parentIds: group.parentIds };
 	}
-	orderModelGroups(result);
 	return result;
 }
 

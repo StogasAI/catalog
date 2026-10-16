@@ -6,11 +6,11 @@ deployments:
     serviceTier: flex
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '2.5'
+      per_mill_tokens: '2.5'
       per_mill_context_gt_272k: '5'
     cached_input_tokens:
-      per_mill_context_lte_272k: '0.25'
+      per_mill_tokens: '0.25'
       per_mill_context_gt_272k: '0.5'
     output_tokens:
-      per_mill_context_lte_272k: '15'
+      per_mill_tokens: '15'
       per_mill_context_gt_272k: '22.5'

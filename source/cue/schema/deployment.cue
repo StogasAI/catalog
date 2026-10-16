@@ -1,14 +1,15 @@
 package catalog
 
+// serviceTier names a provider-neutral tier; the compiler records an omitted tier as standard.
 #OpenAIUpstream: close({
 	model:          #UpstreamId
 	reasoningMode?: "pro"
-	serviceTier:    "default" | "flex" | "priority"
+	serviceTier?:   "flex" | "fast" | "ultrafast"
 })
 
 #AnthropicUpstream: close({
 	model:         #UpstreamId
-	speed?:        "standard" | "fast"
+	serviceTier?:  "fast"
 	inferenceGeo?: "global" | "us"
 })
 
@@ -18,52 +19,37 @@ package catalog
 	gpuCount: int & >=1 & <=8
 })
 
+#AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "OpenAI" | "OpenAI-OSS"
+
 #AzureUpstream: close({
 	model:          #UpstreamId
-	modelFormat:    #UpstreamId
+	modelFormat:    #AzureModelFormat
 	modelVersion:   #UpstreamId
-	hosting:        "azure" | "anthropic" | "fireworks" | "nvidia"
+	hosting:        "azure" | "anthropic" | "fireworks"
 	deploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
 	reasoningMode?: "pro"
-	serviceTier?:   "default" | "priority"
+	serviceTier?:   "flex" | "fast"
 })
 
 #Upstream: close({
 	model:           #UpstreamId
 	chuteId?:        #Uuid
 	gpuCount?:       int & >=1 & <=8
-	serviceTier?:    "default" | "flex" | "priority" | "standard_only"
-	speed?:          "standard" | "fast"
+	serviceTier?:    "flex" | "fast" | "ultrafast"
 	inferenceGeo?:   "global" | "us"
 	reasoningMode?:  "pro"
-	hosting?:        "azure" | "anthropic" | "fireworks" | "nvidia"
-	modelFormat?:    #UpstreamId
+	hosting?:        "azure" | "anthropic" | "fireworks"
+	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
 	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
 })
 
-#DeploymentCapabilityOverrides: close({
-	streaming?:               bool
-	functionCalling?:         bool
-	parallelFunctionCalling?: bool
-	implicitPromptCaching?:   bool
-	explicitPromptCaching?:   bool
-	structuredOutputs?:       bool
-	systemMessages?:          bool
-	toolChoice?:              bool
-	urlContext?:              bool
-})
-
-#DeploymentRouteOverride: close({
-	reasoningEfforts: [...#ReasoningEffort]
-})
-
 #Deployment: close({
-	retired?: true
 	modelId: #Id
 	routeIds: [#Id, ...#Id]
 	upstream: #Upstream
-	aliases?: [...#Slug]
+	// The provider serves this deployment only to accounts it has approved.
+	approvalRequired?: true
 	weightPrecision?: #WeightPrecision
 	overrides?: close({
 		contextWindowTokens?: int & >0
@@ -71,15 +57,15 @@ package catalog
 		maxOutputTokens?:     int & >0
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
-		capabilities?:          #DeploymentCapabilityOverrides
-		fileInputs?:            #FileInputs
-		reasoning?:          #Reasoning
+		capabilities?:     #CapabilityOverrides
+		nativeFileInputs?: #NativeFileInputs
+		reasoning?:        #Reasoning
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
-		routes?: close({[#Id]: #DeploymentRouteOverride})
 		dataHandling?:    #DeploymentDataHandlingOverride
-		pricing?:         #InheritedPricingOverride
+		pricing?:         #RoutePricing
 		deprecationDate?: #MaybeDate
 	})
 	pricing: #DeploymentPricing
+	periods?: [#Period, ...#Period]
 })

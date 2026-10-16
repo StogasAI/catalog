@@ -7,25 +7,21 @@ deployments:
     modelVersion: '2026-07-09'
     hosting: azure
     deploymentType: data_zone_standard_us
-    serviceTier: default
   overrides:
-    routes:
-      azure-chat-completions:
-        reasoningEfforts: [low, medium, high, xhigh]
     dataHandling:
       processingLocation: US
       storageLocation: US
     deprecationDate: 2028-01-11
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '2.2'
+      per_mill_tokens: '2.2'
       per_mill_context_gt_272k: '4.4'
     cached_input_tokens:
-      per_mill_context_lte_272k: '0.22'
+      per_mill_tokens: '0.22'
       per_mill_context_gt_272k: '0.44'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '2.75'
+      per_mill_tokens: '2.75'
       per_mill_context_gt_272k: '5.5'
     output_tokens:
-      per_mill_context_lte_272k: '13.2'
+      per_mill_tokens: '13.2'
       per_mill_context_gt_272k: '19.8'

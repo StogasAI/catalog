@@ -11,12 +11,11 @@
 	import '@xyflow/svelte/dist/style.css';
 	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import catalogJson from '../../generated/catalog.public.json';
-	import { mergeCatalogArchive } from '../../source/scripts/catalog-archive.mjs';
 	import CatalogNode from './CatalogNode.svelte';
 	import PanelResizer from './PanelResizer.svelte';
 	import SourceEditor from './SourceEditor.svelte';
 	import { setNodeSelection } from './node-selection';
-	import { isRecord, requestJson, REQUEST_TIMEOUT_MS } from './api';
+	import { isRecord, requestJson } from './api';
 	import {
 		completeUnambiguousGraphSelection,
 		decorateFlow,
@@ -31,19 +30,9 @@
 		pageGraph,
 		parseNodeKey
 	} from './catalog';
-	import { readBoundedResponseText } from './http';
 	import { parseCatalog, type LineageNode, type NodeType, type SourcePayload } from './types';
 
-	const activeCatalog = parseCatalog(catalogJson);
-	const archiveAssets = import.meta.glob('../../generated/blobs/sha256/*.json', {
-		query: '?url',
-		import: 'default',
-		eager: true
-	}) as Record<string, string>;
-	let archiveCatalog = $state<ReturnType<typeof parseCatalog> | null>(null);
-	let includeRetired = $state(false);
-	let archiveStatus = $state('');
-	const catalog = $derived(includeRetired && archiveCatalog ? archiveCatalog : activeCatalog);
+	const catalog = parseCatalog(catalogJson);
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
 	const compact = new MediaQuery('(max-width: 640px)');
 	setNodeSelection(selectGraphNode);
@@ -167,42 +156,6 @@
 				if (!controller.signal.aborted)
 					sourceStatus = error instanceof Error ? error.message : String(error);
 			});
-		return () => controller.abort();
-	});
-
-	$effect(() => {
-		if (!includeRetired || archiveCatalog || !activeCatalog.archive) return;
-		const controller = new AbortController();
-		const reference = activeCatalog.archive;
-		const url = archiveAssets[`../../generated/blobs/sha256/${reference.sha256}.json`];
-		archiveStatus = 'Loading retired nodes…';
-		void (async () => {
-			try {
-				if (!url) throw new Error('Retired catalog is unavailable.');
-				const response = await fetch(url, {
-					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-					redirect: 'error'
-				});
-				if (!response.ok) {
-					await response.body?.cancel();
-					throw new Error('Retired catalog is unavailable.');
-				}
-				const body = await readBoundedResponseText(response, reference.size_bytes);
-				const bytes = new TextEncoder().encode(body);
-				const digest = Array.from(
-					new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
-					(byte) => byte.toString(16).padStart(2, '0')
-				).join('');
-				if (bytes.byteLength !== reference.size_bytes || digest !== reference.sha256)
-					throw new Error('Retired catalog digest differs.');
-				if (controller.signal.aborted) return;
-				archiveCatalog = parseCatalog(mergeCatalogArchive(activeCatalog, JSON.parse(body)));
-				archiveStatus = '';
-			} catch (error) {
-				if (!controller.signal.aborted)
-					archiveStatus = error instanceof Error ? error.message : String(error);
-			}
-		})();
 		return () => controller.abort();
 	});
 
@@ -424,17 +377,6 @@
 				</label>
 			</div>
 			<div class="filter-chips" aria-label="Node type filters">
-				<label>
-					<input
-						type="checkbox"
-						bind:checked={includeRetired}
-						onchange={() => {
-							clearSelection();
-							graphPageNumber = 0;
-						}}
-					/>
-					<span>Include retired</span>
-				</label>
 				<label data-type="compatible">
 					<input type="checkbox" checked={compatibleOnly} onchange={toggleCompatibleOnly} />
 					<span>Compatible</span>
@@ -458,9 +400,6 @@
 					role={buildFailed ? 'alert' : 'status'}
 				>
 					{buildStatus}
-				</p>{/if}
-			{#if includeRetired && archiveStatus}<p class="status" role="status">
-					{archiveStatus}
 				</p>{/if}
 		</div>
 		<div class="flow">

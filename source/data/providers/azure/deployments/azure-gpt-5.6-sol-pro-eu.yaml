@@ -8,7 +8,6 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_eu
     reasoningMode: pro
-    serviceTier: default
   overrides:
     dataHandling:
       processingLocation: europe
@@ -16,14 +15,14 @@ deployments:
     deprecationDate: 2028-01-11
   pricing:
     input_tokens:
-      per_mill_context_lte_272k: '4.4'
+      per_mill_tokens: '4.4'
       per_mill_context_gt_272k: '8.8'
     cached_input_tokens:
-      per_mill_context_lte_272k: '0.44'
+      per_mill_tokens: '0.44'
       per_mill_context_gt_272k: '0.88'
     cache_write_input_tokens:
-      per_mill_context_lte_272k: '5.5'
+      per_mill_tokens: '5.5'
       per_mill_context_gt_272k: '11'
     output_tokens:
-      per_mill_context_lte_272k: '22'
+      per_mill_tokens: '22'
       per_mill_context_gt_272k: '33'

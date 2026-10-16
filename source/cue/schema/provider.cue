@@ -7,5 +7,5 @@ package catalog
 	headquarteredCountry?: #CountryCode
 	capabilities:          #RouteCapabilities
 	dataHandling:          #ProviderDataHandling
-	pricing?:              #ProviderPricing
+	periods?: [#Period, ...#Period]
 })

@@ -1,13 +1,10 @@
 models:
   authorId: nvidia
   name: NVIDIA Nemotron 3 Super 120B A12B
-  groupIds: [nvidia-nemotron-3]
-  flavors: [instruct]
+  groupIds: [nemotron-3]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: []
-  reasoningMaxTokens: null
   releaseDate: 2026-03-11

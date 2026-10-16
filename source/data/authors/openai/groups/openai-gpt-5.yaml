@@ -1,4 +1,0 @@
-groups:
-  authorId: openai
-  name: 'GPT-5'
-  parentIds: [openai-gpt]

@@ -4,15 +4,20 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { canonicalJson } from './canonical-json.mjs';
-import { parseArchiveReference } from './catalog-archive.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
 const MAX_CATALOG_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
-	catalogArchive(repositoryRoot);
 	const sequence = parseSequence(sequenceInput);
+	// Missing build output stops a release before any source inspection.
+	const artifacts = Object.fromEntries(
+		['catalog.public.json', 'catalog.runtime.json'].map((name) => {
+			const { bytes } = catalogArtifact(repositoryRoot, name);
+			return [name, { sha256: sha256(bytes), size_bytes: bytes.byteLength }];
+		})
+	);
 	const releasePolicy = catalogReleasePolicy(repositoryRoot);
 	const commit = git(repositoryRoot, ['rev-parse', 'HEAD']);
 	const source = {
@@ -23,12 +28,7 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 	};
 	return {
 		minimum_gateway_sequence: gatewayReleaseSequence(releasePolicy.minimum_gateway_release),
-		artifacts: Object.fromEntries(
-			['catalog.public.json', 'catalog.runtime.json'].map((name) => {
-				const { bytes } = catalogArtifact(repositoryRoot, name);
-				return [name, { sha256: sha256(bytes), size_bytes: bytes.byteLength }];
-			})
-		),
+		artifacts,
 		schema: 'stogas.catalog.release.v1',
 		sequence,
 		source
@@ -84,7 +84,7 @@ function hasKeys(value, keys) {
 	);
 }
 
-function catalogReleasePolicy(repositoryRoot) {
+export function catalogReleasePolicy(repositoryRoot) {
 	const path = join(repositoryRoot, 'source', 'release-policy.json');
 	let value;
 	try {
@@ -96,10 +96,10 @@ function catalogReleasePolicy(repositoryRoot) {
 		!value ||
 		typeof value !== 'object' ||
 		Array.isArray(value) ||
-		Object.keys(value).length !== 1 ||
+		Object.keys(value).join(',') !== 'minimum_gateway_release' ||
 		typeof value.minimum_gateway_release !== 'string'
 	) {
-		throw new Error('Catalog release policy must contain one canonical minimum_gateway_release.');
+		throw new Error('Catalog release policy must contain only minimum_gateway_release.');
 	}
 	gatewayReleaseSequence(value.minimum_gateway_release);
 	return value;
@@ -128,21 +128,6 @@ export function catalogArtifact(repositoryRoot, filename) {
 	}
 	const bytes = readFileSync(path);
 	return { bytes, digest: `sha256:${sha256(bytes)}` };
-}
-
-export function catalogArchive(repositoryRoot) {
-	const publicCatalog = JSON.parse(
-		catalogArtifact(repositoryRoot, 'catalog.public.json').bytes.toString('utf8')
-	);
-	const reference = parseArchiveReference(publicCatalog.archive);
-	const artifact = catalogArtifact(repositoryRoot, `blobs/sha256/${reference.sha256}.json`);
-	if (
-		artifact.bytes.byteLength !== reference.size_bytes ||
-		artifact.digest !== `sha256:${reference.sha256}`
-	) {
-		throw new Error('Catalog archive differs from its public root');
-	}
-	return artifact;
 }
 
 export function resolveDestructiveOutput(repositoryRoot, value, options) {

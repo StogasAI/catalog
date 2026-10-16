@@ -14,7 +14,7 @@ providers:
     toolChoice: true
     urlContext: false
   dataHandling:
-    processingLocation: global
+    processingLocation: world
     storageLocation: unknown
     retentionDays: 30
     trainingUse: false

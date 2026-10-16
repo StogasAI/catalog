@@ -4,4 +4,5 @@ package catalog
 	authorId: #Id
 	name: string & !=""
 	parentIds?: [...#Id]
+	periods?: [#Period, ...#Period]
 })

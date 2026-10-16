@@ -1,4 +1,0 @@
-groups:
-  authorId: anthropic
-  name: 'Claude Fable'
-  parentIds: [anthropic-claude]

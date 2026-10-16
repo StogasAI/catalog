@@ -18,7 +18,6 @@ import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import { r2WriteConditionETag } from './r2-etag.mjs';
 import {
 	catalogArtifact,
-	catalogArchive,
 	catalogApprovalLedgerKey,
 	catalogManifest,
 	parseCatalogReleaseEvidence,
@@ -29,7 +28,6 @@ import {
 	canonicalJson,
 	stagingDevelopmentProvenance
 } from './release-format.mjs';
-import { parseArchiveReference } from './catalog-archive.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const action = process.argv[2];
@@ -79,14 +77,12 @@ if (action === 'prepare') {
 }
 
 async function preparePlaceholderRelease() {
-	requireCommands(['bun', 'git']);
+	requireCommands(['git']);
 	requireStorageEnvironment();
 	if (publicationEnvironment !== 'staging') {
 		throw new Error('Placeholder proof is allowed only for staging.');
 	}
 
-	run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
-	run('bun', ['run', 'check'], catalogCheckEnvironment());
 	const proofRoot = mkdtempSync(join(tmpdir(), 'stogas-catalog-proof-'));
 	try {
 		const proofPath = join(proofRoot, 'attestation.json');
@@ -118,15 +114,12 @@ async function preparePlaceholderRelease() {
 }
 
 async function prepareRelease() {
-	requireCommands(['bun', 'gh', 'git']);
+	requireCommands(['gh', 'git']);
 	requireStorageEnvironment();
 	requireCleanTaggedSource();
 
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 	try {
-		run('bun', ['install', '--frozen-lockfile'], catalogCheckEnvironment());
-		run('bun', ['run', 'check'], catalogCheckEnvironment());
-
 		const proposalRoot = join(workRoot, 'github-proposal');
 		downloadAndVerifyGitHubProposal(proposalRoot);
 		verifyIndependentBuild(proposalRoot);
@@ -235,14 +228,8 @@ async function activateRelease() {
 
 function requireCommands(commands) {
 	for (const command of commands) {
-		run(command, ['--version'], catalogCheckEnvironment(), { stdout: 'ignore' });
+		run(command, ['--version'], commandEnvironment(command), { stdout: 'ignore' });
 	}
-}
-
-function catalogCheckEnvironment() {
-	const environment = commandEnvironment('bun');
-	delete environment.AWS_OBJECT_LOCK_ENABLED;
-	return environment;
 }
 
 function requireStorageEnvironment() {
@@ -318,7 +305,6 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 	for (const name of [
 		'catalog.runtime.json',
 		'catalog.public.json',
-		'catalog.archive.json',
 		'catalog-release.json',
 		'github-attestation.jsonl',
 		'SHA256SUMS'
@@ -354,12 +340,8 @@ function verifyIndependentBuild(proposalRoot) {
 	if (canonicalJsonValue(proposedManifest) !== canonicalJsonValue(expectedManifest)) {
 		throw new Error('GitHub Actions and Stogas produced different catalog manifests.');
 	}
-	for (const filename of ['catalog.runtime.json', 'catalog.public.json', 'catalog.archive.json']) {
-		const local = (
-			filename === 'catalog.archive.json'
-				? catalogArchive(repositoryRoot)
-				: catalogArtifact(repositoryRoot, filename)
-		).bytes;
+	for (const filename of ['catalog.runtime.json', 'catalog.public.json']) {
+		const local = catalogArtifact(repositoryRoot, filename).bytes;
 		const github = readBoundedRegularFile(join(proposalRoot, filename));
 		if (!local.equals(github)) {
 			throw new Error(`GitHub Actions and Stogas produced different ${filename} bytes.`);
@@ -425,23 +407,12 @@ function artifactPaths(root) {
 	const entries = readdirSync(directory, { withFileTypes: true });
 	const envelope = parseEnvelope(join(root, 'releases', `${sequence}.json`));
 	const artifacts = Object.values(envelope.document.artifacts);
-	const publicArtifact = envelope.document.artifacts['catalog.public.json'];
-	const publicBytes = readContainedRegularFile(root, `blobs/sha256/${publicArtifact.sha256}.json`);
-	if (
-		publicBytes.byteLength !== publicArtifact.size_bytes ||
-		sha256(publicBytes) !== publicArtifact.sha256
-	) {
-		throw new Error('Catalog public blob differs from the release');
-	}
-	artifacts.push(parseArchiveReference(JSON.parse(publicBytes.toString('utf8')).archive));
 	const expected = new Set(artifacts.map((artifact) => `${artifact.sha256}.json`));
 	if (
 		entries.length !== expected.size ||
 		entries.some((entry) => !entry.isFile() || !expected.has(entry.name))
 	) {
-		throw new Error(
-			'Catalog release must contain exactly the blobs committed by its public and runtime roots.'
-		);
+		throw new Error('Catalog release must contain exactly the blobs that its manifest names.');
 	}
 	for (const artifact of artifacts) {
 		const bytes = readContainedRegularFile(root, `blobs/sha256/${artifact.sha256}.json`);

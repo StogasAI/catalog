@@ -1,4 +1,0 @@
-groups:
-  authorId: google
-  name: 'Gemma 4'
-  parentIds: [google-gemma]

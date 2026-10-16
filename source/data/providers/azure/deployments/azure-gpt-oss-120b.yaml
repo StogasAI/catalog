@@ -11,6 +11,7 @@ deployments:
     capabilities:
       parallelFunctionCalling: false
       implicitPromptCaching: false
+      explicitPromptCaching: false
   pricing:
     input_tokens:
       per_mill_tokens: '0.15'

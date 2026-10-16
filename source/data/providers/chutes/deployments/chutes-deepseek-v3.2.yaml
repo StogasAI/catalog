@@ -5,7 +5,6 @@ deployments:
     model: deepseek-ai/DeepSeek-V3.2-TEE
     chuteId: 398651e1-5f85-5e50-a513-7c5324e8e839
     gpuCount: 8
-  aliases: [deepseek-v3.2-tee]
   weightPrecision: fp8
   overrides:
     contextWindowTokens: 131072

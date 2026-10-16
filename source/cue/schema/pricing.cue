@@ -1,15 +1,13 @@
 package catalog
 
-#FlatTokenRate: close({
+// A per_mill_context_gt_<N>k rate replaces per_mill_tokens for every token of
+// its meter, output included, when the request's prompt, counting cached and
+// cache write tokens, has more than N thousand tokens. The largest cutoff below
+// the prompt applies.
+#TokenRate: close({
 	per_mill_tokens: #USD
+	[=~"^per_mill_context_gt_[1-9][0-9]*k$"]: #USD
 })
-
-#ContextTokenRate: close({
-	per_mill_context_lte_272k: #USD
-	per_mill_context_gt_272k:  #USD
-})
-
-#TokenRate: #FlatTokenRate | #ContextTokenRate
 
 #CallRate: close({
 	per_1k_calls: #USD
@@ -31,17 +29,7 @@ package catalog
 	reasoning_tokens?:            #TokenRate
 }
 
-#ProviderPricing: close({
-	anthropic_web_search_calls?: #CallRate
-})
-
 #RoutePricing: close({
-	openai_responses_web_search_calls?:                       #CallRate
-	openai_responses_web_search_preview_calls?:               #CallRate
-	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
-})
-
-#InheritedPricingOverride: close({
 	anthropic_web_search_calls?:                              #CallRate
 	openai_responses_web_search_calls?:                       #CallRate
 	openai_responses_web_search_preview_calls?:               #CallRate

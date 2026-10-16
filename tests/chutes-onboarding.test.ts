@@ -48,7 +48,7 @@ const gpuCounts: Record<string, number> = {
 	'chutes-qwen3.8-27b': 1
 };
 const dataHandling = {
-	processingLocation: 'global',
+	processingLocation: 'world',
 	storageLocation: 'none',
 	endToEndEncrypted: true,
 	retentionDays: 0,
@@ -120,8 +120,7 @@ const deployments: ProviderDeploymentContract[] = [
 				inputModalities: ['text', 'image', 'video'],
 				maxOutputTokens: 262144
 			}
-		),
-		aliases: ['gemma-4-31b-turbo-tee']
+		)
 	},
 	deployment(
 		'chutes-glm-5.1',
@@ -185,8 +184,8 @@ const deployments: ProviderDeploymentContract[] = [
 		262144,
 		65536,
 		'fp8',
-		'0.3',
-		'0.03',
+		'0.25',
+		'0.025',
 		'2',
 		true,
 		['text', 'image'],
@@ -207,9 +206,9 @@ const deployments: ProviderDeploymentContract[] = [
 		262144,
 		65536,
 		'fp8',
-		'0.24',
-		'0.024',
-		'2.2',
+		'0.039',
+		'0.0039',
+		'1.25',
 		true,
 		['text', 'image'],
 		'optional',
@@ -229,9 +228,9 @@ const deployments: ProviderDeploymentContract[] = [
 		262144,
 		65535,
 		'int4',
-		'0.5',
-		'0.05',
-		'2.85',
+		'0.45',
+		'0.045',
+		'1.95',
 		true,
 		['text', 'image', 'video'],
 		'optional',
@@ -263,9 +262,9 @@ const deployments: ProviderDeploymentContract[] = [
 		1048576,
 		65535,
 		'mxfp4',
-		'3',
-		'0.3',
-		'15',
+		'1.85',
+		'0.185',
+		'9.5',
 		true,
 		['text', 'image', 'video'],
 		'required',
@@ -342,7 +341,7 @@ describe('Chutes provider onboarding contract', () => {
 				{
 					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					id: 'chutes-chat-completions',
-					fileInputs: { extensions: [], mediaTypes: [] },
+					nativeFileInputs: { extensions: [], mediaTypes: [] },
 					interfaces: ['chat_completions']
 				}
 			]
@@ -388,7 +387,6 @@ function deployment(
 			: {})
 	};
 	return {
-		aliases: [`${modelId}-tee`],
 		authorId,
 		capabilities: { ...capabilities, structuredOutputs },
 		contextWindowTokens: contextTokens,
@@ -411,7 +409,7 @@ function deployment(
 		},
 		...(Object.keys(publicOverrides).length > 0 ? { publicOverrides } : {}),
 		routeIds: ['chutes-chat-completions'],
-		upstream: { chuteId, gpuCount, model: upstreamModel },
+		upstream: { chuteId, gpuCount, model: upstreamModel, serviceTier: 'standard' },
 		weightPrecision
 	};
 }

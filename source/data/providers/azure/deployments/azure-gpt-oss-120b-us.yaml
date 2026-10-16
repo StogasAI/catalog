@@ -11,6 +11,7 @@ deployments:
     capabilities:
       parallelFunctionCalling: false
       implicitPromptCaching: false
+      explicitPromptCaching: false
     dataHandling:
       processingLocation: US
       storageLocation: US

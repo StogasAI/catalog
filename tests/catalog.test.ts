@@ -7,8 +7,13 @@ const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments
 const canonicalEffortOrder = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 const canonicalEfforts = new Set(canonicalEffortOrder);
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
+// Exact decimal price scaled to an integer.
+const coefficient = (value: string) => {
+	const [whole, fraction = ''] = value.split('.');
+	return BigInt(whole! + fraction.padEnd(36, '0'));
+};
 
-describe('compiled catalog v3', () => {
+describe('compiled catalog', () => {
 	test('keeps model grouping in the public graph and execution facts in runtime', () => {
 		expect(Object.keys(publicCatalog.graph).sort()).toEqual([...graphNodeTypes, 'groups'].sort());
 		expect(Object.keys(runtimeCatalog.graph).sort()).toEqual([...graphNodeTypes].sort());
@@ -19,7 +24,7 @@ describe('compiled catalog v3', () => {
 					Object.keys(publicCatalog.graph[nodeType]).length
 				])
 			)
-		).toEqual({ authors: 10, models: 34, providers: 4, routes: 7, deployments: 106 });
+		).toEqual({ authors: 10, models: 45, providers: 4, routes: 7, deployments: 208 });
 		expect(JSON.stringify(publicCatalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -60,11 +65,10 @@ describe('compiled catalog v3', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(51);
+		expect(Object.keys(selectors)).toHaveLength(112);
 		expect(selectors).toMatchObject({
-			'azure-claude-opus-5': 'claude-opus-5',
-			'azure-claude-opus-5-anthropic-hosted': 'claude-opus-5',
-			'azure-deepseek-v3.2': 'DeepSeek-V3.2',
+			'azure-claude-opus-5-5': 'claude-opus-5-5',
+			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',
 			'azure-deepseek-v4-flash-0423-eu': 'DeepSeek-V4-Flash',
 			'azure-deepseek-v4-pro': 'DeepSeek-V4-Pro',
 			'azure-deepseek-v4-pro-fireworks-hosted-us': 'FW-DeepSeek-V4-Pro',
@@ -73,34 +77,38 @@ describe('compiled catalog v3', () => {
 			'azure-gpt-5.6-sol-fast': 'gpt-5.6-sol',
 			'azure-gpt-5.6-sol-pro-fast': 'gpt-5.6-sol',
 			'azure-gpt-5.6-terra-us': 'gpt-5.6-terra',
+			'azure-gpt-6-astra-pro-flex': 'gpt-6-astra',
+			'azure-gpt-6-sol-pro-fast-us': 'gpt-6-sol',
 			'azure-gpt-oss-120b-us': 'gpt-oss-120b',
 			'azure-minimax-m3': 'FW-MiniMax-M3'
 		});
 	});
 
-	test('keeps aliases inline, selectors explicit, and globally unique', () => {
+	test('keeps aliases to respellings and selectors globally unique', () => {
 		const selectors = new Set<string>();
 		for (const [modelId, model] of Object.entries(runtimeCatalog.graph.models)) {
-			expect(model.aliases.length).toBeLessThanOrEqual(8);
+			for (const alias of model.aliases) {
+				expect(alias.replaceAll('.', '-')).toBe(modelId.replaceAll('.', '-'));
+			}
 			for (const selector of [modelId, ...model.aliases]) {
 				expect(selector).not.toContain('/');
 				expect(selectors.has(selector)).toBe(false);
 				selectors.add(selector);
 			}
 		}
-		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment.aliases.length).toBeLessThanOrEqual(8);
-			for (const alias of deployment.aliases) {
-				expect(alias).not.toBe(deployment.modelId);
-				expect(alias).not.toContain('/');
-				expect(selectors.has(alias)).toBe(false);
-				selectors.add(alias);
-			}
+		const groupIds = new Set(
+			Object.values(runtimeCatalog.graph.models).flatMap((model) => model.groupIds)
+		);
+		for (const selector of [...Object.keys(runtimeCatalog.graph.deployments), ...groupIds]) {
+			expect(selectors.has(selector)).toBe(false);
+			selectors.add(selector);
 		}
-		for (const deploymentId of Object.keys(runtimeCatalog.graph.deployments)) {
-			expect(selectors.has(deploymentId)).toBe(false);
-			selectors.add(deploymentId);
-		}
+		expect(runtimeCatalog.graph.models['claude-haiku-4-5'].aliases).toEqual(['claude-haiku-4.5']);
+		expect(selectors.has('claude-haiku-latest')).toBe(false);
+		expect(runtimeCatalog.graph.models['claude-haiku-4-5'].groupIds).toEqual([
+			'claude',
+			'claude-haiku'
+		]);
 		expect(selectors.size).toBeGreaterThan(50);
 		expect(runtimeCatalog).not.toHaveProperty('aliases');
 		expect(runtimeCatalog.graph.authors.openai.aliases).toEqual(['open-ai']);
@@ -276,7 +284,7 @@ describe('compiled catalog v3', () => {
 			);
 		}
 		expect(publicCatalog.graph.models['mistral-nemo-instruct-2407']).toMatchObject({
-			groupIds: ['mistral-ai-mistral-nemo'],
+			groupIds: ['mistral-nemo'],
 			knowledgeCutoff: '2024-04-01',
 			name: 'Mistral NeMo Instruct 2407'
 		});
@@ -383,7 +391,7 @@ describe('compiled catalog v3', () => {
 		expect(deployment.upstream).toEqual({
 			inferenceGeo: 'us',
 			model: 'claude-opus-4-8',
-			speed: 'fast'
+			serviceTier: 'fast'
 		});
 		expect(
 			publicCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].overrides.dataHandling
@@ -394,14 +402,20 @@ describe('compiled catalog v3', () => {
 	test('enumerates current first-party Anthropic models and only supported variants', () => {
 		const expectedActiveModels = [
 			'claude-fable-5',
+			'claude-fable-5-1',
 			'claude-haiku-4-5',
+			'claude-haiku-5-5',
+			'claude-mythos-5',
+			'claude-mythos-5-1',
 			'claude-opus-4-5',
 			'claude-opus-4-6',
 			'claude-opus-4-7',
 			'claude-opus-4-8',
 			'claude-opus-5',
+			'claude-opus-5-5',
 			'claude-sonnet-4-6',
-			'claude-sonnet-5'
+			'claude-sonnet-5',
+			'claude-sonnet-5-5'
 		];
 		const activeModels = Object.entries(publicCatalog.graph.models)
 			.filter(([, model]) => model.authorId === 'anthropic' && model.deprecationDate === null)
@@ -424,29 +438,39 @@ describe('compiled catalog v3', () => {
 			expect(baseDeploymentsByModel.has(modelId)).toBe(true);
 
 		for (const [modelId, alias] of [
+			['claude-fable-5-1', 'claude-fable-5.1'],
 			['claude-haiku-4-5', 'claude-haiku-4.5'],
+			['claude-haiku-5-5', 'claude-haiku-5.5'],
+			['claude-mythos-5-1', 'claude-mythos-5.1'],
 			['claude-opus-4-5', 'claude-opus-4.5'],
 			['claude-opus-4-6', 'claude-opus-4.6'],
 			['claude-opus-4-7', 'claude-opus-4.7'],
 			['claude-opus-4-8', 'claude-opus-4.8'],
-			['claude-sonnet-4-6', 'claude-sonnet-4.6']
+			['claude-opus-5-5', 'claude-opus-5.5'],
+			['claude-sonnet-4-6', 'claude-sonnet-4.6'],
+			['claude-sonnet-5-5', 'claude-sonnet-5.5']
 		] as const) {
 			expect(publicCatalog.graph.models[modelId].aliases).toContain(alias);
 		}
 		expect(publicCatalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toMatchObject({
-			aliases: [],
 			modelId: 'claude-haiku-4-5',
 			upstream: { model: 'claude-haiku-4-5-20251001' }
 		});
 
 		const geoModels = new Set([
 			'claude-fable-5',
+			'claude-fable-5-1',
+			'claude-haiku-5-5',
+			'claude-mythos-5',
+			'claude-mythos-5-1',
 			'claude-opus-4-6',
 			'claude-opus-4-7',
 			'claude-opus-4-8',
 			'claude-opus-5',
+			'claude-opus-5-5',
 			'claude-sonnet-4-6',
-			'claude-sonnet-5'
+			'claude-sonnet-5',
+			'claude-sonnet-5-5'
 		]);
 		const usModels = new Set(
 			Object.values(runtimeCatalog.graph.deployments)
@@ -463,19 +487,22 @@ describe('compiled catalog v3', () => {
 
 		const fastModels = new Set(
 			Object.values(runtimeCatalog.graph.deployments)
-				.filter((deployment) => deployment.upstream.speed === 'fast')
+				.filter(
+					(deployment) =>
+						deployment.routeIds.includes('anthropic-messages') &&
+						deployment.upstream.serviceTier === 'fast'
+				)
 				.map((deployment) => deployment.modelId)
 		);
-		expect(fastModels).toEqual(new Set(['claude-opus-4-8', 'claude-opus-5']));
+		expect(fastModels).toEqual(new Set(['claude-opus-4-8', 'claude-opus-5', 'claude-opus-5-5']));
 		expect(publicCatalog.graph.routes['anthropic-messages'].dataHandling).toEqual({
 			endToEndEncrypted: false
 		});
-		expect(publicCatalog.graph.providers.anthropic.pricing).toEqual({
+		expect(publicCatalog.graph.routes['anthropic-messages'].pricing).toEqual({
 			anthropic_web_search_calls: {
 				per_1k_calls: '10'
 			}
 		});
-		expect(publicCatalog.graph.routes['anthropic-messages']).not.toHaveProperty('pricing');
 		expect(runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].pricing).toHaveProperty(
 			'anthropic_web_search_calls'
 		);
@@ -484,7 +511,16 @@ describe('compiled catalog v3', () => {
 			retentionDays: 0,
 			zeroDataRetention: false
 		});
-		for (const deploymentId of ['anthropic-claude-fable-5', 'anthropic-claude-fable-5-us']) {
+		for (const deploymentId of [
+			'anthropic-claude-fable-5',
+			'anthropic-claude-fable-5-us',
+			'anthropic-claude-fable-5-1',
+			'anthropic-claude-fable-5-1-us',
+			'anthropic-claude-mythos-5',
+			'anthropic-claude-mythos-5-us',
+			'anthropic-claude-mythos-5-1',
+			'anthropic-claude-mythos-5-1-us'
+		]) {
 			expect(runtimeCatalog.graph.deployments[deploymentId].dataHandlingByRoute).toEqual({
 				'anthropic-messages': expect.objectContaining({
 					storageLocation: 'unknown',
@@ -497,6 +533,31 @@ describe('compiled catalog v3', () => {
 				'anthropic-messages'
 			]
 		).toMatchObject({ storageLocation: 'none', retentionDays: 0 });
+	});
+
+	test('marks deployments that need provider approval in both graphs', () => {
+		const gated = (deployments: Record<string, { approvalRequired: boolean }>) =>
+			Object.entries(deployments)
+				.filter(([, deployment]) => deployment.approvalRequired)
+				.map(([deploymentId]) => deploymentId)
+				.sort();
+		const expected = [
+			'anthropic-claude-mythos-5',
+			'anthropic-claude-mythos-5-1',
+			'anthropic-claude-mythos-5-1-us',
+			'anthropic-claude-mythos-5-us',
+			'anthropic-claude-opus-4-8-fast',
+			'anthropic-claude-opus-4-8-fast-us',
+			'anthropic-claude-opus-5-5-fast',
+			'anthropic-claude-opus-5-5-fast-us',
+			'anthropic-claude-opus-5-fast',
+			'anthropic-claude-opus-5-fast-us',
+			'azure-claude-mythos-5-1-anthropic-hosted',
+			'azure-claude-mythos-5-anthropic-hosted',
+			'openai-gpt-5.6-cyber'
+		];
+		expect(gated(runtimeCatalog.graph.deployments)).toEqual(expected);
+		expect(gated(publicCatalog.graph.deployments)).toEqual(expected);
 	});
 
 	test('publishes OpenAI Fast naming and current GPT-5.6 prices', () => {
@@ -516,61 +577,61 @@ describe('compiled catalog v3', () => {
 			'openai-gpt-5.6-terra-fast'
 		] as const) {
 			expect(deployments[fastId]).toMatchObject({
-				upstream: { serviceTier: 'priority' }
+				upstream: { serviceTier: 'fast' }
 			});
 		}
 
 		expect(deployments['openai-gpt-5.6-luna'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '0.2',
+				per_mill_tokens: '0.2',
 				per_mill_context_gt_272k: '0.4'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.02',
+				per_mill_tokens: '0.02',
 				per_mill_context_gt_272k: '0.04'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '0.25',
+				per_mill_tokens: '0.25',
 				per_mill_context_gt_272k: '0.5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '1.2',
+				per_mill_tokens: '1.2',
 				per_mill_context_gt_272k: '1.8'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-flex'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '0.1',
+				per_mill_tokens: '0.1',
 				per_mill_context_gt_272k: '0.2'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.01',
+				per_mill_tokens: '0.01',
 				per_mill_context_gt_272k: '0.02'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '0.125',
+				per_mill_tokens: '0.125',
 				per_mill_context_gt_272k: '0.25'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '0.6',
+				per_mill_tokens: '0.6',
 				per_mill_context_gt_272k: '0.9'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-luna-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '0.4',
+				per_mill_tokens: '0.4',
 				per_mill_context_gt_272k: '0.8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.04',
+				per_mill_tokens: '0.04',
 				per_mill_context_gt_272k: '0.08'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '0.5',
+				per_mill_tokens: '0.5',
 				per_mill_context_gt_272k: '1'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '2.4',
+				per_mill_tokens: '2.4',
 				per_mill_context_gt_272k: '3.6'
 			}
 		});
@@ -579,37 +640,37 @@ describe('compiled catalog v3', () => {
 
 		expect(deployments['openai-gpt-5.6-sol-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '8',
+				per_mill_tokens: '8',
 				per_mill_context_gt_272k: '16'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.8',
+				per_mill_tokens: '0.8',
 				per_mill_context_gt_272k: '1.6'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '10',
+				per_mill_tokens: '10',
 				per_mill_context_gt_272k: '20'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '40',
+				per_mill_tokens: '40',
 				per_mill_context_gt_272k: '60'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-sol'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '4',
+				per_mill_tokens: '4',
 				per_mill_context_gt_272k: '8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.4',
+				per_mill_tokens: '0.4',
 				per_mill_context_gt_272k: '0.8'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '5',
+				per_mill_tokens: '5',
 				per_mill_context_gt_272k: '10'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '20',
+				per_mill_tokens: '20',
 				per_mill_context_gt_272k: '30'
 			}
 		});
@@ -619,11 +680,7 @@ describe('compiled catalog v3', () => {
 			'cache_write_input_tokens',
 			'output_tokens'
 		] as const) {
-			for (const band of ['per_mill_context_lte_272k', 'per_mill_context_gt_272k'] as const) {
-				const coefficient = (value: string) => {
-					const [whole, fraction = ''] = value.split('.');
-					return BigInt(whole! + fraction.padEnd(36, '0'));
-				};
+			for (const band of ['per_mill_tokens', 'per_mill_context_gt_272k'] as const) {
 				const standard = coefficient(deployments['openai-gpt-5.6-sol'].pricing[meter][band]);
 				const flex = coefficient(deployments['openai-gpt-5.6-sol-flex'].pricing[meter][band]);
 				const fast = coefficient(deployments['openai-gpt-5.6-sol-fast'].pricing[meter][band]);
@@ -636,55 +693,55 @@ describe('compiled catalog v3', () => {
 
 		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '2',
+				per_mill_tokens: '2',
 				per_mill_context_gt_272k: '4'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.2',
+				per_mill_tokens: '0.2',
 				per_mill_context_gt_272k: '0.4'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '2.5',
+				per_mill_tokens: '2.5',
 				per_mill_context_gt_272k: '5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '12',
+				per_mill_tokens: '12',
 				per_mill_context_gt_272k: '18'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-flex'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '1',
+				per_mill_tokens: '1',
 				per_mill_context_gt_272k: '2'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.1',
+				per_mill_tokens: '0.1',
 				per_mill_context_gt_272k: '0.2'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '1.25',
+				per_mill_tokens: '1.25',
 				per_mill_context_gt_272k: '2.5'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '6',
+				per_mill_tokens: '6',
 				per_mill_context_gt_272k: '9'
 			}
 		});
 		expect(deployments['openai-gpt-5.6-terra-fast'].pricing).toMatchObject({
 			input_tokens: {
-				per_mill_context_lte_272k: '4',
+				per_mill_tokens: '4',
 				per_mill_context_gt_272k: '8'
 			},
 			cached_input_tokens: {
-				per_mill_context_lte_272k: '0.4',
+				per_mill_tokens: '0.4',
 				per_mill_context_gt_272k: '0.8'
 			},
 			cache_write_input_tokens: {
-				per_mill_context_lte_272k: '5',
+				per_mill_tokens: '5',
 				per_mill_context_gt_272k: '10'
 			},
 			output_tokens: {
-				per_mill_context_lte_272k: '24',
+				per_mill_tokens: '24',
 				per_mill_context_gt_272k: '36'
 			}
 		});
@@ -692,25 +749,29 @@ describe('compiled catalog v3', () => {
 		expect(deployments['openai-gpt-5.6-terra-fast'].maxInputTokens).toBe(922_000);
 	});
 
-	test('publishes every GPT-5.6 Pro service tier as a Responses-only deployment', () => {
+	test('publishes every GPT-5.6 and GPT-6 Pro service tier as a Responses-only deployment', () => {
 		const deployments = runtimeCatalog.graph.deployments;
-		for (const modelTier of ['sol', 'terra', 'luna'] as const) {
+		for (const modelId of [
+			'gpt-5.6-luna',
+			'gpt-5.6-sol',
+			'gpt-5.6-terra',
+			'gpt-6-astra',
+			'gpt-6-luna',
+			'gpt-6-sol',
+			'gpt-6.1-sol'
+		] as const) {
 			for (const [suffix, serviceTier] of [
-				['', 'default'],
+				['', 'standard'],
 				['-flex', 'flex'],
-				['-fast', 'priority']
+				['-fast', 'fast']
 			] as const) {
-				const deploymentId = `openai-gpt-5.6-${modelTier}-pro${suffix}`;
-				const peer = deployments[`openai-gpt-5.6-${modelTier}${suffix}`];
+				const deploymentId = `openai-${modelId}-pro${suffix}`;
+				const peer = deployments[`openai-${modelId}${suffix}`];
 				const pro = deployments[deploymentId];
 				expect(pro).toMatchObject({
-					modelId: `gpt-5.6-${modelTier}`,
+					modelId,
 					routeIds: ['openai-responses'],
-					upstream: {
-						model: `gpt-5.6-${modelTier}`,
-						reasoningMode: 'pro',
-						serviceTier
-					}
+					upstream: { model: modelId, reasoningMode: 'pro', serviceTier }
 				});
 				expect(pro.pricing).toEqual(peer.pricing);
 				expect(pro.contextWindowTokens).toBe(peer.contextWindowTokens);
@@ -719,10 +780,67 @@ describe('compiled catalog v3', () => {
 		}
 	});
 
+	test('publishes exact GPT-6 tier prices and Ultrafast only for Astra and GPT-6.1 Sol', () => {
+		const deployments = runtimeCatalog.graph.deployments;
+		expect(
+			Object.fromEntries(
+				Object.entries(deployments)
+					.filter(([, deployment]) => deployment.upstream.serviceTier === 'ultrafast')
+					.map(([deploymentId, deployment]) => [deploymentId, deployment.routeIds])
+			)
+		).toEqual({
+			'openai-gpt-6-astra-ultrafast': ['openai-responses'],
+			'openai-gpt-6.1-sol-ultrafast': ['openai-responses']
+		});
+
+		// OpenAI Standard input, cached input, and output prices per million tokens up to 272K.
+		const standardRates = {
+			'gpt-6-astra': ['10', '1', '50'],
+			'gpt-6-luna': ['0.1', '0.01', '0.5'],
+			'gpt-6-sol': ['2', '0.2', '10'],
+			'gpt-6.1-sol': ['2', '0.1', '10']
+		} as const;
+		const tierScale = {
+			standard: [1n, 1n],
+			flex: [1n, 2n],
+			fast: [2n, 1n],
+			ultrafast: [6n, 1n]
+		} as const;
+		const checked: string[] = [];
+		for (const [deploymentId, deployment] of Object.entries(deployments)) {
+			if (!deploymentId.startsWith('openai-') || !(deployment.modelId in standardRates)) continue;
+			const [input, cached, output] =
+				standardRates[deployment.modelId as keyof typeof standardRates].map(coefficient);
+			const [numerator, denominator] =
+				tierScale[deployment.upstream.serviceTier as keyof typeof tierScale];
+			// Cache writes cost 1.25x input. Prompts over 272K double input rates and raise output by half.
+			for (const [meter, short, long] of [
+				['input_tokens', input, input * 2n],
+				['cached_input_tokens', cached, cached * 2n],
+				['cache_write_input_tokens', (input * 5n) / 4n, (input * 5n) / 2n],
+				['output_tokens', output, (output * 3n) / 2n]
+			] as const) {
+				const rates = deployment.pricing[meter];
+				expect(Object.keys(rates).sort()).toEqual(['per_mill_context_gt_272k', 'per_mill_tokens']);
+				expect(coefficient(rates.per_mill_tokens)).toBe((short * numerator) / denominator);
+				expect(coefficient(rates.per_mill_context_gt_272k)).toBe((long * numerator) / denominator);
+			}
+			if (deployment.routeIds.includes('openai-chat-completions')) {
+				expect(deployment.routeOverrides).toEqual({
+					'openai-chat-completions': { reasoningEfforts: ['low', 'medium', 'high', 'xhigh'] }
+				});
+			}
+			checked.push(deploymentId);
+		}
+		expect(checked).toHaveLength(26);
+	});
+
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v3');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v3');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v4');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v4');
+		expect(runtimeCatalog.schedule).toEqual([]);
+		expect(publicCatalog.schedule).toEqual([]);
 	});
 });

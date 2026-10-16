@@ -18,78 +18,83 @@ function azureDeployments() {
 	);
 }
 
-function gptTargets(tier: 'luna' | 'sol' | 'terra'): AzureTarget[] {
-	const modelId = `gpt-5.6-${tier}`;
-	const base = `azure-${modelId}`;
-	const targets: AzureTarget[] = [];
-	for (const location of ['global', 'eu', 'instant', 'us'] as const) {
-		const deploymentType =
-			location === 'global'
-				? 'global_standard'
-				: location === 'instant'
-					? 'instant'
-					: `data_zone_standard_${location}`;
-		const suffix = location === 'global' ? '' : `-${location}`;
+type AzureLocation = 'global' | 'apac' | 'eu' | 'instant' | 'us';
+
+// Each node is a deployment for both routes plus, for models with Pro, a Responses-only Pro deployment.
+function gptTargets(
+	modelId: string,
+	modelVersion: string,
+	nodes: readonly (readonly ['standard' | 'flex' | 'fast', AzureLocation])[],
+	{ model = modelId, pro = true }: { model?: string; pro?: boolean } = {}
+): AzureTarget[] {
+	return nodes.flatMap(([serviceTier, location]) => {
+		const tierSuffix = serviceTier === 'standard' ? '' : `-${serviceTier}`;
+		const suffix = `${tierSuffix}${location === 'global' ? '' : `-${location}`}`;
 		const upstream = {
-			deploymentType,
+			deploymentType:
+				location === 'global'
+					? 'global_standard'
+					: location === 'instant'
+						? 'instant'
+						: `data_zone_standard_${location}`,
 			hosting: 'azure',
-			model: modelId,
+			model,
 			modelFormat: 'OpenAI',
-			modelVersion: '2026-07-09',
-			serviceTier: 'default'
+			modelVersion,
+			serviceTier
 		};
-		targets.push({
-			id: `${base}${suffix}`,
+		const base = {
+			id: `azure-${modelId}${suffix}`,
 			modelId,
 			routeIds: ['azure-chat-completions', 'azure-responses'],
 			upstream
-		});
-		targets.push({
-			id: `${base}-pro${suffix}`,
-			modelId,
-			routeIds: ['azure-responses'],
-			upstream: { ...upstream, reasoningMode: 'pro' }
-		});
-	}
-	if (tier !== 'luna') {
-		targets.push(
-			{
-				id: `${base}-fast`,
-				modelId,
-				routeIds: ['azure-chat-completions', 'azure-responses'],
-				upstream: {
-					deploymentType: 'global_standard',
-					hosting: 'azure',
-					model: modelId,
-					modelFormat: 'OpenAI',
-					modelVersion: '2026-07-09',
-					serviceTier: 'priority'
-				}
-			},
-			{
-				id: `${base}-pro-fast`,
-				modelId,
-				routeIds: ['azure-responses'],
-				upstream: {
-					deploymentType: 'global_standard',
-					hosting: 'azure',
-					model: modelId,
-					modelFormat: 'OpenAI',
-					modelVersion: '2026-07-09',
-					reasoningMode: 'pro',
-					serviceTier: 'priority'
-				}
-			}
-		);
-	}
-	return targets;
+		};
+		return pro
+			? [
+					base,
+					{
+						id: `azure-${modelId}-pro${suffix}`,
+						modelId,
+						routeIds: ['azure-responses'],
+						upstream: { ...upstream, reasoningMode: 'pro' }
+					}
+				]
+			: [base];
+	});
 }
+
+const standardNodes = (['global', 'eu', 'instant', 'us'] as const).map(
+	(location) => ['standard', location] as const
+);
 
 const otherTargets: AzureTarget[] = [
 	['azure-claude-fable-5-anthropic-hosted', 'claude-fable-5', '1', 'anthropic', 'global_standard'],
 	[
-		'azure-claude-opus-4-7-anthropic-hosted',
-		'claude-opus-4-7',
+		'azure-claude-fable-5-1-anthropic-hosted',
+		'claude-fable-5-1',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
+	['azure-claude-haiku-5-5', 'claude-haiku-5-5', '2', 'azure', 'global_standard'],
+	[
+		'azure-claude-haiku-5-5-anthropic-hosted',
+		'claude-haiku-5-5',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
+	['azure-claude-haiku-5-5-us', 'claude-haiku-5-5', '2', 'azure', 'data_zone_standard_us'],
+	[
+		'azure-claude-mythos-5-anthropic-hosted',
+		'claude-mythos-5',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
+	[
+		'azure-claude-mythos-5-1-anthropic-hosted',
+		'claude-mythos-5-1',
 		'1',
 		'anthropic',
 		'global_standard'
@@ -103,25 +108,24 @@ const otherTargets: AzureTarget[] = [
 		'global_standard'
 	],
 	['azure-claude-opus-4-8-us', 'claude-opus-4-8', '2', 'azure', 'data_zone_standard_us'],
-	['azure-claude-opus-5', 'claude-opus-5', '2', 'azure', 'global_standard'],
-	['azure-claude-opus-5-anthropic-hosted', 'claude-opus-5', '1', 'anthropic', 'global_standard'],
-	['azure-claude-opus-5-us', 'claude-opus-5', '2', 'azure', 'data_zone_standard_us'],
+	['azure-claude-opus-5-5', 'claude-opus-5-5', '2', 'azure', 'global_standard'],
 	[
-		'azure-claude-sonnet-4-6-anthropic-hosted',
-		'claude-sonnet-4-6',
+		'azure-claude-opus-5-5-anthropic-hosted',
+		'claude-opus-5-5',
 		'1',
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-sonnet-5', 'claude-sonnet-5', '2', 'azure', 'global_standard'],
+	['azure-claude-opus-5-5-us', 'claude-opus-5-5', '2', 'azure', 'data_zone_standard_us'],
+	['azure-claude-sonnet-5-5', 'claude-sonnet-5-5', '2', 'azure', 'global_standard'],
 	[
-		'azure-claude-sonnet-5-anthropic-hosted',
-		'claude-sonnet-5',
+		'azure-claude-sonnet-5-5-anthropic-hosted',
+		'claude-sonnet-5-5',
 		'1',
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-sonnet-5-us', 'claude-sonnet-5', '2', 'azure', 'data_zone_standard_us']
+	['azure-claude-sonnet-5-5-us', 'claude-sonnet-5-5', '2', 'azure', 'data_zone_standard_us']
 ].map(([id, modelId, modelVersion, hosting, deploymentType]) => ({
 	id,
 	modelId,
@@ -136,18 +140,6 @@ const otherTargets: AzureTarget[] = [
 }));
 
 otherTargets.push(
-	{
-		id: 'azure-deepseek-v3.2',
-		modelId: 'deepseek-v3.2',
-		routeIds: ['azure-chat-completions'],
-		upstream: {
-			deploymentType: 'global_standard',
-			hosting: 'azure',
-			model: 'DeepSeek-V3.2',
-			modelFormat: 'DeepSeek',
-			modelVersion: '1'
-		}
-	},
 	...(['global', 'eu', 'us'] as const).map((location) => ({
 		id: `azure-deepseek-v4-flash-0423${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-flash-0423',
@@ -232,56 +224,97 @@ function scaled(value: string, numerator: bigint, denominator = 1n) {
 	return `${digits.slice(0, -36)}.${digits.slice(-36)}`.replace(/0+$/, '').replace(/\.$/, '');
 }
 
-function gptPricing(
-	input: string,
-	output: string,
-	options: { dataZone: boolean; priority: boolean }
-) {
-	const regionNumerator = options.dataZone ? 11n : 10n;
-	const shortInput = scaled(input, regionNumerator, 10n);
-	const shortCached = scaled(shortInput, 1n, 10n);
-	const shortWrite = scaled(shortInput, 5n, 4n);
-	const shortOutput = scaled(output, regionNumerator, 10n);
+// Long prompts double the input prices and raise the output price by half.
+function gptPricing(rates: readonly string[], numerator: bigint, denominator: bigint) {
+	const [input, cached, output] = rates.map((rate) => scaled(rate, numerator, denominator));
+	const write = scaled(input!, 5n, 4n);
 	return {
 		cache_write_input_tokens: {
-			per_mill_context_gt_272k: scaled(shortWrite, options.priority ? 4n : 2n),
-			per_mill_context_lte_272k: scaled(shortWrite, options.priority ? 2n : 1n)
+			per_mill_context_gt_272k: scaled(write, 2n),
+			per_mill_tokens: write
 		},
 		cached_input_tokens: {
-			per_mill_context_gt_272k: scaled(shortCached, options.priority ? 4n : 2n),
-			per_mill_context_lte_272k: scaled(shortCached, options.priority ? 2n : 1n)
+			per_mill_context_gt_272k: scaled(cached!, 2n),
+			per_mill_tokens: cached
 		},
 		input_tokens: {
-			per_mill_context_gt_272k: scaled(shortInput, options.priority ? 4n : 2n),
-			per_mill_context_lte_272k: scaled(shortInput, options.priority ? 2n : 1n)
+			per_mill_context_gt_272k: scaled(input!, 2n),
+			per_mill_tokens: input
 		},
 		output_tokens: {
-			per_mill_context_gt_272k: scaled(shortOutput, options.priority ? 6n : 3n, 2n),
-			per_mill_context_lte_272k: scaled(shortOutput, options.priority ? 2n : 1n)
+			per_mill_context_gt_272k: scaled(output!, 3n, 2n),
+			per_mill_tokens: output
 		}
 	};
 }
 
-function claudePricing(input: string, output: string, dataZone: boolean) {
-	const adjustedInput = dataZone ? scaled(input, 11n, 10n) : input;
-	const adjustedOutput = dataZone ? scaled(output, 11n, 10n) : output;
+function claudePricing(
+	input: string,
+	output: string,
+	options: { dataZone: boolean; cacheReadDivisor: bigint; longPromptMultiplier?: bigint }
+) {
+	const adjustedInput = options.dataZone ? scaled(input, 11n, 10n) : input;
+	const adjustedOutput = options.dataZone ? scaled(output, 11n, 10n) : output;
+	const rate = (value: string) =>
+		options.longPromptMultiplier === undefined
+			? { per_mill_tokens: value }
+			: {
+					per_mill_context_gt_100k: scaled(value, options.longPromptMultiplier),
+					per_mill_tokens: value
+				};
 	return {
-		cache_write_1h_input_tokens: { per_mill_tokens: scaled(adjustedInput, 2n) },
-		cache_write_5m_input_tokens: { per_mill_tokens: scaled(adjustedInput, 5n, 4n) },
-		cached_input_tokens: { per_mill_tokens: scaled(adjustedInput, 1n, 10n) },
-		input_tokens: { per_mill_tokens: adjustedInput.toString() },
-		output_tokens: { per_mill_tokens: adjustedOutput.toString() }
+		anthropic_web_search_calls: { per_1k_calls: '10' },
+		cache_write_1h_input_tokens: rate(scaled(adjustedInput, 2n)),
+		cache_write_5m_input_tokens: rate(scaled(adjustedInput, 5n, 4n)),
+		cached_input_tokens: rate(scaled(adjustedInput, 1n, options.cacheReadDivisor)),
+		input_tokens: rate(adjustedInput),
+		output_tokens: rate(adjustedOutput)
 	};
 }
 
 describe('Azure provider onboarding contract', () => {
 	test('publishes the exact verified Azure target matrix without duplicates', () => {
 		const expected = [
-			...gptTargets('luna'),
-			...gptTargets('sol'),
-			...gptTargets('terra'),
+			...gptTargets(
+				'gpt-5.5-2026-04-23',
+				'2026-04-24',
+				[...standardNodes, ['fast', 'global'], ['fast', 'us']],
+				{ model: 'gpt-5.5', pro: false }
+			),
+			...gptTargets('gpt-5.6-luna', '2026-07-09', [...standardNodes, ['flex', 'global']]),
+			...gptTargets('gpt-5.6-sol', '2026-07-09', [
+				...standardNodes,
+				['standard', 'apac'],
+				['flex', 'global'],
+				['fast', 'global']
+			]),
+			...gptTargets('gpt-5.6-terra', '2026-07-09', [
+				...standardNodes,
+				['flex', 'global'],
+				['fast', 'global']
+			]),
+			...gptTargets('gpt-6-astra', '2026-09-03', [
+				['standard', 'global'],
+				['standard', 'instant'],
+				['standard', 'us'],
+				['flex', 'global']
+			]),
+			...gptTargets('gpt-6-luna', '2026-09-22', [...standardNodes, ['flex', 'global']]),
+			...gptTargets('gpt-6-sol', '2026-09-22', [
+				...standardNodes,
+				['flex', 'global'],
+				['fast', 'global'],
+				['fast', 'us']
+			]),
+			...gptTargets('gpt-6.1-sol', '2026-09-29', [
+				...standardNodes,
+				['standard', 'apac'],
+				['flex', 'global']
+			]),
 			...otherTargets
-		].sort((left, right) => left.id.localeCompare(right.id));
+		]
+			.map((target) => ({ ...target, upstream: { serviceTier: 'standard', ...target.upstream } }))
+			.sort((left, right) => left.id.localeCompare(right.id));
 		const actual = azureDeployments()
 			.map(([id, deployment]) => ({
 				id,
@@ -309,21 +342,35 @@ describe('Azure provider onboarding contract', () => {
 		expect(publicCatalog.graph.providers.azure.credentialModes).toEqual(['byok']);
 	});
 
-	test('pins GPT-5.6 standard, data-zone, Instant, Pro, and Priority prices', () => {
-		const baseRates = {
-			'gpt-5.6-luna': ['0.2', '1.2'],
-			'gpt-5.6-sol': ['4', '20'],
-			'gpt-5.6-terra': ['2', '12']
+	test('pins GPT prices and retirement for every Azure location, tier, and reasoning mode', () => {
+		// Global input, cached input, and output prices; EU and Asia Pacific Data Zone price in tenths of
+		// Global; retirement.
+		const models = {
+			'gpt-5.6-luna': [['0.2', '0.02', '1.2'], 11n, '2028-01-11'],
+			'gpt-5.6-sol': [['4', '0.4', '20'], 11n, '2028-01-11'],
+			'gpt-5.6-terra': [['2', '0.2', '12'], 11n, '2028-01-11'],
+			'gpt-6-astra': [['10', '1', '50'], 12n, '2028-01-11'],
+			'gpt-6-luna': [['0.1', '0.01', '0.5'], 12n, '2028-03-11'],
+			'gpt-6-sol': [['2', '0.2', '10'], 12n, '2028-03-11'],
+			'gpt-6.1-sol': [['2', '0.1', '10'], 12n, '2028-03-11']
 		} as const;
 		for (const [, deployment] of azureDeployments()) {
-			if (!(deployment.modelId in baseRates)) continue;
-			const [input, output] = baseRates[deployment.modelId as keyof typeof baseRates];
+			if (!(deployment.modelId in models)) continue;
+			const [rates, euTenths, retirement] = models[deployment.modelId as keyof typeof models];
+			const { deploymentType, serviceTier } = deployment.upstream;
+			const regionTenths =
+				deploymentType === 'data_zone_standard_us'
+					? 11n
+					: deploymentType === 'data_zone_standard_eu' ||
+						  deploymentType === 'data_zone_standard_apac'
+						? euTenths
+						: 10n;
+			const [tierNumerator, tierDenominator] =
+				serviceTier === 'fast' ? [2n, 1n] : serviceTier === 'flex' ? [1n, 2n] : [1n, 1n];
 			expect(deployment.pricing).toEqual(
-				gptPricing(input, output, {
-					dataZone: deployment.upstream.deploymentType.startsWith('data_zone_standard_'),
-					priority: deployment.upstream.serviceTier === 'priority'
-				})
+				gptPricing(rates, regionTenths * tierNumerator, 10n * tierDenominator)
 			);
+			expect(deployment.deprecationDate).toBe(retirement);
 			expect(deployment.contextWindowTokens).toBe(1_050_000);
 			expect(deployment.maxOutputTokens).toBe(128_000);
 			expect(deployment.reasoningEfforts).toEqual(allReasoningEfforts);
@@ -336,58 +383,80 @@ describe('Azure provider onboarding contract', () => {
 				});
 			}
 		}
-		expect(runtimeCatalog.graph.deployments['azure-gpt-5.6-luna-fast']).toBeUndefined();
-		expect(runtimeCatalog.graph.deployments['azure-gpt-5.6-luna-pro-fast']).toBeUndefined();
 	});
 
-	test('does not stack Pro and Priority prices', () => {
-		for (const tier of ['sol', 'terra'] as const) {
-			const base = runtimeCatalog.graph.deployments[`azure-gpt-5.6-${tier}`];
-			const pro = runtimeCatalog.graph.deployments[`azure-gpt-5.6-${tier}-pro`];
-			const fast = runtimeCatalog.graph.deployments[`azure-gpt-5.6-${tier}-fast`];
-			const proFast = runtimeCatalog.graph.deployments[`azure-gpt-5.6-${tier}-pro-fast`];
-			expect(pro.pricing).toEqual(base.pricing);
-			expect(proFast.pricing).toEqual(fast.pricing);
+	test('pins GPT-5.5 prices, windows, and retirement for every location and tier', () => {
+		for (const [, deployment] of azureDeployments()) {
+			if (deployment.modelId !== 'gpt-5.5-2026-04-23') continue;
+			const zoneTenths = deployment.upstream.deploymentType.startsWith('data_zone_standard_')
+				? 11n
+				: 10n;
+			if (deployment.upstream.serviceTier === 'fast') {
+				// Priority has short prompt meters only, at 2.5 times the Standard rates.
+				const rate = (value: string) => ({
+					per_mill_tokens: scaled(value, zoneTenths * 25n, 100n)
+				});
+				expect(deployment.pricing).toEqual({
+					cached_input_tokens: rate('0.5'),
+					input_tokens: rate('5'),
+					output_tokens: rate('30')
+				});
+				expect(deployment.contextWindowTokens).toBe(272_000);
+			} else {
+				const { cached_input_tokens, input_tokens, output_tokens } = gptPricing(
+					['5', '0.5', '30'],
+					zoneTenths,
+					10n
+				);
+				expect(deployment.pricing).toEqual({ cached_input_tokens, input_tokens, output_tokens });
+				expect(deployment.contextWindowTokens).toBe(922_000);
+			}
+			expect(deployment.deprecationDate).toBe('2027-10-26');
 		}
 	});
 
 	test('pins Claude hosting, reasoning, model-specific retention, and prices separately', () => {
+		// Input, output, and the divisor that gives the cache read price from the input price.
 		const prices = {
-			'claude-fable-5': ['10', '50'],
-			'claude-opus-4-7': ['5', '25'],
-			'claude-opus-4-8': ['5', '25'],
-			'claude-opus-5': ['5', '25'],
-			'claude-sonnet-4-6': ['3', '15'],
-			'claude-sonnet-5': ['2', '10']
+			'claude-fable-5': ['10', '50', 10n],
+			'claude-fable-5-1': ['10', '50', 40n],
+			'claude-haiku-5-5': ['0.1', '0.5', 10n],
+			'claude-mythos-5': ['10', '50', 10n],
+			'claude-mythos-5-1': ['10', '50', 40n],
+			'claude-opus-4-8': ['5', '25', 10n],
+			'claude-opus-5-5': ['4', '20', 20n],
+			'claude-sonnet-5-5': ['2', '10', 20n]
 		} as const;
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in prices)) continue;
-			const [input, output] = prices[deployment.modelId as keyof typeof prices];
+			const [input, output, cacheReadDivisor] = prices[deployment.modelId as keyof typeof prices];
 			expect(deployment.pricing).toEqual(
-				claudePricing(input, output, deployment.upstream.deploymentType === 'data_zone_standard_us')
+				claudePricing(input, output, {
+					dataZone: deployment.upstream.deploymentType === 'data_zone_standard_us',
+					cacheReadDivisor,
+					// Haiku 5.5 charges five times every rate once the prompt is over 100K tokens.
+					longPromptMultiplier: deployment.modelId === 'claude-haiku-5-5' ? 5n : undefined
+				})
 			);
 			const handling = deployment.dataHandlingByRoute['azure-anthropic-messages'];
-			expect(handling.retentionDays).toBe(deployment.modelId === 'claude-fable-5' ? 30 : 0);
-			if (deployment.modelId === 'claude-fable-5') {
+			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
+			expect(handling.retentionDays).toBe(fableOrMythos ? 30 : 0);
+			// Foundry offers no max effort for Claude Fable and Mythos.
+			expect(deployment.reasoningEfforts.includes('max')).toBe(
+				!fableOrMythos &&
+					runtimeCatalog.graph.models[deployment.modelId].reasoningEfforts.includes('max')
+			);
+			if (fableOrMythos) {
 				expect(handling.storageLocation).toBe('unknown');
 			} else if (deployment.upstream.hosting === 'anthropic') {
 				expect(handling.storageLocation).toBe('none');
 			}
-			expect(deployment.upstream).not.toHaveProperty('speed');
-			expect(deployment.upstream).not.toHaveProperty('serviceTier');
+			expect(deployment.upstream.serviceTier).toBe('standard');
 		}
-		expect(
-			runtimeCatalog.graph.deployments['azure-claude-sonnet-4-6-anthropic-hosted']
-				.reasoningMaxTokens
-		).toEqual({
-			minimum: 1024,
-			maximum: 127_999
-		});
 	});
 
 	test('pins all non-GPT and non-Claude token prices', () => {
 		const expected = {
-			'azure-deepseek-v3.2': ['0.58', '0.58', '1.68'],
 			'azure-deepseek-v4-flash-0423': ['0.19', '0.028', '0.51'],
 			'azure-deepseek-v4-flash-0423-eu': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-flash-0423-us': ['0.21', '0.031', '0.56'],
@@ -404,6 +473,7 @@ describe('Azure provider onboarding contract', () => {
 				output_tokens: { per_mill_tokens: output }
 			});
 		}
+		// Azure publishes no cached input meter for gpt-oss-120b.
 		expect(runtimeCatalog.graph.deployments['azure-gpt-oss-120b'].pricing).toEqual({
 			input_tokens: { per_mill_tokens: '0.15' },
 			output_tokens: { per_mill_tokens: '0.6' }

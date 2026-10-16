@@ -8,13 +8,13 @@ providers:
     functionCalling: true
     parallelFunctionCalling: true
     implicitPromptCaching: true
-    explicitPromptCaching: false
+    explicitPromptCaching: true
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
     urlContext: false
   dataHandling:
-    processingLocation: global
+    processingLocation: world
     storageLocation: unknown
     retentionDays: 0
     trainingUse: false

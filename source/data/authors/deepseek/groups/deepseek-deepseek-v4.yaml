@@ -1,4 +1,0 @@
-groups:
-  authorId: deepseek
-  name: 'DeepSeek V4'
-  parentIds: [deepseek-deepseek]

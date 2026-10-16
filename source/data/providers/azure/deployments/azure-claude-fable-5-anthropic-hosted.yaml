@@ -8,6 +8,9 @@ deployments:
     hosting: anthropic
     deploymentType: global_standard
   overrides:
+    # Foundry offers no max effort for Claude Fable and Mythos; its xhigh gives the same result.
+    # Reviewed 2026-10-14: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models
+    reasoningEfforts: [low, medium, high, xhigh]
     dataHandling:
       processingLocation: unknown
       retentionDays: 30

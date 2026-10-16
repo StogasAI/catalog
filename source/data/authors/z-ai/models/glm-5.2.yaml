@@ -1,13 +1,11 @@
 models:
   authorId: z-ai
   name: GLM-5.2
-  groupIds: [z-ai-glm-5]
-  flavors: [instruct]
+  groupIds: [glm-5]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
   reasoningEfforts: [high, max]
-  reasoningMaxTokens: null
   releaseDate: 2026-06-16

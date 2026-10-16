@@ -4,18 +4,18 @@
 	"private": true,
 	"type": "module",
 	"exports": {
-		"./archive": "./source/scripts/catalog-archive.mjs",
 		"./groups": "./source/scripts/model-groups.mjs",
+		"./schedule": "./source/scripts/schedule.mjs",
 		"./viewer": "./editor/src/catalog.ts",
 		"./viewer/types": "./editor/src/types.ts",
 		"./public": "./generated/catalog.public.json"
 	},
-	"packageManager": "bun@1.3.14",
+	"packageManager": "bun@1.4.2",
 	"overrides": {
 		"typescript": "6.0.3"
 	},
 	"engines": {
-		"bun": ">=1.3.14",
+		"bun": ">=1.4.2",
 		"node": ">=24.6.0"
 	},
 	"workspaces": [
@@ -24,7 +24,9 @@
 	"scripts": {
 		"build": "node source/scripts/build.mjs",
 		"build:editor": "bun run --cwd editor build",
+		"build:release": "node source/scripts/build-release.mjs",
 		"check": "bun run format:check && bun run typecheck && bun run build --check && bun run test",
+		"check:periods": "node source/scripts/check-periods.mjs",
 		"clean": "node source/scripts/build.mjs --clean",
 		"create-release": "node source/scripts/create-release.mjs",
 		"editor": "bun run --cwd editor dev",
@@ -32,13 +34,14 @@
 		"format:check": "prettier --check .",
 		"publish-release": "node source/scripts/publish-release.mjs",
 		"test": "bun test ./tests",
+		"test:release": "node --test source/scripts/build-release.test.mjs",
 		"test:browser": "playwright test --config editor/browser/playwright.config.ts",
 		"typecheck": "bun run --cwd editor typecheck"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.13.0",
-		"@playwright/test": "1.62.1",
-		"prettier": "3.9.6",
+		"@playwright/test": "1.64.0",
+		"prettier": "3.9.10",
 		"prettier-plugin-svelte": "4.1.1",
 		"typescript": "6.0.3"
 	}

@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
 	catalogArtifact,
-	catalogArchive,
 	catalogManifest,
 	parseCatalogReleaseEvidence,
 	parseSequence,
@@ -41,7 +40,6 @@ rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
-const archive = addBlob('catalog.archive.json');
 
 mkdirSync(join(outputRoot, 'releases'), { recursive: true });
 writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), canonicalJson(envelope));
@@ -51,16 +49,12 @@ writeFileSync(
 	[
 		`${sha256(canonicalJson(envelope))}  releases/${sequence}.json`,
 		`${runtime.digest.slice('sha256:'.length)}  ${runtime.path}`,
-		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`,
-		`${archive.digest.slice('sha256:'.length)}  ${archive.path}`
+		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`
 	].join('\n') + '\n'
 );
 
 function addBlob(filename) {
-	const artifact =
-		filename === 'catalog.archive.json'
-			? catalogArchive(repositoryRoot)
-			: catalogArtifact(repositoryRoot, filename);
+	const artifact = catalogArtifact(repositoryRoot, filename);
 	const { bytes } = artifact;
 	const digest = artifact.digest.slice('sha256:'.length);
 	const extension = filename.endsWith('.json') ? '.json' : '';

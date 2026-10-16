@@ -37,6 +37,7 @@ function isNodeType(value: string): value is NodeType {
 
 export function buildFlow(graph: CatalogGraph): CatalogFlow {
 	const positions = groupedLayoutPositions(graph);
+	const retired = retiredNodeIds(graph);
 	const nodes: Node<GraphNodeData>[] = [
 		...Object.keys(graph.authors).map((id) =>
 			makeNode('author', id, positionFor(positions, 'author', id), { rightOut: true })
@@ -58,7 +59,7 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 				{ leftIn: true, rightOut: true },
 				{
 					label: String(graph.models[id].name ?? id),
-					subtitle: graph.models[id].retired ? 'Retired' : undefined
+					subtitle: retired.models.has(id) ? 'Retired' : undefined
 				}
 			)
 		),
@@ -71,7 +72,7 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 					leftIn: true,
 					rightIn: true
 				},
-				{ subtitle: graph.deployments[id].retired ? 'Retired' : undefined }
+				{ subtitle: retired.deployments.has(id) ? 'Retired' : undefined }
 			)
 		),
 		...Object.keys(graph.routes).map((id) =>
@@ -301,6 +302,37 @@ function positionFor(positions: Map<string, { x: number; y: number }>, type: Nod
 
 function lanePosition(type: NodeType, y: number) {
 	return { x: 80 + graphChainNodeOrder.indexOf(type) * 280, y };
+}
+
+// Source keeps a record until someone removes it. A deployment retires on its deprecation
+// date; a model retires with its last deployment, or on its own date when it has none.
+function retiredNodeIds(graph: CatalogGraph, today = new Date().toISOString().slice(0, 10)) {
+	const passed = (date: unknown) => typeof date === 'string' && date <= today;
+	const deployments = new Set<string>();
+	const deployed = new Set<string>();
+	const served = new Set<string>();
+	for (const [id, deployment] of Object.entries(graph.deployments)) {
+		const modelId = String(deployment.modelId);
+		const overrides = deployment.overrides;
+		deployed.add(modelId);
+		if (
+			passed(
+				isPlainRecord(overrides) && 'deprecationDate' in overrides
+					? overrides.deprecationDate
+					: graph.models[modelId]?.deprecationDate
+			)
+		)
+			deployments.add(id);
+		else served.add(modelId);
+	}
+	const models = new Set(
+		Object.entries(graph.models)
+			.filter(
+				([id, model]) => !served.has(id) && (deployed.has(id) || passed(model.deprecationDate))
+			)
+			.map(([id]) => id)
+	);
+	return { deployments, models };
 }
 
 function makeNode(
@@ -699,11 +731,16 @@ export function effectiveDeploymentFacts(
 	applyFactLayer(
 		value,
 		origins,
-		selectFacts(provider, ['capabilities', 'dataHandling', 'pricing']),
+		selectFacts(provider, ['capabilities', 'dataHandling']),
 		providerOrigin
 	);
 	const routeOverrides = objectAt(route, ['overrides']);
-	applyFactLayer(value, origins, selectFacts(route, ['dataHandling', 'fileInputs']), routeOrigin);
+	applyFactLayer(
+		value,
+		origins,
+		selectFacts(route, ['dataHandling', 'nativeFileInputs']),
+		routeOrigin
+	);
 	applyFactLayer(value, origins, selectFacts(routeOverrides, ['capabilities']), routeOrigin);
 	applyFactLayer(value, origins, { pricing: route.pricing }, routeOrigin);
 	applyFactLayer(
@@ -736,7 +773,7 @@ export function effectiveDeploymentFacts(
 			'contextWindowTokens',
 			'dataHandling',
 			'deprecationDate',
-			'fileInputs',
+			'nativeFileInputs',
 			'inputModalities',
 			'maxInputTokens',
 			'maxOutputTokens',
@@ -748,17 +785,22 @@ export function effectiveDeploymentFacts(
 		]),
 		deploymentOrigin
 	);
-	applyFactLayer(
-		value,
-		origins,
-		objectAt(deploymentOverrides, ['routes', routeId]),
-		deploymentOrigin
-	);
+	// The compiler applies a model's shorter list for an interface on routes that serve only it.
+	const interfaces = Array.isArray(route.interfaces) ? route.interfaces : [];
+	const interfaceEfforts = objectAt(model, ['reasoningEffortsByInterface'])[String(interfaces[0])];
+	const efforts = valueAt(value, ['reasoningEfforts']);
+	if (interfaces.length === 1 && Array.isArray(interfaceEfforts) && Array.isArray(efforts)) {
+		const narrowed = efforts.filter((effort) => interfaceEfforts.includes(effort));
+		if (narrowed.length !== efforts.length) {
+			setValueAt(value, ['reasoningEfforts'], narrowed);
+			origins.set('reasoningEfforts', modelOrigin);
+		}
+	}
 	applyFactLayer(
 		value,
 		origins,
 		selectFacts(deployment, [
-			'aliases',
+			'approvalRequired',
 			'modelId',
 			'pricing',
 			'routeIds',

@@ -5,7 +5,6 @@ deployments:
     model: unsloth/Mistral-Nemo-Instruct-2407-TEE
     chuteId: 7725a31d-28df-5bb7-9d29-c23b49df5472
     gpuCount: 1
-  aliases: [mistral-nemo-instruct-2407-tee]
   weightPrecision: bf16
   overrides:
     # This serving configuration returns function calls as text, not tool_calls.

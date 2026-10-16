@@ -3,7 +3,7 @@ routes:
   endpoint: https://api.openai.com/v1/responses
   interfaces: [responses]
   # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs#supported-file-types
-  fileInputs:
+  nativeFileInputs:
     extensions:
       [
         '.asm',

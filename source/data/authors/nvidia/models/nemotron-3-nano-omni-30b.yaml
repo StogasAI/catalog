@@ -1,14 +1,12 @@
 models:
   authorId: nvidia
   name: Nemotron 3 Nano Omni 30B A3B Reasoning
-  groupIds: [nvidia-nemotron-3]
-  flavors: [instruct]
+  groupIds: [nemotron-3]
   contextWindowTokens: 262144
   maxOutputTokens: 262144
   inputModalities: [text, image, audio, video]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: []
   reasoningMaxTokens:
     minimum: 1
     maximum: 262143

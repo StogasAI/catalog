@@ -1,13 +1,10 @@
 models:
   authorId: deepseek
   name: DeepSeek V3.2
-  groupIds: [deepseek-deepseek-v3]
-  flavors: [instruct]
+  groupIds: [deepseek-v3]
   contextWindowTokens: 163840
   maxOutputTokens: 163840
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: []
-  reasoningMaxTokens: null
   releaseDate: 2025-12-01

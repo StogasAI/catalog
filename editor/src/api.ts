@@ -1,7 +1,7 @@
 import { readBoundedResponseText } from './http';
 
 const MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024;
-export const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function requestJson(input: string, init: RequestInit = {}): Promise<unknown> {
 	const response = await fetch(input, {

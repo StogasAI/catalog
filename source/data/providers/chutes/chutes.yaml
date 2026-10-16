@@ -12,7 +12,7 @@ providers:
     toolChoice: true
     urlContext: false
   dataHandling:
-    processingLocation: global
+    processingLocation: world
     storageLocation: none
     retentionDays: 0
     trainingUse: false

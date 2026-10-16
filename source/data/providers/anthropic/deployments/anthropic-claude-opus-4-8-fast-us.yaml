@@ -3,8 +3,9 @@ deployments:
   routeIds: [anthropic-messages]
   upstream:
     model: claude-opus-4-8
-    speed: fast
+    serviceTier: fast
     inferenceGeo: us
+  approvalRequired: true
   overrides:
     dataHandling:
       processingLocation: US

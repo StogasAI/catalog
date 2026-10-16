@@ -5,7 +5,6 @@ deployments:
     model: Qwen/Qwen3-32B-TEE
     chuteId: ac059e33-eb27-541c-b9a9-24b214036475
     gpuCount: 1
-  aliases: [qwen3-32b-tee]
   weightPrecision: fp8
   overrides:
     contextWindowTokens: 40960

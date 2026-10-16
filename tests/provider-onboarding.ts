@@ -37,12 +37,12 @@ type ProviderRouteContract = {
 	endpoint?: string;
 	id: string;
 	interfaces: string[];
-	fileInputs: { extensions: string[]; mediaTypes: string[] };
+	nativeFileInputs: { extensions: string[]; mediaTypes: string[] };
 	pricing?: Record<string, Record<string, string>>;
 };
 
 export type ProviderDeploymentContract = {
-	aliases: string[];
+	approvalRequired?: boolean;
 	authorId: string;
 	capabilities: Record<string, boolean>;
 	contextWindowTokens: number;
@@ -109,7 +109,6 @@ export function assertProviderOnboardingContract(
 		credentialModes: contract.provider.credentialModes,
 		dataHandling: providerDataHandling(contract.provider.dataHandling),
 		name: contract.provider.name,
-		...(contract.provider.pricing ? { pricing: contract.provider.pricing } : {}),
 		...(contract.provider.headquarteredCountry
 			? { headquarteredCountry: contract.provider.headquarteredCountry }
 			: {})
@@ -122,7 +121,7 @@ export function assertProviderOnboardingContract(
 			providerId
 		});
 		expect(published.routes[route.id]).toEqual({
-			fileInputs: route.fileInputs,
+			nativeFileInputs: route.nativeFileInputs,
 			...(route.endpoint ? { endpoint: route.endpoint } : {}),
 			dataHandling,
 			interfaces: route.interfaces,
@@ -164,7 +163,7 @@ export function assertProviderOnboardingContract(
 		);
 
 		const runtimeDeployment = {
-			aliases: expected.aliases,
+			approvalRequired: expected.approvalRequired ?? false,
 			capabilities: expected.capabilities,
 			contextWindowTokens: expected.contextWindowTokens,
 			maxInputTokens: expected.contextWindowTokens,
@@ -187,13 +186,13 @@ export function assertProviderOnboardingContract(
 					expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
 				])
 			),
-			...(expected.routeOverrides ? { routeOverrides: expected.routeOverrides } : {}),
+			routeOverrides: expected.routeOverrides ?? {},
 			upstream: expected.upstream,
 			dataHandlingByRoute,
-			fileInputsByRoute: Object.fromEntries(
-				routeContracts.map((route) => [route.id, route.fileInputs])
+			nativeFileInputsByRoute: Object.fromEntries(
+				routeContracts.map((route) => [route.id, route.nativeFileInputs])
 			),
-			...(expected.weightPrecision ? { weightPrecision: expected.weightPrecision } : {})
+			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};
 		expect(runtime.deployments[expected.id]).toEqual(runtimeDeployment);
 		expect(runtime.deployments[expected.id]).not.toHaveProperty('default');
@@ -203,13 +202,13 @@ export function assertProviderOnboardingContract(
 			Object.keys(expected.pricing).sort()
 		);
 		expect(published.deployments[expected.id]).toEqual({
-			aliases: expected.aliases,
+			approvalRequired: expected.approvalRequired ?? false,
 			modelId: expected.modelId,
+			overrides: expected.publicOverrides ?? {},
 			pricing: expected.pricing,
 			routeIds: [...expected.routeIds].sort(),
 			upstream: expected.upstream,
-			...(expected.publicOverrides ? { overrides: expected.publicOverrides } : {}),
-			...(expected.weightPrecision ? { weightPrecision: expected.weightPrecision } : {})
+			weightPrecision: expected.weightPrecision ?? 'unknown'
 		});
 
 		const model = published.models[expected.modelId];

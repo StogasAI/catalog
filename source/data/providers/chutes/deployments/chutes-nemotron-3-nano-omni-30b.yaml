@@ -5,7 +5,6 @@ deployments:
     model: Nemotron-3-Nano-Omni-30B-TEE
     chuteId: 761ccdab-2e3d-5268-ab03-55f8ba94a80c
     gpuCount: 1
-  aliases: [nemotron-3-nano-omni-30b-tee]
   weightPrecision: bf16
   overrides:
     contextWindowTokens: 131072

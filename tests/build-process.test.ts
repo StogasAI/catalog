@@ -11,13 +11,18 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // These cases launch real compilers; use the same bound as each build process.
 setDefaultTimeout(60_000);
 
 const catalogRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// Builds running in this checkout keep `.tmp-` paths in these folders; copy only catalog inputs.
+const copyInputs = {
+	recursive: true,
+	filter: (path: string) => !basename(path).includes('.tmp-')
+};
 const temporaryParents = new Set<string>();
 
 afterEach(() => {
@@ -30,8 +35,8 @@ function catalogCopy() {
 	temporaryParents.add(parent);
 	const root = join(parent, 'catalog');
 	mkdirSync(root);
-	cpSync(join(catalogRoot, 'source'), join(root, 'source'), { recursive: true });
-	cpSync(join(catalogRoot, 'generated'), join(root, 'generated'), { recursive: true });
+	cpSync(join(catalogRoot, 'source'), join(root, 'source'), copyInputs);
+	cpSync(join(catalogRoot, 'generated'), join(root, 'generated'), copyInputs);
 	return root;
 }
 
@@ -97,6 +102,48 @@ function replaceSource(root: string, path: string, from: string, to: string) {
 }
 
 describe('catalog build process boundaries', () => {
+	test('rejects an invalid node filename before generating YAML', () => {
+		const root = catalogCopy();
+		for (const id of ['Uppercase', 'has space', 'line\nbreak', '__proto__', 'trailing\n']) {
+			const path = join(root, `source/data/${id}.yaml`);
+			writeFileSync(path, 'models:\n  unknown: true\n');
+			const result = runBuild(root, ['--validate-only']);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.output).toContain(`invalid node ID ${JSON.stringify(id)}`);
+			expect(existsSync(join(root, 'source/.tmp-catalog-build'))).toBe(false);
+			rmSync(path);
+		}
+	});
+
+	for (const kind of ['authors', 'groups', 'models', 'providers', 'routes', 'deployments']) {
+		test(`rejects invalid ${kind} labels through CUE without filename-derived IDs`, () => {
+			const root = catalogCopy();
+			writeFileSync(
+				join(root, 'source/data/invalid-collection.yaml'),
+				JSON.stringify({
+					[kind]: Object.fromEntries(
+						['Uppercase', 'has space', 'line\nbreak', '__proto__'].map((id) => [
+							id,
+							{ unknown: true }
+						])
+					)
+				})
+			);
+			const result = runBuild(root, ['--validate-only']);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.output).toContain('field not allowed');
+			expect(result.output).toContain(kind);
+		});
+	}
+
+	test('quotes valid file-owned IDs that YAML could otherwise interpret as scalars or syntax', () => {
+		const root = catalogCopy();
+		for (const id of ['null', 'true', '123', 'a:']) {
+			writeFileSync(join(root, `source/data/${id}.yaml`), 'authors:\n  name: Quoted identifier\n');
+		}
+		expectBuildSuccess(runBuild(root, ['--validate-only']));
+	});
+
 	test('validates and checks without changing artifacts, then cleans only its copied outputs', () => {
 		const root = catalogCopy();
 		const runtime = readFileSync(join(root, 'generated/catalog.runtime.json'), 'utf8');
@@ -268,37 +315,44 @@ exit 1
 	});
 
 	for (const fixture of [
+		...['Unknown', 'openai'].map((format) => ({
+			name: `noncanonical Azure model format ${JSON.stringify(format)}`,
+			path: 'source/data/providers/azure/deployments/azure-gpt-5.6-sol.yaml',
+			from: '    modelFormat: OpenAI',
+			to: `    modelFormat: ${JSON.stringify(format)}`,
+			error: 'modelFormat'
+		})),
 		{
 			name: 'unknown native file property',
 			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
-			from: '  fileInputs:',
-			to: '  fileInputs:\n    unknown: true',
+			from: '  nativeFileInputs:',
+			to: '  nativeFileInputs:\n    unknown: true',
 			error: 'unknown'
 		},
 		{
 			name: 'provider-owned native file formats',
 			path: 'source/data/providers/openai/openai.yaml',
 			from: '  name: OpenAI',
-			to: '  name: OpenAI\n  fileInputs: {extensions: [], mediaTypes: []}',
-			error: 'fileInputs'
+			to: '  name: OpenAI\n  nativeFileInputs: {extensions: [], mediaTypes: []}',
+			error: 'nativeFileInputs'
 		},
 		{
 			name: 'native file formats below route overrides',
 			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
 			from: '  providerId: openai',
-			to: '  providerId: openai\n  overrides:\n    fileInputs: {extensions: [], mediaTypes: []}',
-			error: 'fileInputs'
+			to: '  providerId: openai\n  overrides:\n    nativeFileInputs: {extensions: [], mediaTypes: []}',
+			error: 'nativeFileInputs'
 		},
 		{
 			name: 'empty group name',
-			path: 'source/data/authors/openai/groups/openai-gpt-oss.yaml',
+			path: 'source/data/authors/openai/groups/gpt-oss.yaml',
 			from: "  name: 'gpt-oss'",
 			to: "  name: ''",
 			error: 'name'
 		},
 		{
 			name: 'group execution facts',
-			path: 'source/data/authors/openai/groups/openai-gpt-oss.yaml',
+			path: 'source/data/authors/openai/groups/gpt-oss.yaml',
 			from: '  authorId: openai',
 			to: '  authorId: openai\n  dataHandling: {zeroDataRetention: true}',
 			error: 'dataHandling'
@@ -306,8 +360,8 @@ exit 1
 		{
 			name: 'legacy provider moderation field',
 			path: 'source/data/providers/anthropic/anthropic.yaml',
-			from: '  pricing:',
-			to: '  moderated: true\n  pricing:',
+			from: '  dataHandling:',
+			to: '  moderated: true\n  dataHandling:',
 			error: 'moderated'
 		},
 		{
@@ -318,10 +372,24 @@ exit 1
 			error: 'moderated'
 		},
 		{
+			name: 'token rate without a short prompt price',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: "    input_tokens:\n      per_mill_tokens: '4'\n",
+			to: '    input_tokens:\n',
+			error: 'per_mill_tokens'
+		},
+		{
+			name: 'token rate with an unknown prompt size key',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: "      per_mill_context_gt_272k: '8'",
+			to: "      per_mill_context_lte_272k: '8'",
+			error: 'per_mill_context_lte_272k'
+		},
+		{
 			name: 'legacy deployment moderation field',
 			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
-			from: '  overrides:\n',
-			to: '  overrides:\n    moderated: true\n',
+			from: '  pricing:\n',
+			to: '  moderated: true\n  pricing:\n',
 			error: 'moderated'
 		}
 	] as const) {
@@ -334,4 +402,66 @@ exit 1
 			expect(existsSync(join(root, 'source/.tmp-catalog-build'))).toBe(false);
 		});
 	}
+
+	const datedPrice = (price: string, name = 'November input discount') =>
+		[
+			'  periods:',
+			`    - name: '${name}'`,
+			'      start: 2026-11-01T00:00:00Z',
+			'      end: 2026-12-01T00:00:00Z',
+			'      set:',
+			`        pricing.input_tokens.per_mill_tokens: '${price}'`,
+			'  pricing:\n'
+		].join('\n');
+
+	test('compiles a dated period from source into both schedules', () => {
+		const root = catalogCopy();
+		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
+		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
+		expectBuildSuccess(runBuild(root));
+		for (const artifact of ['runtime', 'public']) {
+			const catalog = JSON.parse(
+				readFileSync(join(root, `generated/catalog.${artifact}.json`), 'utf8')
+			);
+			expect(catalog.schedule.map(({ start }: { start: string }) => start)).toEqual([
+				'2026-11-01T00:00:00Z',
+				'2026-12-01T00:00:00Z'
+			]);
+			expect(
+				catalog.schedule[0].graph.deployments['openai-gpt-5.6-sol'].pricing.input_tokens
+					.per_mill_tokens
+			).toBe('2');
+		}
+		const publicCatalog = JSON.parse(
+			readFileSync(join(root, 'generated/catalog.public.json'), 'utf8')
+		);
+		expect(publicCatalog.periods).toEqual([
+			{
+				kind: 'deployments',
+				id: 'openai-gpt-5.6-sol',
+				name: 'November input discount',
+				start: '2026-11-01T00:00:00Z',
+				end: '2026-12-01T00:00:00Z'
+			}
+		]);
+	});
+
+	test('rejects a dated period without a name', () => {
+		const root = catalogCopy();
+		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
+		replaceSource(root, path, '  pricing:\n', datedPrice('2', ''));
+		const result = runBuild(root, ['--validate-only']);
+		expect(result.exitCode).not.toBe(0);
+		expect(result.output).toContain('name');
+	});
+
+	test('rejects a dated state that the closed CUE schema rejects', () => {
+		const root = catalogCopy();
+		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
+		replaceSource(root, path, '  pricing:\n', datedPrice('free'));
+		const result = runBuild(root, ['--validate-only']);
+		expect(result.exitCode).not.toBe(0);
+		expect(result.output).toContain('The catalog state from 2026-11-01T00:00:00Z is invalid');
+		expect(result.output).toContain('per_mill_tokens');
+	});
 });

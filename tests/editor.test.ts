@@ -23,7 +23,7 @@ const catalog = parseCatalog(catalogJson);
 describe('effective catalog facts', () => {
 	test('keeps a nested group diamond as real edges and one execution choice', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.public.v3',
+			schema: 'stogas.catalog.public.v4',
 			graph: {
 				authors: { author: { name: 'Author' } },
 				groups: {
@@ -71,19 +71,26 @@ describe('effective catalog facts', () => {
 	test('rejects malformed generated catalog collections', () => {
 		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
 		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
-		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.public.v3' })).toThrow(
-			'authors collection'
-		);
+		expect(() =>
+			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v4' })
+		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
-				graph: { authors: [], deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v3'
+				graph: { authors: [], groups: {}, deployments: {}, models: {}, providers: {}, routes: {} },
+				schema: 'stogas.catalog.public.v4'
 			})
 		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
-				graph: { authors: { bad: [] }, deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v3'
+				graph: {
+					authors: { bad: [] },
+					groups: {},
+					deployments: {},
+					models: {},
+					providers: {},
+					routes: {}
+				},
+				schema: 'stogas.catalog.public.v4'
 			})
 		).toThrow('authors.bad entry');
 	});
@@ -247,9 +254,9 @@ describe('effective catalog facts', () => {
 		expect(extendGraphSelection(flow, chains, [model], route)).toEqual([model, deployment, route]);
 		expect(completeUnambiguousGraphSelection(chains, [deployment, route])).toEqual([
 			'author:openai',
-			'group:openai-gpt',
-			'group:openai-gpt-5',
-			'group:openai-gpt-5.6',
+			'group:gpt',
+			'group:gpt-5',
+			'group:gpt-5.6',
 			model,
 			deployment,
 			route,
@@ -257,9 +264,9 @@ describe('effective catalog facts', () => {
 		]);
 		expect(completeUnambiguousGraphSelection(chains, [model])).toEqual([
 			'author:openai',
-			'group:openai-gpt',
-			'group:openai-gpt-5',
-			'group:openai-gpt-5.6',
+			'group:gpt',
+			'group:gpt-5',
+			'group:gpt-5.6',
 			model
 		]);
 		expect(completeUnambiguousGraphSelection(chains, ['model:missing'])).toEqual(['model:missing']);
@@ -340,8 +347,8 @@ describe('effective catalog facts', () => {
 			})
 		).toMatchObject([
 			{ type: 'author', id: 'z-ai' },
-			{ type: 'group', id: 'z-ai-glm' },
-			{ type: 'group', id: 'z-ai-glm-5' },
+			{ type: 'group', id: 'glm' },
+			{ type: 'group', id: 'glm-5' },
 			{ type: 'model', id: 'glm-5.2' },
 			{ type: 'deployment', id: 'chutes-glm-5.2' },
 			{ type: 'route', id: 'chutes-chat-completions' },
@@ -353,9 +360,9 @@ describe('effective catalog facts', () => {
 		]);
 		expect(lineageForSelection(catalog, 'model:gpt-5.6-sol', {})).toMatchObject([
 			{ type: 'author', id: 'openai' },
-			{ type: 'group', id: 'openai-gpt' },
-			{ type: 'group', id: 'openai-gpt-5' },
-			{ type: 'group', id: 'openai-gpt-5.6' },
+			{ type: 'group', id: 'gpt' },
+			{ type: 'group', id: 'gpt-5' },
+			{ type: 'group', id: 'gpt-5.6' },
 			{ type: 'model', id: 'gpt-5.6-sol' }
 		]);
 		expect(lineageForSelection(catalog, 'author:openai', {})).toMatchObject([
@@ -394,19 +401,6 @@ describe('effective catalog facts', () => {
 		expect(webSearch?.origin).toEqual({ type: 'route', id: 'openai-responses' });
 	});
 
-	test('attributes provider-wide tool pricing to the provider that owns it', () => {
-		const facts = effectiveDeploymentFacts(
-			catalog,
-			'anthropic-claude-opus-5',
-			'anthropic-messages'
-		);
-		const webSearch = facts.find(
-			(fact) => fact.path === 'pricing.anthropic_web_search_calls.per_1k_calls'
-		);
-
-		expect(webSearch?.origin).toEqual({ type: 'provider', id: 'anthropic' });
-	});
-
 	test('requires a concrete route and excludes facts from another route', () => {
 		expect(effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol')).toEqual([]);
 
@@ -415,12 +409,11 @@ describe('effective catalog facts', () => {
 			'openai-gpt-5.6-sol',
 			'openai-chat-completions'
 		);
-		expect(chatFacts.find((fact) => fact.path === 'reasoningEfforts')?.value).toEqual([
-			'low',
-			'medium',
-			'high',
-			'xhigh'
-		]);
+		expect(chatFacts.find((fact) => fact.path === 'reasoningEfforts')).toEqual({
+			path: 'reasoningEfforts',
+			value: ['low', 'medium', 'high', 'xhigh'],
+			origin: { type: 'model', id: 'gpt-5.6-sol' }
+		});
 		expect(
 			effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol', 'openai-responses').find(
 				(fact) => fact.path === 'reasoningEfforts'
@@ -481,33 +474,35 @@ test('attributes provider file formats to routes and deployment overrides indepe
 	const fixture = structuredClone(catalog);
 	const id = 'openai-gpt-5.6-luna';
 	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'fileInputs.extensions',
+		path: 'nativeFileInputs.extensions',
 		value: ['.pdf'],
 		origin: { type: 'route', id: 'openai-chat-completions' }
 	});
 	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
-		path: 'fileInputs.extensions',
+		path: 'nativeFileInputs.extensions',
 		value: expect.arrayContaining(['.csv', '.pdf', '.txt']),
 		origin: { type: 'route', id: 'openai-responses' }
 	});
-	fixture.graph.deployments[id].overrides = { fileInputs: { extensions: [], mediaTypes: [] } };
+	fixture.graph.deployments[id].overrides = {
+		nativeFileInputs: { extensions: [], mediaTypes: [] }
+	};
 	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
-		path: 'fileInputs.extensions',
+		path: 'nativeFileInputs.extensions',
 		value: [],
 		origin: { type: 'deployment', id }
 	});
 	fixture.graph.deployments[id].overrides = {
-		fileInputs: { extensions: ['.md'], mediaTypes: ['text/markdown'] }
+		nativeFileInputs: { extensions: ['.md'], mediaTypes: ['text/markdown'] }
 	};
 	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'fileInputs.extensions',
+		path: 'nativeFileInputs.extensions',
 		value: ['.md'],
 		origin: { type: 'deployment', id }
 	});
 	delete fixture.graph.deployments[id].overrides;
 	fixture.graph.models['gpt-5.6-luna'].inputModalities = ['text'];
 	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'fileInputs.extensions',
+		path: 'nativeFileInputs.extensions',
 		value: ['.pdf'],
 		origin: { type: 'route', id: 'openai-chat-completions' }
 	});

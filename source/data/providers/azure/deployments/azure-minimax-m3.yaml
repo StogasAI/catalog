@@ -11,6 +11,7 @@ deployments:
     inputModalities: [text, image]
     capabilities:
       parallelFunctionCalling: false
+      explicitPromptCaching: false
       structuredOutputs: false
     dataHandling:
       processingLocation: unknown

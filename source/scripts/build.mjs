@@ -16,9 +16,9 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
+import { ancestorGroupIds, orderModelGroups } from './model-groups.mjs';
+import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
-import { orderModelGroups } from './model-groups.mjs';
-import { partitionPublicGraph, catalogPublicSizeLimit } from './catalog-archive.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
@@ -44,8 +44,9 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
+const nodeIdPattern = /^[a-z0-9][a-z0-9._:-]*$/;
 const runtimeSizeLimit = 16 * 1024 * 1024;
-const publicSizeLimit = catalogPublicSizeLimit;
+const publicSizeLimit = 8 * 1024 * 1024;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;
@@ -91,7 +92,16 @@ function fileOwnedNodeSource(path) {
 	const content = readFileSync(path, 'utf8').replace(/^\uFEFF/, '');
 	const body = content.replace(/^---[ \t]*(?:\r?\n|$)/, '');
 	const match = /^(authors|deployments|groups|models|providers|routes):\s*$/m.exec(body);
-	return match ? { type: match[1], id: basename(path).replace(/\.ya?ml$/, '') } : null;
+	if (!match) return null;
+	const id = basename(path).replace(/\.ya?ml$/, '');
+	validateNodeId(id, rel(path));
+	return { type: match[1], id };
+}
+
+function validateNodeId(id, owner) {
+	if (!nodeIdPattern.test(id)) {
+		throw new Error(`${owner}: invalid node ID ${JSON.stringify(id)}`);
+	}
 }
 
 function fileOwnedNodeBody(path, source) {
@@ -134,7 +144,7 @@ function writeFileOwnedNodeSource(sources) {
 			...entries
 				.sort((left, right) => left.id.localeCompare(right.id))
 				.flatMap((source) => [
-					`  ${source.id}:`,
+					`  ${JSON.stringify(source.id)}:`,
 					...fileOwnedNodeBody(source.path, source)
 						.split(/\r?\n/)
 						.map((line) => (line.trim() ? `    ${line}` : line))
@@ -316,12 +326,11 @@ function normalizeSourceGraph(sourceGraph) {
 					aliases: [...(model.aliases ?? [])],
 					capabilities: model.capabilities ?? {},
 					deprecationDate: model.deprecationDate ?? null,
-					flavors: [...(model.flavors ?? [])],
 					knowledgeCutoff: model.knowledgeCutoff ?? null,
 					reasoning: model.reasoning,
-					reasoningEfforts: [...model.reasoningEfforts],
-					reasoningMaxTokens: model.reasoningMaxTokens,
-					releaseDate: model.releaseDate ?? null,
+					reasoningEfforts: [...(model.reasoningEfforts ?? [])],
+					reasoningEffortsByInterface: model.reasoningEffortsByInterface ?? {},
+					reasoningMaxTokens: model.reasoningMaxTokens ?? null,
 					snapshot: model.snapshot ?? null
 				}
 			])
@@ -342,7 +351,7 @@ function normalizeSourceGraph(sourceGraph) {
 }
 
 function requireNode(nodes, id, owner) {
-	const node = nodes?.[id];
+	const node = nodes && Object.hasOwn(nodes, id) ? nodes[id] : undefined;
 	if (!node) throw new Error(`${owner}: missing referenced node ${id}`);
 	return node;
 }
@@ -624,40 +633,17 @@ function effectiveReasoning(deploymentId, model, deployment) {
 	};
 }
 
-function effectiveRouteOverrides(deploymentId, deployment, reasoningEfforts) {
-	const sourceOverrides = deployment.overrides?.routes ?? {};
+// A route that serves one interface passes requests through to that provider API, so a
+// model's shorter effort list for the interface applies there. Routes that translate
+// several interfaces to another API keep the deployment's list.
+function effectiveRouteOverrides(graph, deployment, model, reasoningEfforts) {
 	const routeOverrides = {};
-	const deploymentEfforts = new Set(reasoningEfforts);
-	for (const [routeId, override] of Object.entries(sourceOverrides)) {
-		if (!deployment.routeIds.includes(routeId)) {
-			throw new Error(`${deploymentId}.overrides.routes references unattached route ${routeId}`);
-		}
-		rejectRedundantOverride(
-			reasoningEfforts,
-			override.reasoningEfforts,
-			`${deploymentId}.overrides.routes.${routeId}.reasoningEfforts`
-		);
-		let previousEffortRank = -1;
-		for (const effort of override.reasoningEfforts) {
-			const effortRank = canonicalEffortRanks.get(effort);
-			if (effortRank === undefined) {
-				throw new Error(`${deploymentId}: invalid ${routeId} reasoning effort ${effort}`);
-			}
-			if (effortRank <= previousEffortRank) {
-				throw new Error(
-					`${deploymentId}: ${routeId} reasoning efforts must use canonical order without repeats`
-				);
-			}
-			previousEffortRank = effortRank;
-			if (!deploymentEfforts.has(effort)) {
-				throw new Error(
-					`${deploymentId}: ${routeId} reasoning effort ${effort} is absent from the deployment`
-				);
-			}
-		}
-		routeOverrides[routeId] = {
-			reasoningEfforts: [...override.reasoningEfforts]
-		};
+	for (const routeId of deployment.routeIds) {
+		const interfaces = graph.routes[routeId].interfaces;
+		const interfaceEfforts = model.reasoningEffortsByInterface[interfaces[0]];
+		if (interfaces.length !== 1 || !interfaceEfforts) continue;
+		const efforts = reasoningEfforts.filter((effort) => interfaceEfforts.includes(effort));
+		if (!same(efforts, reasoningEfforts)) routeOverrides[routeId] = { reasoningEfforts: efforts };
 	}
 	return routeOverrides;
 }
@@ -690,9 +676,9 @@ function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
 	);
 }
 
-function validateFileInputs(value, owner) {
+function validateNativeFileInputs(value, owner) {
 	if (!isPlainObject(value) || Object.keys(value).sort().join(',') !== 'extensions,mediaTypes') {
-		throw new Error(`${owner}: fileInputs requires extensions and mediaTypes`);
+		throw new Error(`${owner}: nativeFileInputs requires extensions and mediaTypes`);
 	}
 	for (const [field, pattern] of [
 		['extensions', /^\.[a-z0-9][a-z0-9._+-]*$/],
@@ -706,28 +692,28 @@ function validateFileInputs(value, owner) {
 					typeof entry !== 'string' || !pattern.test(entry) || (i > 0 && values[i - 1] >= entry)
 			)
 		) {
-			throw new Error(`${owner}: fileInputs.${field} must be sorted, unique and lowercase`);
+			throw new Error(`${owner}: nativeFileInputs.${field} must be sorted, unique and lowercase`);
 		}
 	}
 	if (value.mediaTypes.length === 0 && value.extensions.length !== 0) {
-		throw new Error(`${owner}: file extensions require native media types`);
+		throw new Error(`${owner}: nativeFileInputs.extensions require nativeFileInputs.mediaTypes`);
 	}
 }
 
-function effectiveFileInputsByRoute(graph, deploymentId, deployment) {
-	const override = deployment.overrides?.fileInputs;
-	if (override !== undefined) validateFileInputs(override, deploymentId);
+function effectiveNativeFileInputsByRoute(graph, deploymentId, deployment) {
+	const override = deployment.overrides?.nativeFileInputs;
+	if (override !== undefined) validateNativeFileInputs(override, deploymentId);
 	let changed = false;
 	const result = Object.fromEntries(
 		deployment.routeIds.map((routeId) => {
-			const inherited = graph.routes[routeId].fileInputs;
+			const inherited = graph.routes[routeId].nativeFileInputs;
 			const effective = override ?? inherited;
 			changed ||= !same(inherited, effective);
 			return [routeId, structuredClone(effective)];
 		})
 	);
 	if (override !== undefined && !changed)
-		throw new Error(`${deploymentId}: fileInputs redundantly repeats its inherited value`);
+		throw new Error(`${deploymentId}: nativeFileInputs redundantly repeats its inherited value`);
 	return result;
 }
 
@@ -744,7 +730,50 @@ function effectiveDeprecationDate(deploymentId, model, deployment) {
 }
 
 export function buildCatalogs(source) {
-	const sourceGraph = normalizeSourceGraph(source.graph);
+	for (const [kind, nodes] of Object.entries(source.graph)) {
+		for (const id of Object.keys(nodes)) validateNodeId(id, kind);
+	}
+	const { base, states, periods } = periodStates(source.graph);
+	const compiled = compileGraph(base);
+	const runtimeSchedule = [];
+	const publicSchedule = [];
+	for (const state of states) {
+		const stateCompiled = compileGraph(state.graph);
+		addScheduleEntry(runtimeSchedule, state.start, compiled.runtime, stateCompiled.runtime);
+		addScheduleEntry(publicSchedule, state.start, compiled.public, stateCompiled.public);
+	}
+	return {
+		runtime: {
+			schema: 'stogas.catalog.runtime.v4',
+			graph: compiled.runtime,
+			schedule: runtimeSchedule
+		},
+		public: {
+			schema: 'stogas.catalog.public.v4',
+			graph: compiled.public,
+			schedule: publicSchedule,
+			periods
+		}
+	};
+}
+
+// An entry lists every node that differs from the base graph, so a reader needs only the
+// base and the latest entry that has started. Periods cannot add or remove nodes.
+function addScheduleEntry(schedule, start, base, state) {
+	const graph = {};
+	for (const [kind, nodes] of Object.entries(state)) {
+		if (!same(Object.keys(nodes).sort(), Object.keys(base[kind]).sort())) {
+			throw new Error(`The ${kind} at ${start} differ from the base graph`);
+		}
+		for (const [id, node] of Object.entries(nodes)) {
+			if (!same(node, base[kind][id])) (graph[kind] ??= {})[id] = node;
+		}
+	}
+	if (!same(graph, schedule.at(-1)?.graph ?? {})) schedule.push({ start, graph });
+}
+
+function compileGraph(source) {
+	const sourceGraph = normalizeSourceGraph(source);
 	orderModelGroups(sourceGraph.groups);
 	for (const [id, group] of Object.entries(sourceGraph.groups)) {
 		requireNode(sourceGraph.authors, group.authorId, id);
@@ -772,7 +801,7 @@ export function buildCatalogs(source) {
 				validateCanonicalList(route.interfaces, canonicalInterfaceRanks, `${routeId}: interfaces`);
 				validateRouteEndpoint(routeId, route.endpoint);
 				const overrides = route.overrides ?? {};
-				validateFileInputs(route.fileInputs, routeId);
+				validateNativeFileInputs(route.nativeFileInputs, routeId);
 				rejectRedundantOverride(
 					provider.capabilities,
 					overrides.capabilities,
@@ -809,17 +838,16 @@ export function buildCatalogs(source) {
 					}
 				}
 				validateDataHandling(routeId, dataHandling);
-				const pricing = mergeFacts(provider.pricing ?? {}, route.pricing ?? {});
 				return [
 					routeId,
 					{
 						providerId: route.providerId,
 						endpoint: route.endpoint,
 						interfaces: [...route.interfaces],
-						fileInputs: route.fileInputs,
+						nativeFileInputs: route.nativeFileInputs,
 						capabilities,
 						dataHandling,
-						pricing
+						pricing: route.pricing ?? {}
 					}
 				];
 			})
@@ -830,10 +858,7 @@ export function buildCatalogs(source) {
 	const publicDeployments = {};
 	const baseByModelRoute = new Map();
 	const deploymentsByModelRoute = new Map();
-	const retiredDeployment = (deployment) =>
-		deployment.retired === true || graph.models[deployment.modelId]?.retired === true;
 	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
-		if (retiredDeployment(deployment)) continue;
 		for (const routeId of deployment.routeIds) {
 			const key = `${deployment.modelId}\0${routeId}`;
 			const deploymentIds = deploymentsByModelRoute.get(key) ?? [];
@@ -880,11 +905,10 @@ export function buildCatalogs(source) {
 		}
 	}
 
-	function addSelector(selector, kind, id, retired = false) {
+	function addSelector(selector, kind, id) {
 		if (selector.trim() !== selector || selector.includes('/')) {
 			throw new Error(`${kind} ${id}: selector ${selector} is not canonical`);
 		}
-		if (retired) return;
 		const owner = selectors.get(selector);
 		if (owner) throw new Error(`${selector} selects both ${owner} and ${kind}:${id}`);
 		selectors.set(selector, `${kind}:${id}`);
@@ -925,33 +949,34 @@ export function buildCatalogs(source) {
 			canonicalModalityRanks,
 			`${modelId}: outputModalities`
 		);
-		for (const field of ['releaseDate', 'snapshot', 'knowledgeCutoff']) {
+		if (!validDate(model.releaseDate)) throw new Error(`${modelId}: releaseDate is invalid`);
+		for (const field of ['snapshot', 'knowledgeCutoff', 'deprecationDate']) {
 			if (model[field] !== null && !validDate(model[field])) {
 				throw new Error(`${modelId}: ${field} is invalid`);
 			}
 		}
-		if (!validDeprecationDate(model.deprecationDate)) {
-			throw new Error(`${modelId}: deprecationDate is invalid`);
-		}
-		if (
-			model.releaseDate !== null &&
-			model.deprecationDate !== null &&
-			model.deprecationDate < model.releaseDate
-		) {
+		if (model.deprecationDate !== null && model.deprecationDate < model.releaseDate) {
 			throw new Error(`${modelId}: deprecationDate precedes releaseDate`);
 		}
 		if (!reasoningValues.has(model.reasoning)) {
 			throw new Error(`${modelId}: invalid reasoning value`);
 		}
-		let previousEffortRank = -1;
-		for (const effort of model.reasoningEfforts) {
-			const effortRank = canonicalEffortRanks.get(effort);
-			if (effortRank === undefined)
-				throw new Error(`${modelId}: invalid reasoning effort ${effort}`);
-			if (effortRank <= previousEffortRank) {
-				throw new Error(`${modelId}: reasoning efforts must use canonical order without repeats`);
+		if (model.reasoningEfforts.length > 0) {
+			validateCanonicalList(
+				model.reasoningEfforts,
+				canonicalEffortRanks,
+				`${modelId}: reasoningEfforts`
+			);
+		}
+		for (const [name, efforts] of Object.entries(model.reasoningEffortsByInterface)) {
+			const owner = `${modelId}: reasoningEffortsByInterface.${name}`;
+			validateCanonicalList(efforts, canonicalEffortRanks, owner);
+			if (efforts.some((effort) => !model.reasoningEfforts.includes(effort))) {
+				throw new Error(`${owner} must be a subset of reasoningEfforts`);
 			}
-			previousEffortRank = effortRank;
+			if (same(efforts, model.reasoningEfforts)) {
+				throw new Error(`${owner} redundantly repeats reasoningEfforts`);
+			}
 		}
 		if (
 			model.reasoning === 'unsupported' &&
@@ -967,15 +992,24 @@ export function buildCatalogs(source) {
 		) {
 			throw new Error(`${modelId}: invalid manual reasoning token bounds`);
 		}
-		addSelector(modelId, 'model', modelId, model.retired);
-		for (const alias of model.aliases) addSelector(alias, 'model', modelId, model.retired);
+		addSelector(modelId, 'model', modelId);
+		// An alias that only respells the ID can never come to mean another model.
+		for (const alias of model.aliases) {
+			if (alias.replaceAll('.', '-') !== modelId.replaceAll('.', '-')) {
+				throw new Error(
+					`${modelId}: alias ${alias} may differ from the ID only in dots and dashes`
+				);
+			}
+			addSelector(alias, 'model', modelId);
+		}
 	}
 	validateModelDerivation(graph.models);
+	// A group selects its newest model, so requests can follow a family without aliases
+	// that move between models.
+	for (const groupId of Object.keys(graph.groups)) addSelector(groupId, 'group', groupId);
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
-		const retired = retiredDeployment(deployment);
-		validateAliasCount(deployment.aliases ?? [], 'deployment', deploymentId);
 		if (new Set(deployment.routeIds).size !== deployment.routeIds.length) {
 			throw new Error(`${deploymentId}: routeIds must not repeat`);
 		}
@@ -988,22 +1022,17 @@ export function buildCatalogs(source) {
 		if (!validDeprecationDate(deprecationDate)) {
 			throw new Error(`${deploymentId}: deprecationDate is invalid`);
 		}
-		if (
-			deprecationDate !== null &&
-			model.releaseDate !== null &&
-			deprecationDate < model.releaseDate
-		) {
+		if (deprecationDate !== null && deprecationDate < model.releaseDate) {
 			throw new Error(`${deploymentId}: deprecationDate precedes model releaseDate`);
 		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
 				selectorKeys.includes('model') &&
-				selectorKeys.includes('serviceTier') &&
 				selectorKeys.every((key) => ['model', 'reasoningMode', 'serviceTier'].includes(key))) ||
 			(providerId === 'anthropic' &&
 				selectorKeys.includes('model') &&
-				selectorKeys.every((key) => ['inferenceGeo', 'model', 'speed'].includes(key))) ||
+				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key))) ||
 			(providerId === 'chutes' &&
 				JSON.stringify(selectorKeys) === JSON.stringify(['chuteId', 'gpuCount', 'model'])) ||
 			(providerId === 'azure' &&
@@ -1026,90 +1055,39 @@ export function buildCatalogs(source) {
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
-		if (providerId === 'azure') {
-			const usesAnthropicMessages = deployment.routeIds.includes('azure-anthropic-messages');
-			const modelFormat = deployment.upstream.modelFormat.toLowerCase();
-			const isAnthropicModel = model.authorId === 'anthropic';
-			if (
-				isAnthropicModel
-					? modelFormat !== 'anthropic' ||
-						deployment.routeIds.length !== 1 ||
-						!usesAnthropicMessages
-					: modelFormat === 'anthropic' || usesAnthropicMessages
-			) {
-				throw new Error(
-					`${deploymentId}: Azure Anthropic models and format must use only the Azure Anthropic Messages route`
-				);
-			}
-			if (
-				(modelFormat === 'anthropic' &&
-					!['anthropic', 'azure'].includes(deployment.upstream.hosting)) ||
-				(modelFormat === 'fireworks' && deployment.upstream.hosting !== 'fireworks') ||
-				(['deepseek', 'openai', 'openai-oss'].includes(modelFormat) &&
-					deployment.upstream.hosting !== 'azure') ||
-				(modelFormat === 'nvidia' && deployment.upstream.hosting !== 'nvidia')
-			) {
-				throw new Error(`${deploymentId}: Azure model format and hosting do not match`);
-			}
-			if (
-				model.authorId === 'anthropic' &&
-				!['anthropic', 'azure'].includes(deployment.upstream.hosting)
-			) {
-				throw new Error(`${deploymentId}: Azure Claude hosting must be azure or anthropic`);
-			}
-			if (
-				deployment.upstream.hosting === 'anthropic' &&
-				deployment.upstream.deploymentType !== 'global_standard'
-			) {
-				throw new Error(`${deploymentId}: Anthropic-hosted Azure Claude is Global Standard only`);
-			}
-			if (
-				deployment.upstream.deploymentType !== 'global_standard' &&
-				!['azure', 'fireworks'].includes(deployment.upstream.hosting)
-			) {
-				throw new Error(
-					`${deploymentId}: this Azure hosting mode does not offer Data Zone Standard`
-				);
-			}
-			if (
-				deployment.upstream.serviceTier === 'priority' &&
-				(deployment.upstream.hosting !== 'azure' ||
-					modelFormat !== 'openai' ||
-					deployment.upstream.deploymentType !== 'global_standard')
-			) {
-				throw new Error(`${deploymentId}: Azure Priority is unavailable for this target`);
-			}
-			if (
-				deployment.upstream.deploymentType === 'instant' &&
-				(deployment.upstream.hosting !== 'azure' ||
-					modelFormat !== 'openai' ||
-					deployment.upstream.serviceTier !== 'default')
-			) {
-				throw new Error(
-					`${deploymentId}: Azure Instant requires a default-tier Azure OpenAI target`
-				);
-			}
-			if (
-				modelFormat === 'fireworks' &&
-				(deployment.upstream.deploymentType !== 'data_zone_standard_us' ||
-					deployment.routeIds.length !== 1 ||
-					deployment.routeIds[0] !== 'azure-chat-completions')
-			) {
-				throw new Error(
-					`${deploymentId}: Fireworks pay-per-token requires US Data Zone Chat Completions`
-				);
-			}
+		if (
+			providerId === 'azure' &&
+			deployment.upstream.serviceTier &&
+			deployment.upstream.modelFormat !== 'OpenAI'
+		) {
+			throw new Error(`${deploymentId}: Azure offers service tiers only for OpenAI-format models`);
+		}
+		// Source omits the standard tier; compiled deployments always name their tier.
+		const upstream = {
+			...deployment.upstream,
+			serviceTier: deployment.upstream.serviceTier ?? 'standard'
+		};
+		const anthropicWire =
+			providerId === 'anthropic' ||
+			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
+		if (
+			providerId === 'azure' &&
+			deployment.routeIds.some(
+				(routeId) => (routeId === 'azure-anthropic-messages') !== anthropicWire
+			)
+		) {
+			throw new Error(
+				`${deploymentId}: only Azure Anthropic-format models use the Azure Anthropic Messages route`
+			);
 		}
 		if (
 			deployment.upstream.reasoningMode &&
-			(!['openai', 'azure'].includes(providerId) ||
-				model.authorId !== 'openai' ||
-				deployment.routeIds.some((routeId) => {
-					const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
-					return interfaces.length !== 1 || interfaces[0] !== 'responses';
-				}))
+			deployment.routeIds.some((routeId) => {
+				const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
+				return interfaces.length !== 1 || interfaces[0] !== 'responses';
+			})
 		) {
-			throw new Error(`${deploymentId}: fixed reasoning mode requires an OpenAI Responses model`);
+			throw new Error(`${deploymentId}: fixed reasoning mode requires Responses-only routes`);
 		}
 		const { contextWindowTokens, maxInputTokens, maxOutputTokens } = effectiveTokenLimits(
 			deploymentId,
@@ -1127,17 +1105,24 @@ export function buildCatalogs(source) {
 			model,
 			deployment
 		);
-		const routeOverrides = effectiveRouteOverrides(deploymentId, deployment, reasoningEfforts);
+		const routeOverrides = effectiveRouteOverrides(graph, deployment, model, reasoningEfforts);
 		if (
 			reasoningMaxTokens &&
-			((providerId !== 'anthropic' &&
-				!(providerId === 'azure' && model.authorId === 'anthropic')) ||
+			(!anthropicWire ||
 				reasoningMaxTokens.minimum > reasoningMaxTokens.maximum ||
 				reasoningMaxTokens.maximum >= maxOutputTokens)
 		) {
 			throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
 		}
 		const pricing = mergePricing(graph, deploymentId, deployment);
+		for (const [meter, rates] of Object.entries(pricing)) {
+			for (const rate of Object.keys(rates)) {
+				const cutoff = /^per_mill_context_gt_([1-9][0-9]*)k$/.exec(rate)?.[1];
+				if (cutoff && Number(cutoff) * 1000 >= maxInputTokens) {
+					throw new Error(`${deploymentId}.pricing.${meter}.${rate} must be below the input limit`);
+				}
+			}
+		}
 		const dataHandlingByRoute = effectiveDataHandlingByRoute(graph, deploymentId, deployment);
 		const dataHandlingValues = Object.values(dataHandlingByRoute);
 		if (
@@ -1163,18 +1148,28 @@ export function buildCatalogs(source) {
 				);
 			}
 		}
+		// Microsoft's preview terms drop its data location and retention commitments.
 		if (
 			providerId === 'azure' &&
-			deployment.upstream.hosting !== 'azure' &&
+			(deployment.upstream.deploymentType === 'instant' ||
+				deployment.upstream.serviceTier === 'flex') &&
 			dataHandlingValues.some(
-				(value) =>
-					value.processingLocation !== 'unknown' ||
-					!['none', 'unknown'].includes(value.storageLocation)
+				(value) => value.storageLocation !== 'world' || value.retentionDays !== null
 			)
 		) {
 			throw new Error(
-				`${deploymentId}: externally hosted Azure locations must remain unknown or none`
+				`${deploymentId}: Azure Instant and Flex previews must keep world storage and unknown retention`
 			);
+		}
+		// Anthropic runs inference where the inference_geo it receives says.
+		if (
+			providerId === 'anthropic' &&
+			dataHandlingValues.some(
+				(value) =>
+					value.processingLocation !== (deployment.upstream.inferenceGeo === 'us' ? 'US' : 'world')
+			)
+		) {
+			throw new Error(`${deploymentId}: processingLocation must match upstream inferenceGeo`);
 		}
 		const baseStates = deployment.routeIds.map(
 			(routeId) => baseByModelRoute.get(`${deployment.modelId}\0${routeId}`) === deploymentId
@@ -1183,22 +1178,19 @@ export function buildCatalogs(source) {
 			throw new Error(`${deploymentId}: split deployments whose routes have different bases`);
 		}
 
-		addSelector(deploymentId, 'deployment', deploymentId, retired);
-		for (const alias of deployment.aliases ?? []) {
-			if (alias === deployment.modelId) {
-				throw new Error(`${deploymentId}: deployment alias duplicates model slug ${alias}`);
-			}
-			addSelector(alias, 'deployment', deploymentId, retired);
-		}
+		addSelector(deploymentId, 'deployment', deploymentId);
 
-		const common = {
-			aliases: [...(deployment.aliases ?? [])],
+		const approvalRequired = deployment.approvalRequired ?? false;
+		// Closed models do not disclose how their weights are stored.
+		const weightPrecision = deployment.weightPrecision ?? 'unknown';
+		runtimeDeployments[deploymentId] = {
+			approvalRequired,
 			capabilities,
 			contextWindowTokens,
 			maxInputTokens,
 			deprecationDate,
 			inputModalities: [...inputModalities],
-			fileInputsByRoute: effectiveFileInputsByRoute(graph, deploymentId, deployment),
+			nativeFileInputsByRoute: effectiveNativeFileInputsByRoute(graph, deploymentId, deployment),
 			maxOutputTokens,
 			modelId: deployment.modelId,
 			outputModalities: [...outputModalities],
@@ -1206,49 +1198,62 @@ export function buildCatalogs(source) {
 			reasoning,
 			reasoningEfforts,
 			reasoningMaxTokens,
-			...(Object.keys(routeOverrides).length > 0 ? { routeOverrides } : {}),
+			routeOverrides,
 			routeIds: [...deployment.routeIds].sort(),
-			upstream: deployment.upstream,
+			upstream,
 			dataHandlingByRoute,
-			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
+			weightPrecision
 		};
 		publicDeployments[deploymentId] = {
-			...(retired ? { retired: true } : {}),
-			aliases: [...(deployment.aliases ?? [])],
+			approvalRequired,
 			modelId: deployment.modelId,
+			overrides: structuredClone(deployment.overrides ?? {}),
 			pricing: structuredClone(deployment.pricing),
 			routeIds: [...deployment.routeIds].sort(),
-			upstream: structuredClone(deployment.upstream),
-			...(deployment.overrides ? { overrides: structuredClone(deployment.overrides) } : {}),
-			...(deployment.weightPrecision ? { weightPrecision: deployment.weightPrecision } : {})
+			upstream: structuredClone(upstream),
+			weightPrecision
 		};
-		if (!retired) runtimeDeployments[deploymentId] = common;
 
 		requireNode(graph.providers, providerId, deploymentId);
 	}
 
-	const partition = partitionPublicGraph({
-		...sourceGraph,
-		models: graph.models,
-		deployments: publicDeployments
-	});
-	const archive = { schema: 'stogas.catalog.archive.v1', graph: partition.retired };
-	const archiveJson = canonicalJson(archive);
-	assertSize('catalog archive', archiveJson, publicSizeLimit);
-	const archiveReference = {
-		sha256: createHash('sha256').update(archiveJson).digest('hex'),
-		size_bytes: Buffer.byteLength(archiveJson)
-	};
+	// The gateway bills a Fast request that the provider ran at Standard at the Standard deployment
+	// that matches these upstream fields on the same route.
+	const siblingFields = [
+		'model',
+		'reasoningMode',
+		'hosting',
+		'modelFormat',
+		'modelVersion',
+		'deploymentType',
+		'inferenceGeo'
+	];
+	for (const [deploymentId, fast] of Object.entries(runtimeDeployments)) {
+		if (fast.upstream.serviceTier !== 'fast') continue;
+		for (const routeId of fast.routeIds) {
+			const hasStandard = Object.values(runtimeDeployments).some(
+				(candidate) =>
+					candidate.upstream.serviceTier === 'standard' &&
+					candidate.modelId === fast.modelId &&
+					candidate.routeIds.includes(routeId) &&
+					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field]) &&
+					(candidate.deprecationDate === null ||
+						(fast.deprecationDate !== null && candidate.deprecationDate >= fast.deprecationDate))
+			);
+			if (!hasStandard) {
+				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
+			}
+		}
+	}
+
 	const runtimeRoutes = Object.fromEntries(
-		Object.entries(graph.routes)
-			.filter(([id]) => Object.hasOwn(partition.active.routes, id))
-			.map(([id, route]) => [
-				id,
-				{
-					providerId: route.providerId,
-					interfaces: route.interfaces
-				}
-			])
+		Object.entries(graph.routes).map(([id, route]) => [
+			id,
+			{
+				providerId: route.providerId,
+				interfaces: route.interfaces
+			}
+		])
 	);
 	const runtimeModelIds = new Set(
 		Object.values(runtimeDeployments).map((deployment) => deployment.modelId)
@@ -1261,6 +1266,8 @@ export function buildCatalogs(source) {
 				{
 					authorId: model.authorId,
 					aliases: model.aliases,
+					// Every group that contains the model, so a group selects its descendants' models.
+					groupIds: ancestorGroupIds(graph.groups, model.groupIds).sort(),
 					maxOutputTokens: model.maxOutputTokens,
 					name: model.name,
 					reasoning: model.reasoning,
@@ -1271,13 +1278,13 @@ export function buildCatalogs(source) {
 			])
 	);
 	const runtimeAuthors = Object.fromEntries(
-		Object.entries(partition.active.authors).map(([id, author]) => [
+		Object.entries(graph.authors).map(([id, author]) => [
 			id,
 			{ aliases: author.aliases, name: author.name }
 		])
 	);
 	const runtimeProviders = Object.fromEntries(
-		Object.entries(partition.active.providers).map(([id, provider]) => [
+		Object.entries(graph.providers).map(([id, provider]) => [
 			id,
 			{
 				aliases: provider.aliases,
@@ -1287,33 +1294,25 @@ export function buildCatalogs(source) {
 		])
 	);
 
-	const catalogs = {
-		archive,
+	const compiled = {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v3',
-			graph: {
-				authors: runtimeAuthors,
-				models: runtimeModels,
-				providers: runtimeProviders,
-				routes: runtimeRoutes,
-				deployments: runtimeDeployments
-			}
+			authors: runtimeAuthors,
+			models: runtimeModels,
+			providers: runtimeProviders,
+			routes: runtimeRoutes,
+			deployments: runtimeDeployments
 		},
-		public: {
-			schema: 'stogas.catalog.public.v3',
-			archive: archiveReference,
-			graph: partition.active
-		}
+		public: { ...sourceGraph, deployments: publicDeployments }
 	};
 	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(
-		catalogs.public,
-		catalogs.runtime
+		{ graph: compiled.public },
+		{ graph: compiled.runtime }
 	)) {
 		const deployment = runtimeDeployments[deploymentId];
 		deployment.chainHashes ??= {};
 		deployment.chainHashes[routeId] = hash;
 	}
-	return catalogs;
+	return compiled;
 }
 
 function writeIfChanged(path, content) {
@@ -1388,23 +1387,20 @@ export async function main(argv = process.argv.slice(2)) {
 			...dataFiles,
 			...(generatedFileOwnedSource ? [rel(generatedFileOwnedSource)] : [])
 		];
-		const exported = await run([
-			...cue,
-			'export',
-			...sourceFiles,
-			'-e',
-			'compiledSource',
-			'--out',
-			'json'
-		]);
-		const catalogs = buildCatalogs(JSON.parse(exported));
-		const archiveJson = canonicalJson(catalogs.archive);
-		const archivePath = join(
-			generatedRoot,
-			'blobs',
-			'sha256',
-			`${catalogs.public.archive.sha256}.json`
+		const exportSource = (files) =>
+			run([...cue, 'export', ...files, '-e', 'compiledSource', '--out', 'json']);
+		const source = JSON.parse(await exportSource(sourceFiles));
+		// Each dated state must satisfy the same schema and invariants as the source.
+		await Promise.all(
+			periodStates(source.graph).states.map((state, index) => {
+				const statePath = join(ensureTempBuildDir(), `state-${index}.json`);
+				writeFileSync(statePath, JSON.stringify(state.graph));
+				return exportSource([...cueFiles, rel(statePath)]).catch((error) => {
+					throw new Error(`The catalog state from ${state.start} is invalid\n${error.message}`);
+				});
+			})
 		);
+		const catalogs = buildCatalogs(source);
 		const publicJson = canonicalJson(catalogs.public);
 		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
 		const runtimeJson = canonicalJson(catalogs.runtime);
@@ -1415,27 +1411,13 @@ export async function main(argv = process.argv.slice(2)) {
 			if (args.has('--check')) {
 				const currentRuntime = existsSync(runtimePath) ? readFileSync(runtimePath, 'utf8') : null;
 				const currentPublic = existsSync(publicPath) ? readFileSync(publicPath, 'utf8') : null;
-				const currentArchive = existsSync(archivePath) ? readFileSync(archivePath, 'utf8') : null;
-				if (
-					currentRuntime !== runtimeJson ||
-					currentPublic !== publicJson ||
-					currentArchive !== archiveJson ||
-					readdirSync(join(generatedRoot, 'blobs', 'sha256')).some(
-						(entry) => join(generatedRoot, 'blobs', 'sha256', entry) !== archivePath
-					)
-				) {
+				if (currentRuntime !== runtimeJson || currentPublic !== publicJson) {
 					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
 				}
 			} else {
 				mkdirSync(generatedRoot, { recursive: true });
 				writeIfChanged(runtimePath, runtimeJson);
 				writeIfChanged(publicPath, publicJson);
-				mkdirSync(join(generatedRoot, 'blobs', 'sha256'), { recursive: true });
-				writeIfChanged(archivePath, archiveJson);
-				for (const entry of readdirSync(join(generatedRoot, 'blobs', 'sha256'))) {
-					const path = join(generatedRoot, 'blobs', 'sha256', entry);
-					if (path !== archivePath) rmSync(path);
-				}
 			}
 		}
 	} finally {

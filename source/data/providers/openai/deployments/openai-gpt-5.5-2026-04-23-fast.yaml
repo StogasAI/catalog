@@ -3,7 +3,7 @@ deployments:
   routeIds: [openai-chat-completions, openai-responses]
   upstream:
     model: gpt-5.5-2026-04-23
-    serviceTier: priority
+    serviceTier: fast
   overrides:
     contextWindowTokens: 272000
   pricing:

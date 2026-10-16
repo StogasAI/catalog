@@ -5,7 +5,6 @@ deployments:
     model: zai-org/GLM-5.1-TEE
     chuteId: b048fe26-0352-5c46-acf7-335e527e7f3d
     gpuCount: 8
-  aliases: [glm-5.1-tee]
   weightPrecision: fp8
   overrides:
     maxOutputTokens: 65535

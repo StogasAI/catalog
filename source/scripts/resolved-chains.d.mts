@@ -15,3 +15,14 @@ export function resolvedCatalogChains(
 	hash: string;
 	json: string;
 }>;
+
+/** Chains of the base graph and of every dated state, each once. */
+export function everyStateCatalogChains(
+	publicCatalog: Catalog & { schedule: { start: string; graph: Partial<Catalog['graph']> }[] },
+	runtimeCatalog: Catalog & { schedule: { start: string; graph: Partial<Catalog['graph']> }[] }
+): Generator<{
+	deploymentId: string;
+	routeId: string;
+	hash: string;
+	json: string;
+}>;

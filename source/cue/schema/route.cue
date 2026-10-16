@@ -1,7 +1,7 @@
 package catalog
 
 // Native document content parts. Image/audio parts follow model modalities.
-#FileInputs: close({
+#NativeFileInputs: close({
 	mediaTypes: [...string & =~"^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"]
 	extensions: [...string & =~"^\\.[a-z0-9][a-z0-9._+-]*$"]
 })
@@ -18,7 +18,7 @@ package catalog
 	urlContext:              bool
 })
 
-#RouteCapabilityOverrides: close({
+#CapabilityOverrides: close({
 	streaming?:               bool
 	functionCalling?:         bool
 	parallelFunctionCalling?: bool
@@ -34,10 +34,11 @@ package catalog
 	providerId: #Id
 	endpoint?:  string & =~"^https://"
 	interfaces: [#Interface, ...#Interface]
-	fileInputs:   #FileInputs
-	dataHandling: #RouteDataHandling
-	pricing?:     #RoutePricing
+	nativeFileInputs: #NativeFileInputs
+	dataHandling:     #RouteDataHandling
+	pricing?:         #RoutePricing
 	overrides?: close({
-		capabilities?: #RouteCapabilityOverrides
+		capabilities?: #CapabilityOverrides
 	})
+	periods?: [#Period, ...#Period]
 })

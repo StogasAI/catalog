@@ -1,13 +1,11 @@
 models:
   authorId: moonshot-ai
   name: Kimi K3
-  groupIds: [moonshot-ai-kimi-k3]
-  flavors: [instruct]
+  groupIds: [kimi]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: required
   reasoningEfforts: [low, high, max]
-  reasoningMaxTokens: null
   releaseDate: 2026-07-16
