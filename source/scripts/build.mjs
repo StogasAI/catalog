@@ -1055,12 +1055,19 @@ function compileGraph(source) {
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
+		// Azure sells OpenAI tiers as request modes of one deployment, and Claude Fast as its own model.
 		if (
 			providerId === 'azure' &&
 			deployment.upstream.serviceTier &&
-			deployment.upstream.modelFormat !== 'OpenAI'
+			deployment.upstream.modelFormat !== 'OpenAI' &&
+			!(
+				deployment.upstream.modelFormat === 'Anthropic' &&
+				deployment.upstream.serviceTier === 'fast'
+			)
 		) {
-			throw new Error(`${deploymentId}: Azure offers service tiers only for OpenAI-format models`);
+			throw new Error(
+				`${deploymentId}: Azure offers service tiers only for OpenAI-format models and Claude Fast`
+			);
 		}
 		// Source omits the standard tier; compiled deployments always name their tier.
 		const upstream = {
@@ -1217,10 +1224,10 @@ function compileGraph(source) {
 		requireNode(graph.providers, providerId, deploymentId);
 	}
 
-	// The gateway bills a Fast request that the provider ran at Standard at the Standard deployment
-	// that matches these upstream fields on the same route.
+	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
+	// provider ran at Standard at, the one deployment of the model on the same route that matches
+	// these upstream fields. The provider's model name can differ, as Azure's Claude Fast does.
 	const siblingFields = [
-		'model',
 		'reasoningMode',
 		'hosting',
 		'modelFormat',
@@ -1231,16 +1238,22 @@ function compileGraph(source) {
 	for (const [deploymentId, fast] of Object.entries(runtimeDeployments)) {
 		if (fast.upstream.serviceTier !== 'fast') continue;
 		for (const routeId of fast.routeIds) {
-			const hasStandard = Object.values(runtimeDeployments).some(
+			const standards = Object.values(runtimeDeployments).filter(
 				(candidate) =>
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
 					candidate.routeIds.includes(routeId) &&
-					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field]) &&
-					(candidate.deprecationDate === null ||
-						(fast.deprecationDate !== null && candidate.deprecationDate >= fast.deprecationDate))
+					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field])
 			);
-			if (!hasStandard) {
+			if (standards.length > 1) {
+				throw new Error(`${deploymentId}: Fast matches several Standard deployments on ${routeId}`);
+			}
+			const [standard] = standards;
+			if (
+				!standard ||
+				(standard.deprecationDate !== null &&
+					(fast.deprecationDate === null || standard.deprecationDate < fast.deprecationDate))
+			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}
 		}

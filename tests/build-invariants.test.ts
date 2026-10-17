@@ -1306,12 +1306,15 @@ describe('catalog source compiler invariants', () => {
 				'openai-gpt-test: Fast needs a Standard deployment on openai-responses'
 			],
 			[
-				'a Standard deployment with another upstream model',
+				'several Standard deployments that differ only in the upstream model',
 				(source: Source) => {
 					addFast(source);
-					source.graph.deployments['openai-gpt-test-fast'].upstream.model = 'gpt-test-2';
+					source.graph.deployments['openai-gpt-test-2'] = {
+						...structuredClone(source.graph.deployments['openai-gpt-test']),
+						upstream: { model: 'gpt-test-2' }
+					};
 				},
-				'Fast needs a Standard deployment'
+				'openai-gpt-test-fast: Fast matches several Standard deployments on openai-responses'
 			],
 			[
 				'a Standard deployment that retires first',

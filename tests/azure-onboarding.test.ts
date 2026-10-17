@@ -140,6 +140,20 @@ const otherTargets: AzureTarget[] = [
 }));
 
 otherTargets.push(
+	// Azure sells Claude Opus 5.5 Fast as its own model.
+	...(['global', 'us'] as const).map((location) => ({
+		id: `azure-claude-opus-5-5-fast${location === 'global' ? '' : '-us'}`,
+		modelId: 'claude-opus-5-5',
+		routeIds: ['azure-anthropic-messages'],
+		upstream: {
+			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
+			hosting: 'azure',
+			model: 'claude-opus-5-5-fast',
+			modelFormat: 'Anthropic',
+			modelVersion: '2',
+			serviceTier: 'fast'
+		}
+	})),
 	...(['global', 'eu', 'us'] as const).map((location) => ({
 		id: `azure-deepseek-v4-flash-0423${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-flash-0423',
@@ -293,12 +307,7 @@ describe('Azure provider onboarding contract', () => {
 				['flex', 'global'],
 				['fast', 'global']
 			]),
-			...gptTargets('gpt-6-astra', '2026-09-03', [
-				['standard', 'global'],
-				['standard', 'instant'],
-				['standard', 'us'],
-				['flex', 'global']
-			]),
+			...gptTargets('gpt-6-astra', '2026-09-03', [...standardNodes, ['flex', 'global']]),
 			...gptTargets('gpt-6-luna', '2026-09-22', [...standardNodes, ['flex', 'global']]),
 			...gptTargets('gpt-6-sol', '2026-09-22', [
 				...standardNodes,
@@ -431,8 +440,11 @@ describe('Azure provider onboarding contract', () => {
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in prices)) continue;
 			const [input, output, cacheReadDivisor] = prices[deployment.modelId as keyof typeof prices];
+			// Only Opus 5.5 has Fast on Azure, at twice its standard rates.
+			const fast = deployment.upstream.serviceTier === 'fast';
+			expect(fast).toBe(deployment.upstream.model === 'claude-opus-5-5-fast');
 			expect(deployment.pricing).toEqual(
-				claudePricing(input, output, {
+				claudePricing(fast ? scaled(input, 2n) : input, fast ? scaled(output, 2n) : output, {
 					dataZone: deployment.upstream.deploymentType === 'data_zone_standard_us',
 					cacheReadDivisor,
 					// Haiku 5.5 charges five times every rate once the prompt is over 100K tokens.
@@ -452,7 +464,6 @@ describe('Azure provider onboarding contract', () => {
 			} else if (deployment.upstream.hosting === 'anthropic') {
 				expect(handling.storageLocation).toBe('none');
 			}
-			expect(deployment.upstream.serviceTier).toBe('standard');
 		}
 	});
 
