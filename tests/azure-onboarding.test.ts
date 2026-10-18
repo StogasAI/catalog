@@ -14,8 +14,16 @@ const chatReasoningEfforts = ['low', 'medium', 'high', 'xhigh'];
 
 function azureDeployments() {
 	return Object.entries(runtimeCatalog.graph.deployments).filter(([, deployment]) =>
-		deployment.routeIds.some((routeId) => routeId.startsWith('azure-'))
+		Object.keys(deployment.routes).some((routeId) => routeId.startsWith('azure-'))
 	);
+}
+
+// Every route of a deployment charges its token prices.
+function expectRoutePricing(
+	deployment: { routes: Record<string, { pricing: unknown }> },
+	pricing: unknown
+) {
+	for (const route of Object.values(deployment.routes)) expect(route.pricing).toEqual(pricing);
 }
 
 type AzureLocation = 'global' | 'apac' | 'eu' | 'instant' | 'us';
@@ -328,7 +336,7 @@ describe('Azure provider onboarding contract', () => {
 			.map(([id, deployment]) => ({
 				id,
 				modelId: deployment.modelId,
-				routeIds: [...deployment.routeIds].sort(),
+				routeIds: Object.keys(deployment.routes).sort(),
 				upstream: deployment.upstream
 			}))
 			.sort((left, right) => left.id.localeCompare(right.id));
@@ -377,21 +385,29 @@ describe('Azure provider onboarding contract', () => {
 						: 10n;
 			const [tierNumerator, tierDenominator] =
 				serviceTier === 'fast' ? [2n, 1n] : serviceTier === 'flex' ? [1n, 2n] : [1n, 1n];
-			expect(deployment.pricing).toEqual(
+			expectRoutePricing(
+				deployment,
 				gptPricing(rates, regionTenths * tierNumerator, 10n * tierDenominator)
 			);
-			expect(deployment.deprecationDate).toBe(retirement);
+			expect(deployment.retirementDate).toBe(retirement);
 			expect(deployment.contextWindowTokens).toBe(1_050_000);
 			expect(deployment.maxOutputTokens).toBe(128_000);
-			expect(deployment.reasoningEfforts).toEqual(allReasoningEfforts);
 			expect(deployment.reasoningMaxTokens).toBeNull();
-			if (deployment.upstream.reasoningMode === 'pro') {
-				expect(deployment.routeIds).toEqual(['azure-responses']);
-			} else {
-				expect(deployment.routeOverrides).toEqual({
-					'azure-chat-completions': { reasoningEfforts: chatReasoningEfforts }
-				});
-			}
+			expect(
+				Object.fromEntries(
+					Object.entries(deployment.routes).map(([routeId, route]) => [
+						routeId,
+						route.reasoningEfforts
+					])
+				)
+			).toEqual(
+				deployment.upstream.reasoningMode === 'pro'
+					? { 'azure-responses': allReasoningEfforts }
+					: {
+							'azure-chat-completions': chatReasoningEfforts,
+							'azure-responses': allReasoningEfforts
+						}
+			);
 		}
 	});
 
@@ -406,7 +422,7 @@ describe('Azure provider onboarding contract', () => {
 				const rate = (value: string) => ({
 					per_mill_tokens: scaled(value, zoneTenths * 25n, 100n)
 				});
-				expect(deployment.pricing).toEqual({
+				expectRoutePricing(deployment, {
 					cached_input_tokens: rate('0.5'),
 					input_tokens: rate('5'),
 					output_tokens: rate('30')
@@ -418,10 +434,10 @@ describe('Azure provider onboarding contract', () => {
 					zoneTenths,
 					10n
 				);
-				expect(deployment.pricing).toEqual({ cached_input_tokens, input_tokens, output_tokens });
+				expectRoutePricing(deployment, { cached_input_tokens, input_tokens, output_tokens });
 				expect(deployment.contextWindowTokens).toBe(922_000);
 			}
-			expect(deployment.deprecationDate).toBe('2027-10-26');
+			expect(deployment.retirementDate).toBe('2027-10-26');
 		}
 	});
 
@@ -443,7 +459,8 @@ describe('Azure provider onboarding contract', () => {
 			// Only Opus 5.5 has Fast on Azure, at twice its standard rates.
 			const fast = deployment.upstream.serviceTier === 'fast';
 			expect(fast).toBe(deployment.upstream.model === 'claude-opus-5-5-fast');
-			expect(deployment.pricing).toEqual(
+			const route = deployment.routes['azure-anthropic-messages'];
+			expect(route.pricing).toEqual(
 				claudePricing(fast ? scaled(input, 2n) : input, fast ? scaled(output, 2n) : output, {
 					dataZone: deployment.upstream.deploymentType === 'data_zone_standard_us',
 					cacheReadDivisor,
@@ -451,11 +468,11 @@ describe('Azure provider onboarding contract', () => {
 					longPromptMultiplier: deployment.modelId === 'claude-haiku-5-5' ? 5n : undefined
 				})
 			);
-			const handling = deployment.dataHandlingByRoute['azure-anthropic-messages'];
+			const handling = route.dataHandling;
 			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
 			expect(handling.retentionDays).toBe(fableOrMythos ? 30 : 0);
 			// Foundry offers no max effort for Claude Fable and Mythos.
-			expect(deployment.reasoningEfforts.includes('max')).toBe(
+			expect(route.reasoningEfforts.includes('max')).toBe(
 				!fableOrMythos &&
 					runtimeCatalog.graph.models[deployment.modelId].reasoningEfforts.includes('max')
 			);
@@ -478,19 +495,20 @@ describe('Azure provider onboarding contract', () => {
 			'azure-glm-5.2': ['1.54', '0.15', '4.84'],
 			'azure-minimax-m3': ['0.33', '0.066', '1.32']
 		} as const;
+		const deployments = runtimeCatalog.graph.deployments;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
-			expect(runtimeCatalog.graph.deployments[id].pricing).toEqual({
+			expectRoutePricing(deployments[id as keyof typeof deployments], {
 				cached_input_tokens: { per_mill_tokens: cached },
 				input_tokens: { per_mill_tokens: input },
 				output_tokens: { per_mill_tokens: output }
 			});
 		}
 		// Azure publishes no cached input meter for gpt-oss-120b.
-		expect(runtimeCatalog.graph.deployments['azure-gpt-oss-120b'].pricing).toEqual({
+		expectRoutePricing(deployments['azure-gpt-oss-120b'], {
 			input_tokens: { per_mill_tokens: '0.15' },
 			output_tokens: { per_mill_tokens: '0.6' }
 		});
-		expect(runtimeCatalog.graph.deployments['azure-gpt-oss-120b-us'].pricing).toEqual({
+		expectRoutePricing(deployments['azure-gpt-oss-120b-us'], {
 			input_tokens: { per_mill_tokens: '0.165' },
 			output_tokens: { per_mill_tokens: '0.66' }
 		});
@@ -498,7 +516,7 @@ describe('Azure provider onboarding contract', () => {
 
 	test('keeps public regions conservative and does not invent capacity-metered deployments', () => {
 		for (const [, deployment] of azureDeployments()) {
-			for (const handling of Object.values(deployment.dataHandlingByRoute)) {
+			for (const { dataHandling: handling } of Object.values(deployment.routes)) {
 				if (
 					deployment.upstream.hosting === 'azure' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_us'

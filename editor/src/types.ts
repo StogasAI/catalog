@@ -14,12 +14,12 @@ export type CatalogGraph = {
 
 // The editor shows the base graph; each node's dated periods appear in its source.
 export type Catalog = {
-	schema: 'stogas.catalog.public.v4';
+	schema: 'stogas.catalog.public.v5';
 	graph: CatalogGraph;
 };
 
 export function parseCatalog(value: unknown): Catalog {
-	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v4' || !isObject(value.graph)) {
+	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v5' || !isObject(value.graph)) {
 		throw new TypeError('The generated public catalog is invalid.');
 	}
 	const graph = value.graph;
@@ -92,15 +92,6 @@ export type LineageNode = {
 	type: NodeType;
 	id: string;
 	value: Record<string, unknown>;
-};
-
-export type EffectiveFact = {
-	origin: {
-		type: NodeType;
-		id: string;
-	};
-	path: string;
-	value: unknown;
 };
 
 export type CatalogFlow = {

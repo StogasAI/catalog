@@ -49,9 +49,9 @@ describe('compiled catalog', () => {
 		}
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 			expect(runtimeCatalog.graph.models[deployment.modelId]).toBeDefined();
-			expect(deployment.routeIds.length).toBeGreaterThan(0);
+			expect(Object.keys(deployment.routes).length).toBeGreaterThan(0);
 			expect(deployment.upstream.model).not.toBe('');
-			for (const routeId of deployment.routeIds) {
+			for (const routeId of Object.keys(deployment.routes)) {
 				expect(runtimeCatalog.graph.routes[routeId]).toBeDefined();
 			}
 		}
@@ -61,7 +61,7 @@ describe('compiled catalog', () => {
 		const selectors = Object.fromEntries(
 			Object.entries(runtimeCatalog.graph.deployments)
 				.filter(([, deployment]) =>
-					deployment.routeIds.some((routeId) => routeId.startsWith('azure-'))
+					Object.keys(deployment.routes).some((routeId) => routeId.startsWith('azure-'))
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
@@ -117,7 +117,9 @@ describe('compiled catalog', () => {
 
 	test('excludes confirmed shutdowns through the pre-launch cutoff without retiring other providers', () => {
 		expect(runtimeCatalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toBeDefined();
-		expect(publicCatalog.graph.models['claude-opus-4-5'].deprecationDate).toBeNull();
+		expect(
+			publicCatalog.graph.deployments['anthropic-claude-opus-4-5-20251101'].retirementDate
+		).toBeNull();
 		expect(publicCatalog.graph.deployments['azure-claude-haiku-4-5']).toBeUndefined();
 		expect(
 			publicCatalog.graph.deployments['azure-claude-haiku-4-5-anthropic-hosted']
@@ -137,15 +139,9 @@ describe('compiled catalog', () => {
 			).toBe(false);
 		}
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			expect(deployment).toHaveProperty('deprecationDate');
-			if (deployment.deprecationDate !== null)
-				expect(deployment.deprecationDate > '2026-12-31').toBe(true);
-			expect(deployment).not.toHaveProperty('status');
-			expect(deployment).not.toHaveProperty('deprecatedAt');
-			expect(deployment).not.toHaveProperty('retiredAt');
-		}
-		for (const model of Object.values(publicCatalog.graph.models)) {
-			expect(model).toHaveProperty('deprecationDate');
+			expect(deployment).toHaveProperty('retirementDate');
+			if (deployment.retirementDate !== null)
+				expect(deployment.retirementDate > '2026-12-31').toBe(true);
 		}
 	});
 
@@ -155,7 +151,7 @@ describe('compiled catalog', () => {
 		}
 		for (const [routeId, route] of Object.entries(runtimeCatalog.graph.routes)) {
 			const deployments = Object.entries(runtimeCatalog.graph.deployments).filter(
-				([, deployment]) => deployment.routeIds.includes(routeId)
+				([, deployment]) => Object.hasOwn(deployment.routes, routeId)
 			);
 			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
 				const matchingIds = deployments
@@ -193,18 +189,20 @@ describe('compiled catalog', () => {
 			expect(deployment.maxInputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
 			expect(deployment.maxOutputTokens).toBeGreaterThan(0);
 			expect(deployment.maxOutputTokens).toBeLessThanOrEqual(deployment.contextWindowTokens);
-			expect(deployment.inputModalities.length).toBeGreaterThan(0);
 			expect(deployment.outputModalities.length).toBeGreaterThan(0);
-			expect(deployment.capabilities).not.toHaveProperty('inputModalities');
-			expect(deployment.capabilities).not.toHaveProperty('outputModalities');
-			for (const effort of deployment.reasoningEfforts) {
-				expect(canonicalEfforts.has(effort)).toBe(true);
+			for (const route of Object.values(deployment.routes)) {
+				expect(route.inputModalities[0]).toBe('text');
+				for (const effort of route.reasoningEfforts) {
+					expect(canonicalEfforts.has(effort)).toBe(true);
+				}
+				expect(route.reasoningEfforts).toEqual(
+					route.reasoningEfforts.toSorted(
+						(left, right) =>
+							canonicalEffortOrder.indexOf(left) - canonicalEffortOrder.indexOf(right)
+					)
+				);
+				expect(route.chainHash).toMatch(/^sha256:[0-9a-f]{64}$/);
 			}
-			expect(deployment.reasoningEfforts).toEqual(
-				deployment.reasoningEfforts.toSorted(
-					(left, right) => canonicalEffortOrder.indexOf(left) - canonicalEffortOrder.indexOf(right)
-				)
-			);
 			expect(deployment).toHaveProperty('reasoningMaxTokens');
 			if (deployment.reasoningMaxTokens) {
 				expect(deployment.reasoningMaxTokens.minimum).toBeGreaterThan(0);
@@ -213,14 +211,7 @@ describe('compiled catalog', () => {
 				);
 				expect(deployment.reasoningMaxTokens.maximum).toBeLessThan(deployment.maxOutputTokens);
 			}
-			expect(Object.keys(deployment.dataHandlingByRoute).sort()).toEqual(
-				[...deployment.routeIds].sort()
-			);
-			for (const dataHandling of Object.values(deployment.dataHandlingByRoute)) {
-				expect(dataHandling).toBeDefined();
-			}
-			expect(deployment).not.toHaveProperty('moderated');
-			if (deployment.routeIds.includes('chutes-chat-completions')) {
+			if (Object.hasOwn(deployment.routes, 'chutes-chat-completions')) {
 				expect(deployment.upstream.gpuCount).toBeGreaterThanOrEqual(1);
 				expect(deployment.upstream.gpuCount).toBeLessThanOrEqual(8);
 			}
@@ -235,8 +226,8 @@ describe('compiled catalog', () => {
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-glm-5.2']).toMatchObject({
 			reasoning: 'optional',
-			reasoningEfforts: ['high', 'max'],
-			reasoningMaxTokens: null
+			reasoningMaxTokens: null,
+			routes: { 'chutes-chat-completions': { reasoningEfforts: ['high', 'max'] } }
 		});
 		expect(runtimeCatalog.graph.deployments['anthropic-claude-opus-4-6']).toMatchObject({
 			reasoningMaxTokens: { maximum: 127999, minimum: 1024 }
@@ -248,8 +239,8 @@ describe('compiled catalog', () => {
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-nemotron-3-nano-omni-30b']).toMatchObject({
 			reasoning: 'optional',
-			reasoningEfforts: [],
-			reasoningMaxTokens: null
+			reasoningMaxTokens: null,
+			routes: { 'chutes-chat-completions': { reasoningEfforts: [] } }
 		});
 	});
 
@@ -263,25 +254,27 @@ describe('compiled catalog', () => {
 			inputModalities: ['text', 'image', 'video'],
 			reasoningEfforts: []
 		});
+		// The Chutes route carries only text, whatever the model accepts.
 		expect(runtimeCatalog.graph.deployments['chutes-gemma-4-31b-turbo']).toMatchObject({
 			contextWindowTokens: 131072,
-			inputModalities: ['text', 'image'],
-			maxOutputTokens: 65536
+			maxOutputTokens: 65536,
+			routes: { 'chutes-chat-completions': { inputModalities: ['text'] } }
 		});
 		expect(publicCatalog.graph.models['deepseek-v4-flash-0731']).toMatchObject({
 			name: 'DeepSeek V4 Flash 0731',
 			reasoningEfforts: ['low', 'high', 'max']
 		});
 		expect(runtimeCatalog.graph.deployments['chutes-deepseek-v4-flash-0731']).toMatchObject({
-			reasoningEfforts: ['high', 'max']
+			routes: { 'chutes-chat-completions': { reasoningEfforts: ['high', 'max'] } }
 		});
 		for (const deploymentId of [
 			'chutes-mistral-nemo-instruct-2407',
 			'chutes-nemotron-3-nano-omni-30b'
 		]) {
-			expect(runtimeCatalog.graph.deployments[deploymentId].capabilities.structuredOutputs).toBe(
-				true
-			);
+			expect(
+				runtimeCatalog.graph.deployments[deploymentId].routes['chutes-chat-completions']
+					.capabilities.structuredOutputs
+			).toBe(true);
 		}
 		expect(publicCatalog.graph.models['mistral-nemo-instruct-2407']).toMatchObject({
 			groupIds: ['mistral-nemo'],
@@ -322,34 +315,35 @@ describe('compiled catalog', () => {
 		expect(publicCatalog.graph.models['gpt-oss-120b'].knowledgeCutoff).toBe('2024-06-01');
 	});
 
-	test('keeps public policy facts at their semantic owner', () => {
+	test('resolves public policy facts on routes and deployment routes', () => {
+		// Provider defaults are compiled into routes, so readers never combine nodes.
 		for (const provider of Object.values(publicCatalog.graph.providers)) {
-			expect(provider).not.toHaveProperty('moderated');
-			expect(provider.dataHandling).toHaveProperty('processingLocation');
-			expect(provider.dataHandling).toHaveProperty('storageLocation');
-			expect(provider.dataHandling).toHaveProperty('tee');
-			expect(provider.dataHandling).toHaveProperty('teeVerified');
-			expect(typeof provider.dataHandling.tee).toBe('boolean');
-			expect(typeof provider.dataHandling.teeVerified).toBe('boolean');
-			expect(provider.dataHandling.teeVerified && !provider.dataHandling.tee).toBe(false);
-			expect(typeof provider.dataHandling.trainingUse).toBe('boolean');
-			expect(typeof provider.dataHandling.zeroDataRetention).toBe('boolean');
-			expect(provider.dataHandling).not.toHaveProperty('endToEndEncrypted');
-			expect(provider.dataHandling).not.toHaveProperty('gdpr');
+			expect(provider).not.toHaveProperty('capabilities');
+			expect(provider).not.toHaveProperty('dataHandling');
 		}
-		for (const route of Object.values(publicCatalog.graph.routes)) {
-			expect(typeof route.dataHandling.endToEndEncrypted).toBe('boolean');
-			expect(route.dataHandling).not.toHaveProperty('processingLocation');
-			expect(route.dataHandling).not.toHaveProperty('storageLocation');
+		const dataHandlingFields = [
+			'endToEndEncrypted',
+			'processingLocation',
+			'retentionDays',
+			'storageLocation',
+			'tee',
+			'teeVerified',
+			'trainingUse',
+			'zeroDataRetention'
+		];
+		const records = [
+			...Object.values(publicCatalog.graph.routes),
+			...Object.values(publicCatalog.graph.deployments).flatMap((deployment) =>
+				Object.values(deployment.routes)
+			)
+		];
+		for (const { dataHandling } of records) {
+			expect(Object.keys(dataHandling).sort()).toEqual(dataHandlingFields);
+			expect(dataHandling.teeVerified && !dataHandling.tee).toBe(false);
 		}
-		expect(publicCatalog.graph.routes['anthropic-messages']).not.toHaveProperty('moderated');
 		expect(publicCatalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('dataHandling');
-		expect(publicCatalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('moderated');
-		expect(
-			publicCatalog.graph.deployments['chutes-nemotron-3-nano-omni-30b'].overrides
-		).not.toHaveProperty('dataHandling');
+		expect(publicCatalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('overrides');
 		expect(publicCatalog).not.toHaveProperty('evidence');
-		expect(JSON.stringify(publicCatalog)).not.toContain('"webSearch"');
 	});
 
 	test('publishes every known model release and only disclosed knowledge cutoffs', () => {
@@ -375,7 +369,8 @@ describe('compiled catalog', () => {
 			});
 			for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
 				if (deployment.modelId !== modelId) continue;
-				if (!deployment.routeIds.some((routeId) => routeId.startsWith('openai-'))) continue;
+				if (!Object.keys(deployment.routes).some((routeId) => routeId.startsWith('openai-')))
+					continue;
 				expect(deployment.upstream.model).toBe(modelId);
 			}
 		}
@@ -387,15 +382,16 @@ describe('compiled catalog', () => {
 
 	test('keeps Anthropic selection literal and its guarantee normalized', () => {
 		const deployment = runtimeCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'];
-		expect(deployment.routeIds).toEqual(['anthropic-messages']);
+		expect(Object.keys(deployment.routes)).toEqual(['anthropic-messages']);
 		expect(deployment.upstream).toEqual({
 			inferenceGeo: 'us',
 			model: 'claude-opus-4-8',
 			serviceTier: 'fast'
 		});
 		expect(
-			publicCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].overrides.dataHandling
-				.processingLocation
+			publicCatalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].routes[
+				'anthropic-messages'
+			].dataHandling.processingLocation
 		).toBe('US');
 	});
 
@@ -418,7 +414,16 @@ describe('compiled catalog', () => {
 			'claude-sonnet-5-5'
 		];
 		const activeModels = Object.entries(publicCatalog.graph.models)
-			.filter(([, model]) => model.authorId === 'anthropic' && model.deprecationDate === null)
+			.filter(
+				([modelId, model]) =>
+					model.authorId === 'anthropic' &&
+					Object.values(publicCatalog.graph.deployments).some(
+						(deployment) =>
+							deployment.modelId === modelId &&
+							Object.hasOwn(deployment.routes, 'anthropic-messages') &&
+							deployment.retirementDate === null
+					)
+			)
 			.map(([modelId]) => modelId)
 			.sort();
 		expect(activeModels).toEqual(expectedActiveModels);
@@ -431,7 +436,7 @@ describe('compiled catalog', () => {
 		]);
 		const baseDeploymentsByModel = new Map(
 			Object.entries(runtimeCatalog.graph.deployments)
-				.filter(([, deployment]) => deployment.routeIds.includes('anthropic-messages'))
+				.filter(([, deployment]) => Object.hasOwn(deployment.routes, 'anthropic-messages'))
 				.map(([deploymentId, deployment]) => [deployment.modelId, deploymentId])
 		);
 		for (const modelId of expectedActiveModels)
@@ -479,7 +484,7 @@ describe('compiled catalog', () => {
 		);
 		expect(usModels).toEqual(geoModels);
 		for (const deployment of Object.values(runtimeCatalog.graph.deployments)) {
-			if (!deployment.routeIds.includes('anthropic-messages')) continue;
+			if (!Object.hasOwn(deployment.routes, 'anthropic-messages')) continue;
 			if (!geoModels.has(deployment.modelId)) {
 				expect(deployment.upstream).not.toHaveProperty('inferenceGeo');
 			}
@@ -489,28 +494,27 @@ describe('compiled catalog', () => {
 			Object.values(runtimeCatalog.graph.deployments)
 				.filter(
 					(deployment) =>
-						deployment.routeIds.includes('anthropic-messages') &&
+						Object.hasOwn(deployment.routes, 'anthropic-messages') &&
 						deployment.upstream.serviceTier === 'fast'
 				)
 				.map((deployment) => deployment.modelId)
 		);
 		expect(fastModels).toEqual(new Set(['claude-opus-4-8', 'claude-opus-5', 'claude-opus-5-5']));
-		expect(publicCatalog.graph.routes['anthropic-messages'].dataHandling).toEqual({
-			endToEndEncrypted: false
+		expect(publicCatalog.graph.routes['anthropic-messages'].dataHandling).toMatchObject({
+			endToEndEncrypted: false,
+			storageLocation: 'none',
+			retentionDays: 0,
+			zeroDataRetention: false
 		});
 		expect(publicCatalog.graph.routes['anthropic-messages'].pricing).toEqual({
 			anthropic_web_search_calls: {
 				per_1k_calls: '10'
 			}
 		});
-		expect(runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].pricing).toHaveProperty(
-			'anthropic_web_search_calls'
-		);
-		expect(publicCatalog.graph.providers.anthropic.dataHandling).toMatchObject({
-			storageLocation: 'none',
-			retentionDays: 0,
-			zeroDataRetention: false
-		});
+		expect(
+			runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].routes['anthropic-messages']
+				.pricing
+		).toHaveProperty('anthropic_web_search_calls');
 		for (const deploymentId of [
 			'anthropic-claude-fable-5',
 			'anthropic-claude-fable-5-us',
@@ -521,17 +525,15 @@ describe('compiled catalog', () => {
 			'anthropic-claude-mythos-5-1',
 			'anthropic-claude-mythos-5-1-us'
 		]) {
-			expect(runtimeCatalog.graph.deployments[deploymentId].dataHandlingByRoute).toEqual({
+			expect(runtimeCatalog.graph.deployments[deploymentId].routes).toEqual({
 				'anthropic-messages': expect.objectContaining({
-					storageLocation: 'unknown',
-					retentionDays: 30
+					dataHandling: expect.objectContaining({ storageLocation: 'unknown', retentionDays: 30 })
 				})
 			});
 		}
 		expect(
-			runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].dataHandlingByRoute[
-				'anthropic-messages'
-			]
+			runtimeCatalog.graph.deployments['anthropic-claude-opus-5'].routes['anthropic-messages']
+				.dataHandling
 		).toMatchObject({ storageLocation: 'none', retentionDays: 0 });
 	});
 
@@ -560,6 +562,9 @@ describe('compiled catalog', () => {
 
 	test('publishes OpenAI Fast naming and current GPT-5.6 prices', () => {
 		const deployments = runtimeCatalog.graph.deployments;
+		// Token prices belong to the deployment, so every route has them.
+		const prices = (deploymentId: keyof typeof deployments) =>
+			deployments[deploymentId].routes['openai-responses'].pricing;
 		expect(publicCatalog.graph.models['gpt-5-search-api-2025-10-14']).toMatchObject({
 			capabilities: {
 				functionCalling: false,
@@ -579,7 +584,7 @@ describe('compiled catalog', () => {
 			});
 		}
 
-		expect(deployments['openai-gpt-5.6-luna'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-luna')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '0.2',
 				per_mill_context_gt_272k: '0.4'
@@ -597,7 +602,7 @@ describe('compiled catalog', () => {
 				per_mill_context_gt_272k: '1.8'
 			}
 		});
-		expect(deployments['openai-gpt-5.6-luna-flex'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-luna-flex')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '0.1',
 				per_mill_context_gt_272k: '0.2'
@@ -615,7 +620,7 @@ describe('compiled catalog', () => {
 				per_mill_context_gt_272k: '0.9'
 			}
 		});
-		expect(deployments['openai-gpt-5.6-luna-fast'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-luna-fast')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '0.4',
 				per_mill_context_gt_272k: '0.8'
@@ -636,7 +641,7 @@ describe('compiled catalog', () => {
 		expect(deployments['openai-gpt-5.6-luna-fast'].contextWindowTokens).toBe(1_050_000);
 		expect(deployments['openai-gpt-5.6-luna-fast'].maxInputTokens).toBe(922_000);
 
-		expect(deployments['openai-gpt-5.6-sol-fast'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-sol-fast')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '8',
 				per_mill_context_gt_272k: '16'
@@ -654,7 +659,7 @@ describe('compiled catalog', () => {
 				per_mill_context_gt_272k: '60'
 			}
 		});
-		expect(deployments['openai-gpt-5.6-sol'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-sol')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '4',
 				per_mill_context_gt_272k: '8'
@@ -679,9 +684,9 @@ describe('compiled catalog', () => {
 			'output_tokens'
 		] as const) {
 			for (const band of ['per_mill_tokens', 'per_mill_context_gt_272k'] as const) {
-				const standard = coefficient(deployments['openai-gpt-5.6-sol'].pricing[meter][band]);
-				const flex = coefficient(deployments['openai-gpt-5.6-sol-flex'].pricing[meter][band]);
-				const fast = coefficient(deployments['openai-gpt-5.6-sol-fast'].pricing[meter][band]);
+				const standard = coefficient(prices('openai-gpt-5.6-sol')[meter][band]);
+				const flex = coefficient(prices('openai-gpt-5.6-sol-flex')[meter][band]);
+				const fast = coefficient(prices('openai-gpt-5.6-sol-fast')[meter][band]);
 				expect(flex * 2n).toBe(standard);
 				expect(fast).toBe(standard * 2n);
 			}
@@ -689,7 +694,7 @@ describe('compiled catalog', () => {
 		expect(deployments['openai-gpt-5.6-sol-fast'].contextWindowTokens).toBe(1_050_000);
 		expect(deployments['openai-gpt-5.6-sol-fast'].maxInputTokens).toBe(922_000);
 
-		expect(deployments['openai-gpt-5.6-terra'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-terra')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '2',
 				per_mill_context_gt_272k: '4'
@@ -707,7 +712,7 @@ describe('compiled catalog', () => {
 				per_mill_context_gt_272k: '18'
 			}
 		});
-		expect(deployments['openai-gpt-5.6-terra-flex'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-terra-flex')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '1',
 				per_mill_context_gt_272k: '2'
@@ -725,7 +730,7 @@ describe('compiled catalog', () => {
 				per_mill_context_gt_272k: '9'
 			}
 		});
-		expect(deployments['openai-gpt-5.6-terra-fast'].pricing).toMatchObject({
+		expect(prices('openai-gpt-5.6-terra-fast')).toMatchObject({
 			input_tokens: {
 				per_mill_tokens: '4',
 				per_mill_context_gt_272k: '8'
@@ -768,10 +773,12 @@ describe('compiled catalog', () => {
 				const pro = deployments[deploymentId];
 				expect(pro).toMatchObject({
 					modelId,
-					routeIds: ['openai-responses'],
 					upstream: { model: modelId, reasoningMode: 'pro', serviceTier }
 				});
-				expect(pro.pricing).toEqual(peer.pricing);
+				expect(Object.keys(pro.routes)).toEqual(['openai-responses']);
+				expect(pro.routes['openai-responses'].pricing).toEqual(
+					peer.routes['openai-responses'].pricing
+				);
 				expect(pro.contextWindowTokens).toBe(peer.contextWindowTokens);
 				expect(publicCatalog.graph.deployments[deploymentId]).toBeDefined();
 			}
@@ -784,7 +791,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				Object.entries(deployments)
 					.filter(([, deployment]) => deployment.upstream.serviceTier === 'ultrafast')
-					.map(([deploymentId, deployment]) => [deploymentId, deployment.routeIds])
+					.map(([deploymentId, deployment]) => [deploymentId, Object.keys(deployment.routes)])
 			)
 		).toEqual({
 			'openai-gpt-6-astra-ultrafast': ['openai-responses'],
@@ -818,16 +825,22 @@ describe('compiled catalog', () => {
 				['cache_write_input_tokens', (input * 5n) / 4n, (input * 5n) / 2n],
 				['output_tokens', output, (output * 3n) / 2n]
 			] as const) {
-				const rates = deployment.pricing[meter];
-				expect(Object.keys(rates).sort()).toEqual(['per_mill_context_gt_272k', 'per_mill_tokens']);
-				expect(coefficient(rates.per_mill_tokens)).toBe((short * numerator) / denominator);
-				expect(coefficient(rates.per_mill_context_gt_272k)).toBe((long * numerator) / denominator);
+				for (const route of Object.values(deployment.routes)) {
+					const rates = route.pricing[meter];
+					expect(Object.keys(rates).sort()).toEqual([
+						'per_mill_context_gt_272k',
+						'per_mill_tokens'
+					]);
+					expect(coefficient(rates.per_mill_tokens)).toBe((short * numerator) / denominator);
+					expect(coefficient(rates.per_mill_context_gt_272k)).toBe(
+						(long * numerator) / denominator
+					);
+				}
 			}
-			if (deployment.routeIds.includes('openai-chat-completions')) {
-				expect(deployment.routeOverrides).toEqual({
-					'openai-chat-completions': { reasoningEfforts: ['low', 'medium', 'high', 'xhigh'] }
-				});
-			}
+			const chat = (deployment.routes as Record<string, { reasoningEfforts: string[] }>)[
+				'openai-chat-completions'
+			];
+			if (chat) expect(chat.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh']);
 			checked.push(deploymentId);
 		}
 		expect(checked).toHaveLength(26);
@@ -836,8 +849,8 @@ describe('compiled catalog', () => {
 	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v4');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v4');
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v5');
 		expect(runtimeCatalog.schedule).toEqual([]);
 		expect(publicCatalog.schedule).toEqual([]);
 	});

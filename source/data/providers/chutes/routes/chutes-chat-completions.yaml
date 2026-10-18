@@ -2,7 +2,8 @@ routes:
   providerId: chutes
   endpoint: https://api.chutes.ai/e2e/invoke
   interfaces: [chat_completions]
-  nativeFileInputs:
+  inputModalities: [text]
+  documentFormats:
     extensions: []
     mediaTypes: []
   dataHandling:

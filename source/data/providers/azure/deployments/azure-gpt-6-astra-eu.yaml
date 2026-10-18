@@ -7,11 +7,11 @@ deployments:
     modelVersion: '2026-09-03'
     hosting: azure
     deploymentType: data_zone_standard_eu
+  retirementDate: 2028-01-11
   overrides:
     dataHandling:
       processingLocation: europe
       storageLocation: europe
-    deprecationDate: 2028-01-11
   pricing:
     input_tokens:
       per_mill_tokens: '12'

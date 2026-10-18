@@ -9,8 +9,7 @@ deployments:
     deploymentType: global_standard
     reasoningMode: pro
     serviceTier: fast
-  overrides:
-    deprecationDate: 2028-01-11
+  retirementDate: 2028-01-11
   pricing:
     input_tokens:
       per_mill_tokens: '8'

@@ -7,11 +7,11 @@ deployments:
     modelVersion: '1'
     hosting: anthropic
     deploymentType: global_standard
+  retirementDate: 2027-09-29
   overrides:
     dataHandling:
       processingLocation: unknown
       storageLocation: none
-    deprecationDate: 2027-09-29
   pricing:
     input_tokens:
       per_mill_tokens: '0.1'

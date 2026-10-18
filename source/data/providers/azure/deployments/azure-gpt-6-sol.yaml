@@ -7,8 +7,7 @@ deployments:
     modelVersion: '2026-09-22'
     hosting: azure
     deploymentType: global_standard
-  overrides:
-    deprecationDate: 2028-03-11
+  retirementDate: 2028-03-11
   pricing:
     input_tokens:
       per_mill_tokens: '2'

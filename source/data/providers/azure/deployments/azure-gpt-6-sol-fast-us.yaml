@@ -8,11 +8,11 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_us
     serviceTier: fast
+  retirementDate: 2028-03-11
   overrides:
     dataHandling:
       processingLocation: US
       storageLocation: US
-    deprecationDate: 2028-03-11
   pricing:
     input_tokens:
       per_mill_tokens: '4.4'

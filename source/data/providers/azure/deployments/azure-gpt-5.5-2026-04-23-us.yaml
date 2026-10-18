@@ -7,6 +7,7 @@ deployments:
     modelVersion: '2026-04-24'
     hosting: azure
     deploymentType: data_zone_standard_us
+  retirementDate: 2027-10-26
   overrides:
     # Microsoft caps the GPT-5.5 Responses prompt and output together at about 922,000 tokens.
     # Reviewed 2026-10-13: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#responses-api-token-budget
@@ -14,7 +15,6 @@ deployments:
     dataHandling:
       processingLocation: US
       storageLocation: US
-    deprecationDate: 2027-10-26
   pricing:
     input_tokens:
       per_mill_tokens: '5.5'

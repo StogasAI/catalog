@@ -8,11 +8,11 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_apac
     reasoningMode: pro
+  retirementDate: 2028-03-11
   overrides:
     dataHandling:
       processingLocation: apac
       storageLocation: apac
-    deprecationDate: 2028-03-11
   pricing:
     input_tokens:
       per_mill_tokens: '2.4'

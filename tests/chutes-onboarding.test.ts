@@ -14,8 +14,7 @@ const capabilities = {
 	streaming: true,
 	structuredOutputs: true,
 	systemMessages: true,
-	toolChoice: true,
-	urlContext: false
+	toolChoice: true
 };
 const chuteIds: Record<string, string> = {
 	'chutes-deepseek-v3.2': '398651e1-5f85-5e50-a513-7c5324e8e839',
@@ -88,40 +87,30 @@ const deployments: ProviderDeploymentContract[] = [
 		'0.045',
 		'3',
 		true,
-		['text', 'image'],
+		['text', 'image', 'video'],
 		'optional',
 		[],
 		null,
-		{
-			contextWindowTokens: 1_010_000,
-			inputModalities: ['text', 'image', 'video'],
-			maxOutputTokens: 1_010_000
-		}
+		{ contextWindowTokens: 1_010_000, maxOutputTokens: 1_010_000 }
 	),
-	{
-		...deployment(
-			'chutes-gemma-4-31b-turbo',
-			'gemma-4-31b',
-			'google',
-			'google/gemma-4-31B-turbo-TEE',
-			131072,
-			65536,
-			'nvfp4',
-			'0.12',
-			'0.012',
-			'0.37',
-			true,
-			['text', 'image'],
-			'optional',
-			[],
-			null,
-			{
-				contextWindowTokens: 262144,
-				inputModalities: ['text', 'image', 'video'],
-				maxOutputTokens: 262144
-			}
-		)
-	},
+	deployment(
+		'chutes-gemma-4-31b-turbo',
+		'gemma-4-31b',
+		'google',
+		'google/gemma-4-31B-turbo-TEE',
+		131072,
+		65536,
+		'nvfp4',
+		'0.12',
+		'0.012',
+		'0.37',
+		true,
+		['text', 'image', 'video'],
+		'optional',
+		[],
+		null,
+		{ contextWindowTokens: 262144, maxOutputTokens: 262144 }
+	),
 	deployment(
 		'chutes-glm-5.1',
 		'glm-5.1',
@@ -188,15 +177,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'0.025',
 		'2',
 		true,
-		['text', 'image'],
+		['text', 'image', 'video'],
 		'optional',
 		[],
 		null,
-		{
-			contextWindowTokens: 1_010_000,
-			inputModalities: ['text', 'image', 'video'],
-			maxOutputTokens: 1_010_000
-		}
+		{ contextWindowTokens: 1_010_000, maxOutputTokens: 1_010_000 }
 	),
 	deployment(
 		'chutes-qwen3.8-27b',
@@ -210,15 +195,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'0.0039',
 		'1.25',
 		true,
-		['text', 'image'],
+		['text', 'image', 'video'],
 		'optional',
 		['low', 'medium', 'xhigh'],
 		null,
-		{
-			contextWindowTokens: 1_000_000,
-			inputModalities: ['text', 'image', 'video'],
-			maxOutputTokens: 1_000_000
-		}
+		{ contextWindowTokens: 1_000_000, maxOutputTokens: 1_000_000 }
 	),
 	deployment(
 		'chutes-kimi-k2.6',
@@ -251,8 +232,7 @@ const deployments: ProviderDeploymentContract[] = [
 			'0.00245',
 			'0.0978'
 		),
-		capabilities: { ...capabilities, functionCalling: false, toolChoice: false },
-		publicOverrides: { capabilities: { functionCalling: false, toolChoice: false } }
+		capabilities: { ...capabilities, functionCalling: false, toolChoice: false }
 	},
 	deployment(
 		'chutes-kimi-k3',
@@ -291,12 +271,7 @@ const deployments: ProviderDeploymentContract[] = [
 			{ maximum: 262143, minimum: 1 },
 			{ contextWindowTokens: 262144, maxOutputTokens: 262144 }
 		),
-		reasoningMaxTokens: null,
-		publicOverrides: {
-			contextWindowTokens: 131072,
-			maxOutputTokens: 131072,
-			reasoningMaxTokens: null
-		}
+		reasoningMaxTokens: null
 	},
 	{
 		...deployment(
@@ -317,11 +292,7 @@ const deployments: ProviderDeploymentContract[] = [
 			null,
 			{ maxOutputTokens: 1048576 }
 		),
-		reasoningEfforts: ['high', 'max'],
-		publicOverrides: {
-			maxOutputTokens: 131072,
-			reasoningEfforts: ['high', 'max']
-		}
+		reasoningEfforts: ['high', 'max']
 	}
 ];
 
@@ -341,7 +312,8 @@ describe('Chutes provider onboarding contract', () => {
 				{
 					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					id: 'chutes-chat-completions',
-					nativeFileInputs: { extensions: [], mediaTypes: [] },
+					documentFormats: { extensions: [], mediaTypes: [] },
+					inputModalities: ['text'],
 					interfaces: ['chat_completions']
 				}
 			]
@@ -365,38 +337,19 @@ function deployment(
 	modelReasoning: 'optional' | 'required' | 'unsupported' = 'unsupported',
 	modelReasoningEfforts: string[] = [],
 	modelReasoningMaxTokens: { maximum: number; minimum: number } | null = null,
-	modelFacts: {
-		contextWindowTokens?: number;
-		inputModalities?: string[];
-		maxOutputTokens?: number;
-	} = {}
+	modelFacts: { contextWindowTokens?: number; maxOutputTokens?: number } = {}
 ): ProviderDeploymentContract {
 	const chuteId = chuteIds[id];
 	const gpuCount = gpuCounts[id];
-	const publicOverrides = {
-		...(modelFacts.contextWindowTokens !== undefined &&
-		modelFacts.contextWindowTokens !== contextTokens
-			? { contextWindowTokens: contextTokens }
-			: {}),
-		...(modelFacts.maxOutputTokens !== undefined && modelFacts.maxOutputTokens !== outputTokens
-			? { maxOutputTokens: outputTokens }
-			: {}),
-		...(modelFacts.inputModalities &&
-		modelFacts.inputModalities.join(',') !== inputModalities.join(',')
-			? { inputModalities }
-			: {})
-	};
 	return {
 		authorId,
 		capabilities: { ...capabilities, structuredOutputs },
 		contextWindowTokens: contextTokens,
-		deprecationDate: null,
 		id,
 		inputModalities,
 		maxOutputTokens: outputTokens,
 		modelContextWindowTokens: modelFacts.contextWindowTokens,
 		modelId,
-		modelInputModalities: modelFacts.inputModalities,
 		modelMaxOutputTokens: modelFacts.maxOutputTokens,
 		modelReasoning,
 		modelReasoningEfforts,
@@ -407,7 +360,7 @@ function deployment(
 			input_tokens: { per_mill_tokens: input },
 			output_tokens: { per_mill_tokens: output }
 		},
-		...(Object.keys(publicOverrides).length > 0 ? { publicOverrides } : {}),
+		retirementDate: null,
 		routeIds: ['chutes-chat-completions'],
 		upstream: { chuteId, gpuCount, model: upstreamModel, serviceTier: 'standard' },
 		weightPrecision

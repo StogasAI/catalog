@@ -8,6 +8,7 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_us
   # Reviewed 2026-10-13: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#deepseek-models-sold-by-azure
+  retirementDate: 2028-02-20
   overrides:
     contextWindowTokens: 1000000
     # Probed 2026-10-14: several tool calls per turn, even with parallel_tool_calls false, and json_schema output holds.
@@ -16,7 +17,6 @@ deployments:
     dataHandling:
       processingLocation: US
       storageLocation: US
-    deprecationDate: 2028-02-20
   pricing:
     input_tokens:
       per_mill_tokens: '1.91'

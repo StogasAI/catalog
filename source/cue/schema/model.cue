@@ -14,12 +14,14 @@ package catalog
 	maxOutputTokens: int & >0
 	inputModalities: [#Modality, ...#Modality]
 	outputModalities: [#Modality, ...#Modality]
-	capabilities?: #CapabilityOverrides
+	// Features the model lacks on every route.
+	capabilities?: #UnsupportedCapabilities
 	reasoning:     #Reasoning
 	// Omitted when the model has no effort levels.
 	reasoningEfforts?: [#ReasoningEffort, ...#ReasoningEffort]
-	// A shorter effort list on routes that serve one interface, such as a
-	// Chat Completions API that lacks max.
+	// The model's shorter effort list on one provider API, such as GPT on Chat
+	// Completions, which lacks max. It applies on routes that serve only that
+	// interface, because they send requests to the provider unchanged.
 	reasoningEffortsByInterface?: close({[#Interface]: [#ReasoningEffort, ...#ReasoningEffort]})
 	// Omitted when the model accepts no reasoning token budget.
 	reasoningMaxTokens?: #ReasoningMaxTokens
@@ -28,7 +30,5 @@ package catalog
 	releaseDate:  #Date
 	// Omitted when the model owner has not disclosed it.
 	knowledgeCutoff?: #Date
-	// Omitted when no shutdown date is announced.
-	deprecationDate?: #Date
 	periods?: [#Period, ...#Period]
 })

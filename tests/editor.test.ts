@@ -5,8 +5,6 @@ import {
 	completeUnambiguousGraphSelection,
 	concreteGraphChains,
 	decorateFlow,
-	effectiveDeploymentFacts,
-	effectiveDeploymentValue,
 	extendGraphSelection,
 	filterFlow,
 	GRAPH_PAGE_SIZE,
@@ -20,10 +18,10 @@ import { parseCatalog } from '../editor/src/types';
 
 const catalog = parseCatalog(catalogJson);
 
-describe('effective catalog facts', () => {
+describe('catalog editor graph', () => {
 	test('keeps a nested group diamond as real edges and one execution choice', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.public.v4',
+			schema: 'stogas.catalog.public.v5',
 			graph: {
 				authors: { author: { name: 'Author' } },
 				groups: {
@@ -35,7 +33,7 @@ describe('effective catalog facts', () => {
 				models: { model: { authorId: 'author', name: 'Model', groupIds: ['leaf'] } },
 				providers: { provider: { name: 'Provider' } },
 				routes: { route: { providerId: 'provider' } },
-				deployments: { deployment: { modelId: 'model', routeIds: ['route'] } }
+				deployments: { deployment: { modelId: 'model', routes: { route: {} } } }
 			}
 		});
 		const flow = buildFlow(fixture.graph);
@@ -72,12 +70,12 @@ describe('effective catalog facts', () => {
 		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
 		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
 		expect(() =>
-			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v4' })
+			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v5' })
 		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
 				graph: { authors: [], groups: {}, deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v4'
+				schema: 'stogas.catalog.public.v5'
 			})
 		).toThrow('authors collection');
 		expect(() =>
@@ -90,7 +88,7 @@ describe('effective catalog facts', () => {
 					providers: {},
 					routes: {}
 				},
-				schema: 'stogas.catalog.public.v4'
+				schema: 'stogas.catalog.public.v5'
 			})
 		).toThrow('authors.bad entry');
 	});
@@ -145,7 +143,7 @@ describe('effective catalog facts', () => {
 	test('enumerates one complete chain for every deployment route', () => {
 		const chains = concreteGraphChains(catalog);
 		const routeReferences = Object.values(catalog.graph.deployments).reduce(
-			(total, deployment) => total + (deployment.routeIds as string[]).length,
+			(total, deployment) => total + Object.keys(deployment.routes as object).length,
 			0
 		);
 		expect(chains).toHaveLength(routeReferences);
@@ -256,6 +254,7 @@ describe('effective catalog facts', () => {
 			'author:openai',
 			'group:gpt',
 			'group:gpt-5',
+			'group:gpt-sol',
 			'group:gpt-5.6',
 			model,
 			deployment,
@@ -266,6 +265,7 @@ describe('effective catalog facts', () => {
 			'author:openai',
 			'group:gpt',
 			'group:gpt-5',
+			'group:gpt-sol',
 			'group:gpt-5.6',
 			model
 		]);
@@ -362,6 +362,7 @@ describe('effective catalog facts', () => {
 			{ type: 'author', id: 'openai' },
 			{ type: 'group', id: 'gpt' },
 			{ type: 'group', id: 'gpt-5' },
+			{ type: 'group', id: 'gpt-sol' },
 			{ type: 'group', id: 'gpt-5.6' },
 			{ type: 'model', id: 'gpt-5.6-sol' }
 		]);
@@ -376,60 +377,8 @@ describe('effective catalog facts', () => {
 		expect(lineageForSelection(catalog, 'provider:missing', {})).toEqual([]);
 	});
 
-	test('shows the semantic owner of inherited and overridden deployment facts', () => {
-		const facts = effectiveDeploymentFacts(catalog, 'chutes-glm-5.2');
-		const byPath = new Map(facts.map((fact) => [fact.path, fact]));
-
-		expect(byPath.get('contextWindowTokens')?.origin.type).toBe('model');
-		expect(byPath.get('reasoning')?.origin.type).toBe('model');
-		expect(byPath.get('reasoningEfforts')?.origin.type).toBe('model');
-		expect(byPath.get('reasoningMaxTokens')?.origin.type).toBe('model');
-		expect(byPath.get('dataHandling.endToEndEncrypted')?.origin.type).toBe('route');
-		expect(byPath.get('dataHandling.processingLocation')?.origin.type).toBe('provider');
-		expect(byPath.get('dataHandling.tee')?.origin.type).toBe('provider');
-		expect(byPath.get('dataHandling.teeVerified')?.origin.type).toBe('provider');
-		expect(byPath.get('upstream.chuteId')?.origin.type).toBe('deployment');
-		expect(byPath.get('upstream.gpuCount')?.origin.type).toBe('deployment');
-	});
-
-	test('attributes route-specific tool pricing to the route that owns it', () => {
-		const facts = effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol', 'openai-responses');
-		const webSearch = facts.find(
-			(fact) => fact.path === 'pricing.openai_responses_web_search_calls.per_1k_calls'
-		);
-
-		expect(webSearch?.origin).toEqual({ type: 'route', id: 'openai-responses' });
-	});
-
-	test('requires a concrete route and excludes facts from another route', () => {
-		expect(effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol')).toEqual([]);
-
-		const chatFacts = effectiveDeploymentFacts(
-			catalog,
-			'openai-gpt-5.6-sol',
-			'openai-chat-completions'
-		);
-		expect(chatFacts.find((fact) => fact.path === 'reasoningEfforts')).toEqual({
-			path: 'reasoningEfforts',
-			value: ['low', 'medium', 'high', 'xhigh'],
-			origin: { type: 'model', id: 'gpt-5.6-sol' }
-		});
-		expect(
-			effectiveDeploymentFacts(catalog, 'openai-gpt-5.6-sol', 'openai-responses').find(
-				(fact) => fact.path === 'reasoningEfforts'
-			)?.value
-		).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
-		expect(
-			chatFacts.some(
-				(fact) => fact.path === 'pricing.openai_responses_web_search_calls.per_1k_calls'
-			)
-		).toBe(false);
-	});
-
-	test('rejects a preferred route that is not attached to the deployment', () => {
+	test('rejects lineage for a route that is not attached to the deployment', () => {
 		for (const deploymentId of ['chutes-glm-5.2', 'openai-gpt-5.6-sol']) {
-			expect(effectiveDeploymentFacts(catalog, deploymentId, 'azure-responses')).toEqual([]);
-			expect(effectiveDeploymentValue(catalog, deploymentId, 'azure-responses')).toBeNull();
 			expect(
 				lineageForSelection(catalog, `deployment:${deploymentId}`, {
 					deploymentId,
@@ -437,73 +386,15 @@ describe('effective catalog facts', () => {
 				})
 			).toEqual([]);
 		}
-	});
-
-	test('rejects deployment facts and lineage when no route exists', () => {
-		expect(effectiveDeploymentFacts(catalog, 'missing')).toEqual([]);
-		expect(effectiveDeploymentValue(catalog, 'missing')).toBeNull();
 		expect(lineageForSelection(catalog, 'deployment:missing', { deploymentId: 'missing' })).toEqual(
 			[]
 		);
-
 		const isolated = structuredClone(catalog);
-		isolated.graph.deployments['chutes-glm-5.2'].routeIds = [];
-		expect(effectiveDeploymentFacts(isolated, 'chutes-glm-5.2')).toEqual([]);
-		expect(effectiveDeploymentValue(isolated, 'chutes-glm-5.2')).toBeNull();
+		isolated.graph.deployments['chutes-glm-5.2'].routes = {};
 		expect(
 			lineageForSelection(isolated, 'deployment:chutes-glm-5.2', {
 				deploymentId: 'chutes-glm-5.2'
 			})
 		).toEqual([]);
-	});
-
-	test('builds nested resolved JSON for one concrete deployment route', () => {
-		const value = effectiveDeploymentValue(
-			catalog,
-			'openai-gpt-5.6-sol',
-			'openai-chat-completions'
-		);
-		expect(value?.contextWindowTokens).toBe(1_050_000);
-		expect((value?.upstream as Record<string, unknown>)?.model).toBe('gpt-5.6-sol');
-		const pricing = value?.pricing as Record<string, unknown>;
-		expect(pricing.openai_responses_web_search_calls).toBeUndefined();
-	});
-});
-
-test('attributes provider file formats to routes and deployment overrides independently of model modalities', () => {
-	const fixture = structuredClone(catalog);
-	const id = 'openai-gpt-5.6-luna';
-	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'nativeFileInputs.extensions',
-		value: ['.pdf'],
-		origin: { type: 'route', id: 'openai-chat-completions' }
-	});
-	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
-		path: 'nativeFileInputs.extensions',
-		value: expect.arrayContaining(['.csv', '.pdf', '.txt']),
-		origin: { type: 'route', id: 'openai-responses' }
-	});
-	fixture.graph.deployments[id].overrides = {
-		nativeFileInputs: { extensions: [], mediaTypes: [] }
-	};
-	expect(effectiveDeploymentFacts(fixture, id, 'openai-responses')).toContainEqual({
-		path: 'nativeFileInputs.extensions',
-		value: [],
-		origin: { type: 'deployment', id }
-	});
-	fixture.graph.deployments[id].overrides = {
-		nativeFileInputs: { extensions: ['.md'], mediaTypes: ['text/markdown'] }
-	};
-	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'nativeFileInputs.extensions',
-		value: ['.md'],
-		origin: { type: 'deployment', id }
-	});
-	delete fixture.graph.deployments[id].overrides;
-	fixture.graph.models['gpt-5.6-luna'].inputModalities = ['text'];
-	expect(effectiveDeploymentFacts(fixture, id, 'openai-chat-completions')).toContainEqual({
-		path: 'nativeFileInputs.extensions',
-		value: ['.pdf'],
-		origin: { type: 'route', id: 'openai-chat-completions' }
 	});
 });

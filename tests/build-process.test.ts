@@ -323,25 +323,39 @@ exit 1
 			error: 'modelFormat'
 		})),
 		{
-			name: 'unknown native file property',
+			name: 'unknown document format property',
 			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
-			from: '  nativeFileInputs:',
-			to: '  nativeFileInputs:\n    unknown: true',
+			from: '  documentFormats:',
+			to: '  documentFormats:\n    unknown: true',
 			error: 'unknown'
 		},
 		{
-			name: 'provider-owned native file formats',
+			name: 'provider-owned document formats',
 			path: 'source/data/providers/openai/openai.yaml',
 			from: '  name: OpenAI',
-			to: '  name: OpenAI\n  nativeFileInputs: {extensions: [], mediaTypes: []}',
-			error: 'nativeFileInputs'
+			to: '  name: OpenAI\n  documentFormats: {extensions: [], mediaTypes: []}',
+			error: 'documentFormats'
 		},
 		{
-			name: 'native file formats below route overrides',
+			name: 'document formats below route overrides',
 			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
 			from: '  providerId: openai',
-			to: '  providerId: openai\n  overrides:\n    nativeFileInputs: {extensions: [], mediaTypes: []}',
-			error: 'nativeFileInputs'
+			to: '  providerId: openai\n  overrides:\n    documentFormats: {extensions: [], mediaTypes: []}',
+			error: 'documentFormats'
+		},
+		{
+			name: 'document formats below deployment overrides',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: '  pricing:\n',
+			to: '  overrides:\n    documentFormats: {extensions: [], mediaTypes: []}\n  pricing:\n',
+			error: 'documentFormats'
+		},
+		{
+			name: 'deployment override that adds a capability',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: '  pricing:\n',
+			to: '  overrides:\n    capabilities: {streaming: true}\n  pricing:\n',
+			error: 'streaming'
 		},
 		{
 			name: 'empty group name',
@@ -428,8 +442,8 @@ exit 1
 				'2026-12-01T00:00:00Z'
 			]);
 			expect(
-				catalog.schedule[0].graph.deployments['openai-gpt-5.6-sol'].pricing.input_tokens
-					.per_mill_tokens
+				catalog.schedule[0].graph.deployments['openai-gpt-5.6-sol'].routes['openai-responses']
+					.pricing.input_tokens.per_mill_tokens
 			).toBe('2');
 		}
 		const publicCatalog = JSON.parse(

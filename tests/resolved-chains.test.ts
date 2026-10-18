@@ -3,55 +3,45 @@ import publicCatalog from '../generated/catalog.public.json';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 import { resolvedCatalogChains } from '../source/scripts/resolved-chains.mjs';
 
-function chains(publicData = publicCatalog, runtimeData = runtimeCatalog) {
-	return [...resolvedCatalogChains(publicData, runtimeData)];
+function chains(graph = publicCatalog.graph) {
+	return [...resolvedCatalogChains(graph)];
 }
 
 test('compiled chain hashes identify individual executable paths and resolved facts', () => {
 	const resolved = chains();
 	expect(resolved).toHaveLength(
-		Object.values(runtimeCatalog.graph.deployments).reduce((sum, d) => sum + d.routeIds.length, 0)
+		Object.values(runtimeCatalog.graph.deployments).reduce(
+			(sum, deployment) => sum + Object.keys(deployment.routes).length,
+			0
+		)
 	);
 	expect(new Set(resolved.map((entry) => entry.hash)).size).toBe(resolved.length);
 	for (const entry of resolved) {
-		const deployment = runtimeCatalog.graph.deployments[entry.deploymentId];
+		const { chainHash, ...facts } =
+			runtimeCatalog.graph.deployments[entry.deploymentId].routes[entry.routeId];
 		const chain = JSON.parse(entry.json);
-		expect(deployment.chainHashes[entry.routeId]).toBe(entry.hash);
-		expect(chain.deployment.data.routeIds).toEqual([entry.routeId]);
-		expect(chain.deployment.data.dataHandling).toEqual(
-			deployment.dataHandlingByRoute[entry.routeId]
-		);
-		expect(chain.deployment.data.nativeFileInputs).toEqual(
-			deployment.nativeFileInputsByRoute[entry.routeId]
-		);
-		expect(chain.deployment.data.nativeFileInputsByRoute).toBeUndefined();
-		expect(chain.deployment.data.pricing).toEqual(deployment.pricing);
-		expect(chain.deployment.data.reasoningEfforts).toEqual(
-			deployment.routeOverrides?.[entry.routeId]?.reasoningEfforts ?? deployment.reasoningEfforts
-		);
-		expect(chain.deployment.data.chainHashes).toBeUndefined();
-		expect(chain.deployment.data.routeOverrides).toBeUndefined();
-		expect(chain.deployment.data.overrides).toBeUndefined();
+		expect(chainHash).toBe(entry.hash);
+		// A chain holds what the deployment serves on its own route and nothing of other routes.
+		expect(chain.deployment.data).toMatchObject(facts);
+		expect(chain.deployment.data.routes).toBeUndefined();
+		expect(chain.route.id).toBe(entry.routeId);
+		expect(chain.model.data.groupIds).toBeUndefined();
 	}
 });
 
-test('release metadata and input key order do not change chain identities', () => {
-	const publicData = structuredClone(publicCatalog);
-	const runtimeData = structuredClone(runtimeCatalog);
-	publicData.graph.models = Object.fromEntries(Object.entries(publicData.graph.models).reverse());
-	runtimeData.graph.deployments = Object.fromEntries(
-		Object.entries(runtimeData.graph.deployments).reverse()
-	);
-	runtimeData.publicDigest = `sha256:${'f'.repeat(64)}`;
-	expect(chains(publicData, runtimeData)).toEqual(chains());
+test('node order does not change chain identities', () => {
+	const graph = structuredClone(publicCatalog.graph);
+	graph.models = Object.fromEntries(Object.entries(graph.models).reverse());
+	graph.deployments = Object.fromEntries(Object.entries(graph.deployments).reverse());
+	expect(chains(graph)).toEqual(chains());
 });
 
 test('changes affect only paths containing the changed node and preserve old content', () => {
 	const original = chains();
-	const publicData = structuredClone(publicCatalog);
+	const graph = structuredClone(publicCatalog.graph);
 	const routeId = 'openai-responses';
-	publicData.graph.routes[routeId].endpoint = 'https://api.openai.com/v2/responses';
-	const updated = chains(publicData);
+	graph.routes[routeId].endpoint = 'https://api.openai.com/v2/responses';
+	const updated = chains(graph);
 	for (let index = 0; index < original.length; index++) {
 		if (original[index].routeId === routeId) {
 			expect(updated[index].hash).not.toBe(original[index].hash);
@@ -63,7 +53,7 @@ test('changes affect only paths containing the changed node and preserve old con
 });
 
 test('missing path facts fail instead of producing incomplete historical records', () => {
-	const publicData = structuredClone(publicCatalog);
-	delete publicData.graph.routes['openai-responses'];
-	expect(() => chains(publicData)).toThrow('missing node openai-responses');
+	const graph = structuredClone(publicCatalog.graph);
+	delete (graph.routes as Record<string, unknown>)['openai-responses'];
+	expect(() => chains(graph)).toThrow('missing node openai-responses');
 });

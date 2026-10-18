@@ -1,14 +1,12 @@
 models:
   authorId: openai
   name: GPT-6 Astra
-  groupIds: [gpt-6]
+  groupIds: [gpt-6, gpt-astra]
   contextWindowTokens: 1050000
   maxInputTokens: 922000
   maxOutputTokens: 128000
   inputModalities: [text, image]
   outputModalities: [text]
-  capabilities:
-    explicitPromptCaching: true
   reasoning: required
   reasoningEfforts: [low, medium, high, xhigh, max]
   reasoningEffortsByInterface:

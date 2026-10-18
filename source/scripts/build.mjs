@@ -39,6 +39,26 @@ const canonicalInterfaceRanks = new Map(
 	['chat_completions', 'responses'].map((value, index) => [value, index])
 );
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
+const capabilityNames = [
+	'streaming',
+	'functionCalling',
+	'parallelFunctionCalling',
+	'implicitPromptCaching',
+	'explicitPromptCaching',
+	'structuredOutputs',
+	'systemMessages',
+	'toolChoice'
+];
+const dataHandlingFields = [
+	'processingLocation',
+	'storageLocation',
+	'endToEndEncrypted',
+	'retentionDays',
+	'trainingUse',
+	'zeroDataRetention',
+	'tee',
+	'teeVerified'
+];
 const canonicalCredentialModes = ['managed', 'byok'];
 const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
@@ -267,11 +287,6 @@ function validDate(value) {
 	return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function validDeprecationDate(value) {
-	if (value === null) return true;
-	return validDate(value);
-}
-
 function isPlainObject(value) {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -325,7 +340,6 @@ function normalizeSourceGraph(sourceGraph) {
 					maxInputTokens: model.maxInputTokens ?? model.contextWindowTokens,
 					aliases: [...(model.aliases ?? [])],
 					capabilities: model.capabilities ?? {},
-					deprecationDate: model.deprecationDate ?? null,
 					knowledgeCutoff: model.knowledgeCutoff ?? null,
 					reasoning: model.reasoning,
 					reasoningEfforts: [...(model.reasoningEfforts ?? [])],
@@ -431,19 +445,6 @@ function validateModelDerivation(models) {
 	}
 }
 
-function oneRouteFact(graph, deploymentId, deployment, field) {
-	const facts = deployment.routeIds.map(
-		(routeId) => requireNode(graph.routes, routeId, deploymentId)[field]
-	);
-	const first = facts[0];
-	for (const fact of facts.slice(1)) {
-		if (!same(first, fact)) {
-			throw new Error(`${deploymentId}: route ${field} differs; split the deployment`);
-		}
-	}
-	return structuredClone(first);
-}
-
 function providerForDeployment(graph, deploymentId, deployment) {
 	const providers = deployment.routeIds.map(
 		(routeId) => requireNode(graph.routes, routeId, deploymentId).providerId
@@ -454,231 +455,158 @@ function providerForDeployment(graph, deploymentId, deployment) {
 	return providers[0];
 }
 
-function mergePricing(graph, deploymentId, deployment) {
-	const pricing = {};
-	for (const routeId of deployment.routeIds) {
-		const route = requireNode(graph.routes, routeId, deploymentId);
-		for (const [meter, rates] of Object.entries(route.pricing ?? {})) {
-			if (pricing[meter] && !same(pricing[meter], rates)) {
-				throw new Error(`${deploymentId}: route pricing conflicts for ${meter}`);
-			}
-			pricing[meter] = structuredClone(rates);
-		}
-	}
-	rejectRedundantOverride(
-		pricing,
-		deployment.overrides?.pricing,
-		`${deploymentId}.overrides.pricing`
-	);
-	const inheritedPricing = mergeFacts(pricing, deployment.overrides?.pricing ?? {});
-	for (const meter of Object.keys(deployment.pricing)) {
-		if (inheritedPricing[meter]) {
-			throw new Error(`${deploymentId}.pricing.${meter} must use overrides.pricing`);
-		}
-	}
-	return mergeFacts(inheritedPricing, deployment.pricing);
-}
-
-function effectiveTokenLimits(deploymentId, model, deployment) {
+// What a deployment serves: facts that hold on all its routes, and for each route the facts
+// that combine the route with the model and deployment. Facts of the route alone, such as its
+// document formats, stay on the route. A capability needs the route, the model and the deployment.
+function servedFacts(graph, model, deployment) {
 	const overrides = deployment.overrides ?? {};
-	rejectRedundantOverride(
-		model.contextWindowTokens,
-		overrides.contextWindowTokens,
-		`${deploymentId}.overrides.contextWindowTokens`
-	);
-	rejectRedundantOverride(
-		model.maxOutputTokens,
-		overrides.maxOutputTokens,
-		`${deploymentId}.overrides.maxOutputTokens`
-	);
 	const contextWindowTokens = overrides.contextWindowTokens ?? model.contextWindowTokens;
-	const inheritedMaxInputTokens = Math.min(model.maxInputTokens, contextWindowTokens);
-	rejectRedundantOverride(
-		inheritedMaxInputTokens,
-		overrides.maxInputTokens,
-		`${deploymentId}.overrides.maxInputTokens`
-	);
-	const maxInputTokens = overrides.maxInputTokens ?? inheritedMaxInputTokens;
-	if (maxInputTokens > inheritedMaxInputTokens) {
-		throw new Error(`${deploymentId}: input limit may only narrow the model and context limits`);
-	}
-	const maxOutputTokens = overrides.maxOutputTokens ?? model.maxOutputTokens;
-	if (contextWindowTokens > model.contextWindowTokens) {
-		throw new Error(`${deploymentId}: context limit may only narrow the model limit`);
-	}
-	if (maxOutputTokens > model.maxOutputTokens) {
-		throw new Error(`${deploymentId}: output limit may only narrow the model limit`);
-	}
-	if (maxOutputTokens > contextWindowTokens) {
-		throw new Error(`${deploymentId}: output limit must fit inside the context window`);
-	}
-	return { contextWindowTokens, maxInputTokens, maxOutputTokens };
-}
-
-function effectiveCapabilities(graph, deploymentId, model, deployment) {
-	const routeCapabilities = oneRouteFact(graph, deploymentId, deployment, 'capabilities');
-	const routeSupport = structuredClone(routeCapabilities);
-	const modelCapabilities = new Map();
-	const overrides = deployment.overrides ?? {};
-	const deploymentCapabilities = overrides.capabilities ?? {};
-	for (const [name, value] of Object.entries(model.capabilities)) {
-		modelCapabilities.set(name, value);
-		routeCapabilities[name] = Boolean(routeCapabilities[name] && value);
-	}
-	rejectRedundantOverride(
-		routeCapabilities,
-		deploymentCapabilities,
-		`${deploymentId}.overrides.capabilities`
-	);
-	for (const [name, value] of Object.entries(deploymentCapabilities)) {
-		if (value && !routeSupport[name]) {
-			throw new Error(`${deploymentId}: cannot enable route-unsupported capability ${name}`);
-		}
-		if (value && modelCapabilities.get(name) === false) {
-			throw new Error(`${deploymentId}: cannot enable model-unsupported capability ${name}`);
-		}
-		routeCapabilities[name] = value;
-	}
-	const inputModalities = overrides.inputModalities ?? model.inputModalities;
-	const outputModalities = overrides.outputModalities ?? model.outputModalities;
-	rejectRedundantOverride(
-		model.inputModalities,
-		overrides.inputModalities,
-		`${deploymentId}.overrides.inputModalities`
-	);
-	rejectRedundantOverride(
-		model.outputModalities,
-		overrides.outputModalities,
-		`${deploymentId}.overrides.outputModalities`
-	);
-	for (const [name, values, modelValues] of [
-		['inputModalities', inputModalities, model.inputModalities],
-		['outputModalities', outputModalities, model.outputModalities]
-	]) {
-		validateCanonicalList(values, canonicalModalityRanks, `${deploymentId}: ${name}`);
-		for (const value of values) {
-			if (!modelValues.includes(value)) {
-				throw new Error(`${deploymentId}: cannot enable model-unsupported ${name} value ${value}`);
-			}
-		}
-	}
-	return { capabilities: routeCapabilities, inputModalities, outputModalities };
-}
-
-function effectiveReasoning(deploymentId, model, deployment) {
-	const reasoningOverride = deployment.overrides?.reasoning;
-	rejectRedundantOverride(
-		model.reasoning,
-		reasoningOverride,
-		`${deploymentId}.overrides.reasoning`
-	);
-	const reasoning = reasoningOverride ?? model.reasoning;
-	if (!reasoningValues.has(reasoning)) {
-		throw new Error(`${deploymentId}: invalid reasoning value`);
-	}
-	if (model.reasoning === 'unsupported' && reasoning !== 'unsupported') {
-		throw new Error(`${deploymentId}: cannot enable model-unsupported reasoning`);
-	}
-	if (model.reasoning === 'required' && reasoning !== 'required') {
-		throw new Error(`${deploymentId}: cannot weaken required model reasoning`);
-	}
-	rejectRedundantOverride(
-		model.reasoningEfforts,
-		deployment.overrides?.reasoningEfforts,
-		`${deploymentId}.overrides.reasoningEfforts`
-	);
-	const reasoningEfforts = [...(deployment.overrides?.reasoningEfforts ?? model.reasoningEfforts)];
-	const modelEfforts = new Set(model.reasoningEfforts);
-	let previousEffortRank = -1;
-	for (const effort of reasoningEfforts) {
-		const effortRank = canonicalEffortRanks.get(effort);
-		if (effortRank === undefined) {
-			throw new Error(`${deploymentId}: invalid reasoning effort ${effort}`);
-		}
-		if (effortRank <= previousEffortRank) {
-			throw new Error(
-				`${deploymentId}: reasoning efforts must use canonical order without repeats`
-			);
-		}
-		previousEffortRank = effortRank;
-		if (!modelEfforts.has(effort)) {
-			throw new Error(`${deploymentId}: reasoning effort ${effort} is absent from the model`);
-		}
-	}
-	const override = deployment.overrides?.reasoningMaxTokens;
-	rejectRedundantOverride(
-		model.reasoningMaxTokens,
-		override,
-		`${deploymentId}.overrides.reasoningMaxTokens`
-	);
-	if (override && !model.reasoningMaxTokens) {
-		throw new Error(
-			`${deploymentId}: cannot enable a model-unsupported manual reasoning token limit`
-		);
-	}
-	if (override && model.reasoningMaxTokens && override.minimum < model.reasoningMaxTokens.minimum) {
-		throw new Error(`${deploymentId}: cannot lower the model manual reasoning token minimum`);
-	}
-	if (override && model.reasoningMaxTokens && override.maximum > model.reasoningMaxTokens.maximum) {
-		throw new Error(`${deploymentId}: cannot raise the model manual reasoning token maximum`);
-	}
-	const reasoningMaxTokens = override === undefined ? model.reasoningMaxTokens : override;
-	if (reasoning === 'unsupported' && (reasoningEfforts.length > 0 || reasoningMaxTokens !== null)) {
-		throw new Error(`${deploymentId}: unsupported reasoning cannot expose controls`);
+	const reasoningEfforts = overrides.reasoningEfforts ?? model.reasoningEfforts;
+	const routes = {};
+	for (const routeId of [...deployment.routeIds].sort()) {
+		const route = graph.routes[routeId];
+		// A route that serves one interface passes requests through to that provider API, so a
+		// model's shorter effort list for the interface applies there. Routes that translate
+		// several interfaces to another API keep the deployment's list.
+		const interfaceEfforts =
+			route.interfaces.length === 1
+				? model.reasoningEffortsByInterface[route.interfaces[0]]
+				: undefined;
+		const dataHandling = mergeFacts(route.dataHandling, overrides.dataHandling ?? {});
+		routes[routeId] = {
+			capabilities: Object.fromEntries(
+				capabilityNames.map((name) => [
+					name,
+					route.capabilities[name] &&
+						model.capabilities[name] !== false &&
+						overrides.capabilities?.[name] !== false
+				])
+			),
+			dataHandling: Object.fromEntries(
+				dataHandlingFields.map((field) => [field, dataHandling[field]])
+			),
+			inputModalities: model.inputModalities.filter((modality) =>
+				route.inputModalities.includes(modality)
+			),
+			pricing: { ...structuredClone(route.pricing), ...structuredClone(deployment.pricing) },
+			reasoningEfforts: reasoningEfforts.filter(
+				(effort) => !interfaceEfforts || interfaceEfforts.includes(effort)
+			)
+		};
 	}
 	return {
-		reasoning,
-		reasoningEfforts,
-		reasoningMaxTokens
+		contextWindowTokens,
+		maxInputTokens: Math.min(model.maxInputTokens, contextWindowTokens),
+		maxOutputTokens: overrides.maxOutputTokens ?? model.maxOutputTokens,
+		outputModalities: [...model.outputModalities],
+		reasoning: model.reasoning,
+		reasoningMaxTokens:
+			overrides.reasoningMaxTokens === undefined
+				? model.reasoningMaxTokens
+				: overrides.reasoningMaxTokens,
+		routes
 	};
 }
 
-// A route that serves one interface passes requests through to that provider API, so a
-// model's shorter effort list for the interface applies there. Routes that translate
-// several interfaces to another API keep the deployment's list.
-function effectiveRouteOverrides(graph, deployment, model, reasoningEfforts) {
-	const routeOverrides = {};
-	for (const routeId of deployment.routeIds) {
-		const interfaces = graph.routes[routeId].interfaces;
-		const interfaceEfforts = model.reasoningEffortsByInterface[interfaces[0]];
-		if (interfaces.length !== 1 || !interfaceEfforts) continue;
-		const efforts = reasoningEfforts.filter((effort) => interfaceEfforts.includes(effort));
-		if (!same(efforts, reasoningEfforts)) routeOverrides[routeId] = { reasoningEfforts: efforts };
+// Overrides may only narrow what the model and routes offer.
+function validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire) {
+	const overrides = deployment.overrides ?? {};
+	if (served.contextWindowTokens > model.contextWindowTokens) {
+		throw new Error(`${deploymentId}: context limit may only narrow the model limit`);
 	}
-	return routeOverrides;
-}
-
-function effectiveDataHandlingByRoute(graph, deploymentId, deployment) {
-	return Object.fromEntries(
-		[...deployment.routeIds].sort().map((routeId) => {
-			const routeValue = requireNode(graph.routes, routeId, deploymentId).dataHandling;
-			rejectRedundantOverride(
-				routeValue,
-				deployment.overrides?.dataHandling,
-				`${deploymentId}.overrides.dataHandling`
+	if (served.maxOutputTokens > model.maxOutputTokens) {
+		throw new Error(`${deploymentId}: output limit may only narrow the model limit`);
+	}
+	if (served.maxOutputTokens > served.contextWindowTokens) {
+		throw new Error(`${deploymentId}: output limit must fit inside the context window`);
+	}
+	for (const [name, value] of Object.entries(overrides.capabilities ?? {})) {
+		if (!capabilityNames.includes(name) || value !== false) {
+			throw new Error(
+				`${deploymentId}.overrides.capabilities.${name} may only remove a capability`
 			);
-			const value = mergeFacts(routeValue, deployment.overrides?.dataHandling ?? {});
-			validateDataHandling(`${deploymentId}.overrides.dataHandling`, value);
-			return [
-				routeId,
-				{
-					processingLocation: value.processingLocation,
-					storageLocation: value.storageLocation,
-					endToEndEncrypted: value.endToEndEncrypted,
-					retentionDays: value.retentionDays,
-					trainingUse: value.trainingUse,
-					zeroDataRetention: value.zeroDataRetention,
-					tee: value.tee,
-					teeVerified: value.teeVerified
+		}
+	}
+	if (overrides.reasoningEfforts) {
+		let previousRank = -1;
+		for (const effort of overrides.reasoningEfforts) {
+			const rank = canonicalEffortRanks.get(effort);
+			if (rank === undefined || rank <= previousRank) {
+				throw new Error(
+					`${deploymentId}: reasoning efforts must use canonical order without repeats`
+				);
+			}
+			previousRank = rank;
+			if (!model.reasoningEfforts.includes(effort)) {
+				throw new Error(`${deploymentId}: reasoning effort ${effort} is absent from the model`);
+			}
+		}
+	}
+	const reasoningMaxTokens = served.reasoningMaxTokens;
+	if (reasoningMaxTokens && overrides.reasoningMaxTokens) {
+		if (!model.reasoningMaxTokens) {
+			throw new Error(
+				`${deploymentId}: cannot enable a model-unsupported manual reasoning token limit`
+			);
+		}
+		if (reasoningMaxTokens.minimum < model.reasoningMaxTokens.minimum) {
+			throw new Error(`${deploymentId}: cannot lower the model manual reasoning token minimum`);
+		}
+		if (reasoningMaxTokens.maximum > model.reasoningMaxTokens.maximum) {
+			throw new Error(`${deploymentId}: cannot raise the model manual reasoning token maximum`);
+		}
+	}
+	if (
+		reasoningMaxTokens &&
+		(!anthropicWire ||
+			reasoningMaxTokens.minimum > reasoningMaxTokens.maximum ||
+			reasoningMaxTokens.maximum >= served.maxOutputTokens)
+	) {
+		throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
+	}
+	for (const [routeId, route] of Object.entries(served.routes)) {
+		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling);
+		for (const meter of Object.keys(deployment.pricing)) {
+			if (graph.routes[routeId].pricing[meter]) {
+				throw new Error(`${deploymentId}.pricing.${meter} repeats a price of route ${routeId}`);
+			}
+		}
+		for (const [meter, rates] of Object.entries(route.pricing)) {
+			for (const rate of Object.keys(rates)) {
+				const cutoff = /^per_mill_context_gt_([1-9][0-9]*)k$/.exec(rate)?.[1];
+				if (cutoff && Number(cutoff) * 1000 >= served.maxInputTokens) {
+					throw new Error(`${deploymentId}.pricing.${meter}.${rate} must be below the input limit`);
 				}
-			];
-		})
-	);
+			}
+		}
+	}
 }
 
-function validateNativeFileInputs(value, owner) {
+// Every override must change a fact that the deployment serves on at least one route, so the
+// source never states a value that the model or a route already sets.
+function rejectMaskedOverrides(graph, deploymentId, model, deployment, served) {
+	const overrides = deployment.overrides ?? {};
+	const paths = Object.entries(overrides).flatMap(([key, value]) =>
+		key === 'capabilities' || key === 'dataHandling'
+			? Object.keys(value).map((name) => [key, name])
+			: [[key]]
+	);
+	for (const path of paths) {
+		const without = structuredClone(deployment);
+		let target = without.overrides;
+		for (const key of path.slice(0, -1)) target = target[key];
+		delete target[path.at(-1)];
+		if (same(servedFacts(graph, model, without), served)) {
+			throw new Error(
+				`${deploymentId}.overrides.${path.join('.')} does not change what the deployment serves`
+			);
+		}
+	}
+}
+
+function validateDocumentFormats(value, owner) {
 	if (!isPlainObject(value) || Object.keys(value).sort().join(',') !== 'extensions,mediaTypes') {
-		throw new Error(`${owner}: nativeFileInputs requires extensions and mediaTypes`);
+		throw new Error(`${owner}: documentFormats requires extensions and mediaTypes`);
 	}
 	for (const [field, pattern] of [
 		['extensions', /^\.[a-z0-9][a-z0-9._+-]*$/],
@@ -692,41 +620,12 @@ function validateNativeFileInputs(value, owner) {
 					typeof entry !== 'string' || !pattern.test(entry) || (i > 0 && values[i - 1] >= entry)
 			)
 		) {
-			throw new Error(`${owner}: nativeFileInputs.${field} must be sorted, unique and lowercase`);
+			throw new Error(`${owner}: documentFormats.${field} must be sorted, unique and lowercase`);
 		}
 	}
 	if (value.mediaTypes.length === 0 && value.extensions.length !== 0) {
-		throw new Error(`${owner}: nativeFileInputs.extensions require nativeFileInputs.mediaTypes`);
+		throw new Error(`${owner}: documentFormats.extensions require documentFormats.mediaTypes`);
 	}
-}
-
-function effectiveNativeFileInputsByRoute(graph, deploymentId, deployment) {
-	const override = deployment.overrides?.nativeFileInputs;
-	if (override !== undefined) validateNativeFileInputs(override, deploymentId);
-	let changed = false;
-	const result = Object.fromEntries(
-		deployment.routeIds.map((routeId) => {
-			const inherited = graph.routes[routeId].nativeFileInputs;
-			const effective = override ?? inherited;
-			changed ||= !same(inherited, effective);
-			return [routeId, structuredClone(effective)];
-		})
-	);
-	if (override !== undefined && !changed)
-		throw new Error(`${deploymentId}: nativeFileInputs redundantly repeats its inherited value`);
-	return result;
-}
-
-function effectiveDeprecationDate(deploymentId, model, deployment) {
-	if (deployment.overrides && 'deprecationDate' in deployment.overrides) {
-		rejectRedundantOverride(
-			model.deprecationDate,
-			deployment.overrides.deprecationDate,
-			`${deploymentId}.overrides.deprecationDate`
-		);
-		return deployment.overrides.deprecationDate;
-	}
-	return model.deprecationDate;
 }
 
 export function buildCatalogs(source) {
@@ -744,12 +643,12 @@ export function buildCatalogs(source) {
 	}
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v4',
+			schema: 'stogas.catalog.runtime.v5',
 			graph: compiled.runtime,
 			schedule: runtimeSchedule
 		},
 		public: {
-			schema: 'stogas.catalog.public.v4',
+			schema: 'stogas.catalog.public.v5',
 			graph: compiled.public,
 			schedule: publicSchedule,
 			periods
@@ -799,40 +698,22 @@ function compileGraph(source) {
 			Object.entries(sourceGraph.routes).map(([routeId, route]) => {
 				const provider = requireNode(sourceGraph.providers, route.providerId, routeId);
 				validateCanonicalList(route.interfaces, canonicalInterfaceRanks, `${routeId}: interfaces`);
+				validateCanonicalList(
+					route.inputModalities,
+					canonicalModalityRanks,
+					`${routeId}: inputModalities`
+				);
 				validateRouteEndpoint(routeId, route.endpoint);
+				validateDocumentFormats(route.documentFormats, routeId);
 				const overrides = route.overrides ?? {};
-				validateNativeFileInputs(route.nativeFileInputs, routeId);
 				rejectRedundantOverride(
 					provider.capabilities,
 					overrides.capabilities,
 					`${routeId}.overrides.capabilities`
 				);
 				const capabilities = mergeFacts(provider.capabilities, overrides.capabilities ?? {});
-				const capabilityNames = [
-					'streaming',
-					'functionCalling',
-					'parallelFunctionCalling',
-					'implicitPromptCaching',
-					'explicitPromptCaching',
-					'structuredOutputs',
-					'systemMessages',
-					'toolChoice',
-					'urlContext'
-				];
-				for (const capability of capabilityNames) {
-					if (typeof capabilities[capability] !== 'boolean') capabilities[capability] = false;
-				}
 				const dataHandling = mergeFacts(provider.dataHandling, route.dataHandling);
-				for (const field of [
-					'processingLocation',
-					'storageLocation',
-					'endToEndEncrypted',
-					'retentionDays',
-					'trainingUse',
-					'zeroDataRetention',
-					'tee',
-					'teeVerified'
-				]) {
+				for (const field of dataHandlingFields) {
 					if (!(field in dataHandling)) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
@@ -842,11 +723,16 @@ function compileGraph(source) {
 					routeId,
 					{
 						providerId: route.providerId,
-						endpoint: route.endpoint,
+						...(route.endpoint && { endpoint: route.endpoint }),
 						interfaces: [...route.interfaces],
-						nativeFileInputs: route.nativeFileInputs,
-						capabilities,
-						dataHandling,
+						inputModalities: [...route.inputModalities],
+						documentFormats: structuredClone(route.documentFormats),
+						capabilities: Object.fromEntries(
+							capabilityNames.map((name) => [name, capabilities[name] === true])
+						),
+						dataHandling: Object.fromEntries(
+							dataHandlingFields.map((field) => [field, dataHandling[field]])
+						),
 						pricing: route.pricing ?? {}
 					}
 				];
@@ -950,13 +836,15 @@ function compileGraph(source) {
 			`${modelId}: outputModalities`
 		);
 		if (!validDate(model.releaseDate)) throw new Error(`${modelId}: releaseDate is invalid`);
-		for (const field of ['snapshot', 'knowledgeCutoff', 'deprecationDate']) {
+		for (const field of ['snapshot', 'knowledgeCutoff']) {
 			if (model[field] !== null && !validDate(model[field])) {
 				throw new Error(`${modelId}: ${field} is invalid`);
 			}
 		}
-		if (model.deprecationDate !== null && model.deprecationDate < model.releaseDate) {
-			throw new Error(`${modelId}: deprecationDate precedes releaseDate`);
+		for (const [name, value] of Object.entries(model.capabilities)) {
+			if (!capabilityNames.includes(name) || value !== false) {
+				throw new Error(`${modelId}.capabilities.${name} may only remove a capability`);
+			}
 		}
 		if (!reasoningValues.has(model.reasoning)) {
 			throw new Error(`${modelId}: invalid reasoning value`);
@@ -1010,20 +898,22 @@ function compileGraph(source) {
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
-		if (new Set(deployment.routeIds).size !== deployment.routeIds.length) {
-			throw new Error(`${deploymentId}: routeIds must not repeat`);
-		}
 		const model = requireNode(graph.models, deployment.modelId, deploymentId);
 		const providerId = providerForDeployment(graph, deploymentId, deployment);
+		// The gateway serves each interface of a deployment through one route.
+		const interfaces = deployment.routeIds.flatMap((routeId) => graph.routes[routeId].interfaces);
+		if (new Set(interfaces).size !== interfaces.length) {
+			throw new Error(`${deploymentId}: routes must serve different interfaces`);
+		}
 		if (!deployment.upstream?.model) {
 			throw new Error(`${deploymentId}: upstream model is required`);
 		}
-		const deprecationDate = effectiveDeprecationDate(deploymentId, model, deployment);
-		if (!validDeprecationDate(deprecationDate)) {
-			throw new Error(`${deploymentId}: deprecationDate is invalid`);
+		const retirementDate = deployment.retirementDate ?? null;
+		if (retirementDate !== null && !validDate(retirementDate)) {
+			throw new Error(`${deploymentId}: retirementDate is invalid`);
 		}
-		if (deprecationDate !== null && deprecationDate < model.releaseDate) {
-			throw new Error(`${deploymentId}: deprecationDate precedes model releaseDate`);
+		if (retirementDate !== null && retirementDate < model.releaseDate) {
+			throw new Error(`${deploymentId}: retirementDate precedes model releaseDate`);
 		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
@@ -1090,48 +980,16 @@ function compileGraph(source) {
 		if (
 			deployment.upstream.reasoningMode &&
 			deployment.routeIds.some((routeId) => {
-				const interfaces = requireNode(graph.routes, routeId, deploymentId).interfaces;
-				return interfaces.length !== 1 || interfaces[0] !== 'responses';
+				const routeInterfaces = graph.routes[routeId].interfaces;
+				return routeInterfaces.length !== 1 || routeInterfaces[0] !== 'responses';
 			})
 		) {
 			throw new Error(`${deploymentId}: fixed reasoning mode requires Responses-only routes`);
 		}
-		const { contextWindowTokens, maxInputTokens, maxOutputTokens } = effectiveTokenLimits(
-			deploymentId,
-			model,
-			deployment
-		);
-		const { capabilities, inputModalities, outputModalities } = effectiveCapabilities(
-			graph,
-			deploymentId,
-			model,
-			deployment
-		);
-		const { reasoning, reasoningEfforts, reasoningMaxTokens } = effectiveReasoning(
-			deploymentId,
-			model,
-			deployment
-		);
-		const routeOverrides = effectiveRouteOverrides(graph, deployment, model, reasoningEfforts);
-		if (
-			reasoningMaxTokens &&
-			(!anthropicWire ||
-				reasoningMaxTokens.minimum > reasoningMaxTokens.maximum ||
-				reasoningMaxTokens.maximum >= maxOutputTokens)
-		) {
-			throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
-		}
-		const pricing = mergePricing(graph, deploymentId, deployment);
-		for (const [meter, rates] of Object.entries(pricing)) {
-			for (const rate of Object.keys(rates)) {
-				const cutoff = /^per_mill_context_gt_([1-9][0-9]*)k$/.exec(rate)?.[1];
-				if (cutoff && Number(cutoff) * 1000 >= maxInputTokens) {
-					throw new Error(`${deploymentId}.pricing.${meter}.${rate} must be below the input limit`);
-				}
-			}
-		}
-		const dataHandlingByRoute = effectiveDataHandlingByRoute(graph, deploymentId, deployment);
-		const dataHandlingValues = Object.values(dataHandlingByRoute);
+		const served = servedFacts(graph, model, deployment);
+		validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire);
+		rejectMaskedOverrides(graph, deploymentId, model, deployment, served);
+		const dataHandlingValues = Object.values(served.routes).map((route) => route.dataHandling);
 		if (
 			providerId === 'azure' &&
 			deployment.upstream.hosting === 'azure' &&
@@ -1187,41 +1045,16 @@ function compileGraph(source) {
 
 		addSelector(deploymentId, 'deployment', deploymentId);
 
-		const approvalRequired = deployment.approvalRequired ?? false;
-		// Closed models do not disclose how their weights are stored.
-		const weightPrecision = deployment.weightPrecision ?? 'unknown';
 		runtimeDeployments[deploymentId] = {
-			approvalRequired,
-			capabilities,
-			contextWindowTokens,
-			maxInputTokens,
-			deprecationDate,
-			inputModalities: [...inputModalities],
-			nativeFileInputsByRoute: effectiveNativeFileInputsByRoute(graph, deploymentId, deployment),
-			maxOutputTokens,
 			modelId: deployment.modelId,
-			outputModalities: [...outputModalities],
-			pricing,
-			reasoning,
-			reasoningEfforts,
-			reasoningMaxTokens,
-			routeOverrides,
-			routeIds: [...deployment.routeIds].sort(),
 			upstream,
-			dataHandlingByRoute,
-			weightPrecision
+			approvalRequired: deployment.approvalRequired ?? false,
+			// Closed models do not disclose how their weights are stored.
+			weightPrecision: deployment.weightPrecision ?? 'unknown',
+			retirementDate,
+			...served
 		};
-		publicDeployments[deploymentId] = {
-			approvalRequired,
-			modelId: deployment.modelId,
-			overrides: structuredClone(deployment.overrides ?? {}),
-			pricing: structuredClone(deployment.pricing),
-			routeIds: [...deployment.routeIds].sort(),
-			upstream: structuredClone(upstream),
-			weightPrecision
-		};
-
-		requireNode(graph.providers, providerId, deploymentId);
+		publicDeployments[deploymentId] = structuredClone(runtimeDeployments[deploymentId]);
 	}
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
@@ -1237,12 +1070,12 @@ function compileGraph(source) {
 	];
 	for (const [deploymentId, fast] of Object.entries(runtimeDeployments)) {
 		if (fast.upstream.serviceTier !== 'fast') continue;
-		for (const routeId of fast.routeIds) {
+		for (const routeId of Object.keys(fast.routes)) {
 			const standards = Object.values(runtimeDeployments).filter(
 				(candidate) =>
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
-					candidate.routeIds.includes(routeId) &&
+					Object.hasOwn(candidate.routes, routeId) &&
 					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field])
 			);
 			if (standards.length > 1) {
@@ -1251,8 +1084,8 @@ function compileGraph(source) {
 			const [standard] = standards;
 			if (
 				!standard ||
-				(standard.deprecationDate !== null &&
-					(fast.deprecationDate === null || standard.deprecationDate < fast.deprecationDate))
+				(standard.retirementDate !== null &&
+					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate))
 			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}
@@ -1264,7 +1097,8 @@ function compileGraph(source) {
 			id,
 			{
 				providerId: route.providerId,
-				interfaces: route.interfaces
+				interfaces: route.interfaces,
+				documentFormats: route.documentFormats
 			}
 		])
 	);
@@ -1322,15 +1156,21 @@ function compileGraph(source) {
 			routes: runtimeRoutes,
 			deployments: runtimeDeployments
 		},
-		public: { ...sourceGraph, deployments: publicDeployments }
+		// Routes and deployments carry resolved facts, so readers never combine nodes.
+		public: {
+			...sourceGraph,
+			providers: Object.fromEntries(
+				Object.entries(graph.providers).map(([id, provider]) => {
+					const { capabilities: _routeDefaults, dataHandling: _dataDefaults, ...facts } = provider;
+					return [id, facts];
+				})
+			),
+			routes: graph.routes,
+			deployments: publicDeployments
+		}
 	};
-	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(
-		{ graph: compiled.public },
-		{ graph: compiled.runtime }
-	)) {
-		const deployment = runtimeDeployments[deploymentId];
-		deployment.chainHashes ??= {};
-		deployment.chainHashes[routeId] = hash;
+	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(compiled.public)) {
+		runtimeDeployments[deploymentId].routes[routeId].chainHash = hash;
 	}
 	return compiled;
 }

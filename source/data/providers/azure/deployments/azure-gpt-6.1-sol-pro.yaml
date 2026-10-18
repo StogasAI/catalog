@@ -8,8 +8,7 @@ deployments:
     hosting: azure
     deploymentType: global_standard
     reasoningMode: pro
-  overrides:
-    deprecationDate: 2028-03-11
+  retirementDate: 2028-03-11
   pricing:
     input_tokens:
       per_mill_tokens: '2'

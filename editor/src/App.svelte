@@ -17,10 +17,9 @@
 	import { setNodeSelection } from './node-selection';
 	import { isRecord, requestJson } from './api';
 	import {
+		compiledDeploymentValue,
 		completeUnambiguousGraphSelection,
 		decorateFlow,
-		effectiveDeploymentFacts,
-		effectiveDeploymentValue,
 		extendGraphSelection,
 		filterFlow,
 		GRAPH_PAGE_SIZE,
@@ -90,19 +89,8 @@
 		})
 	);
 	const visibleLineage = $derived(dedupedVisibleLineage(lineage));
-	const effectiveFacts = $derived(
-		effectiveDeploymentFacts(catalog, contextDeploymentId, contextRouteId)
-	);
-	const effectiveValue = $derived(
-		effectiveDeploymentValue(catalog, contextDeploymentId, contextRouteId)
-	);
-	const effectiveJSON = $derived(effectiveValue ? JSON.stringify(effectiveValue, null, 2) : '');
-	const deploymentRoutes = $derived(catalog.graph.deployments[contextDeploymentId]?.routeIds);
-	const effectiveRouteRequired = $derived(
-		contextDeploymentId !== '' &&
-			!contextRouteId &&
-			Array.isArray(deploymentRoutes) &&
-			deploymentRoutes.length > 1
+	const compiledValue = $derived(
+		compiledDeploymentValue(catalog, contextDeploymentId, contextRouteId)
 	);
 	const decoratedFlow = $derived(
 		decorateFlow(flow, selectedKey, selectedEdgeId, selectedGraphKeys, graphChains)
@@ -492,23 +480,15 @@
 			</div>
 		</section>
 
-		{#if contextDeploymentId}
-			<section class="effective-card" aria-label="Effective deployment attributes">
+		{#if compiledValue}
+			<section class="compiled-card" aria-label="Compiled deployment">
 				<div class="section-head">
 					<div>
-						<span>Effective deployment</span>
-						<strong
-							>{effectiveRouteRequired
-								? 'Select one route'
-								: `${effectiveFacts.length} resolved attributes`}</strong
-						>
+						<span>Compiled deployment</span>
+						<strong>{contextRouteId || 'All routes'}</strong>
 					</div>
 				</div>
-				{#if effectiveRouteRequired}
-					<p class="empty">Select a compatible route in the graph.</p>
-				{:else}
-					<pre class="effective-json"><code>{effectiveJSON}</code></pre>
-				{/if}
+				<pre class="compiled-json"><code>{JSON.stringify(compiledValue, null, 2)}</code></pre>
 			</section>
 		{/if}
 

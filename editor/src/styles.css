@@ -411,7 +411,7 @@ button.node-card {
 }
 .inspector-head,
 .chain-card,
-.effective-card,
+.compiled-card,
 .source-card {
 	min-width: 0;
 	background: var(--surface);
@@ -428,7 +428,7 @@ button.node-card {
 	color: var(--muted);
 }
 .chain-card,
-.effective-card,
+.compiled-card,
 .source-card {
 	display: grid;
 	gap: 0.75rem;
@@ -481,7 +481,7 @@ button.node-card {
 	outline: 2px solid var(--text);
 	outline-offset: 2px;
 }
-.effective-json,
+.compiled-json,
 :where(.source-card) textarea {
 	font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 	font-size: 0.8125rem;
@@ -490,7 +490,7 @@ button.node-card {
 	color: var(--text);
 	padding: 0.75rem;
 }
-.effective-json {
+.compiled-json {
 	margin: 0;
 	max-height: 52dvh;
 	overflow: auto;
@@ -559,7 +559,7 @@ button.node-card {
 	textarea,
 	.inspector-head,
 	.chain-card,
-	.effective-card,
+	.compiled-card,
 	.source-card {
 		border: 1px solid ButtonText;
 	}

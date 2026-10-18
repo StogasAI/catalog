@@ -4,7 +4,6 @@ package catalog
 #Slug:        string & =~"^[a-z0-9][a-z0-9._:+-]*$"
 #UpstreamId:  string & !=""
 #Date:        string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-#MaybeDate:   null | #Date
 #Timestamp:   string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 #USD: string & =~"^(0|[1-9][0-9]{0,11})([.][0-9]{0,35}[1-9])?$|^1000000000000$"
 #CountryCode:

@@ -8,7 +8,6 @@ deployments:
     hosting: fireworks
     deploymentType: data_zone_standard_us
   overrides:
-    inputModalities: [text, image]
     capabilities:
       parallelFunctionCalling: false
       explicitPromptCaching: false

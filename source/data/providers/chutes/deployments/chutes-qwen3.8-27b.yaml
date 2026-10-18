@@ -8,7 +8,6 @@ deployments:
   weightPrecision: fp8
   overrides:
     contextWindowTokens: 262144
-    inputModalities: [text, image]
     maxOutputTokens: 65536
   pricing:
     input_tokens:

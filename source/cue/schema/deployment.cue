@@ -51,20 +51,17 @@ package catalog
 	// The provider serves this deployment only to accounts it has approved.
 	approvalRequired?: true
 	weightPrecision?: #WeightPrecision
+	// The first day the provider no longer serves the deployment; omitted when
+	// no date is announced.
+	retirementDate?: #Date
+	// Narrower facts than the deployment inherits from its model and routes.
 	overrides?: close({
 		contextWindowTokens?: int & >0
-		maxInputTokens?:      int & >0
 		maxOutputTokens?:     int & >0
-		inputModalities?: [#Modality, ...#Modality]
-		outputModalities?: [#Modality, ...#Modality]
-		capabilities?:     #CapabilityOverrides
-		nativeFileInputs?: #NativeFileInputs
-		reasoning?:        #Reasoning
+		capabilities?:        #UnsupportedCapabilities
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
-		dataHandling?:    #DeploymentDataHandlingOverride
-		pricing?:         #RoutePricing
-		deprecationDate?: #MaybeDate
+		dataHandling?:       #DeploymentDataHandlingOverride
 	})
 	pricing: #DeploymentPricing
 	periods?: [#Period, ...#Period]

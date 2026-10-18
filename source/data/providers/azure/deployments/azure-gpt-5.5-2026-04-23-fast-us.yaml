@@ -8,13 +8,13 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_us
     serviceTier: fast
+  retirementDate: 2027-10-26
   overrides:
     # Microsoft publishes Priority meters for GPT-5.5 prompts up to 272,000 tokens only.
     contextWindowTokens: 272000
     dataHandling:
       processingLocation: US
       storageLocation: US
-    deprecationDate: 2027-10-26
   pricing:
     input_tokens:
       per_mill_tokens: '13.75'

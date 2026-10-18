@@ -1,7 +1,8 @@
 routes:
   providerId: azure
   interfaces: [chat_completions]
-  nativeFileInputs:
+  inputModalities: [text, image, audio]
+  documentFormats:
     extensions: []
     mediaTypes: []
   dataHandling:

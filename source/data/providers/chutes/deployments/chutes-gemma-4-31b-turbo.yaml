@@ -9,7 +9,6 @@ deployments:
   overrides:
     contextWindowTokens: 131072
     maxOutputTokens: 65536
-    inputModalities: [text, image]
   pricing:
     input_tokens:
       per_mill_tokens: '0.12'

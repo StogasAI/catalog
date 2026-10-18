@@ -10,7 +10,6 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
-    urlContext: false
   dataHandling:
     processingLocation: world
     storageLocation: none

@@ -16,8 +16,7 @@ const capabilities = {
 	explicitPromptCaching: true,
 	structuredOutputs: true,
 	systemMessages: true,
-	toolChoice: true,
-	urlContext: false
+	toolChoice: true
 };
 
 function sourceFixture() {
@@ -62,7 +61,8 @@ function sourceFixture() {
 					providerId: 'openai',
 					endpoint: 'https://api.openai.com/v1/responses',
 					interfaces: ['responses'],
-					nativeFileInputs: { extensions: [] as string[], mediaTypes: [] as string[] },
+					inputModalities: ['text', 'image'],
+					documentFormats: { extensions: [] as string[], mediaTypes: [] as string[] },
 					dataHandling: { endToEndEncrypted: false }
 				}
 			},
@@ -93,6 +93,10 @@ function testRejections(cases: RejectionCase[]) {
 	});
 }
 
+function chainHash(deployment: { routes: Record<string, { chainHash?: string }> }) {
+	return deployment.routes['openai-responses'].chainHash;
+}
+
 function setPeriods(node: object, periods: unknown[]) {
 	Object.assign(node, { periods });
 }
@@ -101,8 +105,9 @@ function addSecondOpenAIRoute(source: Source) {
 	source.graph.routes['openai-chat-completions'] = {
 		providerId: 'openai',
 		endpoint: 'https://api.openai.com/v1/chat/completions',
-		interfaces: ['responses'],
-		nativeFileInputs: { extensions: [], mediaTypes: [] },
+		interfaces: ['chat_completions'],
+		inputModalities: ['text', 'image'],
+		documentFormats: { extensions: [], mediaTypes: [] },
 		dataHandling: { endToEndEncrypted: false }
 	};
 }
@@ -190,8 +195,8 @@ describe('catalog source compiler invariants', () => {
 			'right',
 			'root'
 		]);
-		expect(grouped.runtime.graph.deployments['openai-gpt-test'].chainHashes).toEqual(
-			original.runtime.graph.deployments['openai-gpt-test'].chainHashes
+		expect(chainHash(grouped.runtime.graph.deployments['openai-gpt-test'])).toBe(
+			chainHash(original.runtime.graph.deployments['openai-gpt-test'])
 		);
 		for (const [mutate, message] of [
 			[
@@ -240,7 +245,8 @@ describe('catalog source compiler invariants', () => {
 			const catalogs = buildCatalogs(source);
 			for (const artifact of [catalogs.public, catalogs.runtime]) {
 				expect(
-					artifact.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens
+					artifact.graph.deployments['openai-gpt-test'].routes['openai-responses'].pricing
+						.output_tokens.per_mill_tokens
 				).toBe(rate);
 			}
 		}
@@ -250,7 +256,7 @@ describe('catalog source compiler invariants', () => {
 		expect(catalogs.runtime.graph.deployments['openai-gpt-test']).toMatchObject({
 			contextWindowTokens: 1000,
 			maxOutputTokens: 200,
-			reasoningEfforts: ['low', 'high']
+			routes: { 'openai-responses': { reasoningEfforts: ['low', 'high'] } }
 		});
 		expect(catalogs.runtime.graph.providers.openai).toEqual({
 			aliases: [],
@@ -358,16 +364,6 @@ describe('catalog source compiler invariants', () => {
 				'snapshot is invalid'
 			],
 			[
-				'impossible deprecation date',
-				(source: Source) => (source.graph.models['gpt-test'].deprecationDate = '2026-02-30'),
-				'deprecationDate is invalid'
-			],
-			[
-				'deprecation before release',
-				(source: Source) => (source.graph.models['gpt-test'].deprecationDate = '2026-01-01'),
-				'deprecationDate precedes releaseDate'
-			],
-			[
 				'output exceeds context',
 				(source: Source) => (source.graph.models['gpt-test'].maxOutputTokens = 1001),
 				'output limit must fit inside the context window'
@@ -421,7 +417,6 @@ describe('catalog source compiler invariants', () => {
 	test('accepts exact date and manual-reasoning boundaries', () => {
 		const source = sourceFixture();
 		source.graph.models['gpt-test'].snapshot = '2026-01-02';
-		source.graph.models['gpt-test'].deprecationDate = '2026-01-02';
 		source.graph.models['gpt-test'].reasoningMaxTokens = { minimum: 1, maximum: 199 };
 		asAzureClaude(source);
 		source.graph.deployments['azure-gpt-test'].overrides = {
@@ -430,37 +425,36 @@ describe('catalog source compiler invariants', () => {
 		const catalogs = buildCatalogs(source);
 		expect(catalogs.public.graph.models['gpt-test']).toMatchObject({
 			snapshot: '2026-01-02',
-			deprecationDate: '2026-01-02',
 			reasoningMaxTokens: { minimum: 1, maximum: 199 }
 		});
 
 		const deploymentBoundary = sourceFixture();
-		deploymentBoundary.graph.deployments['openai-gpt-test'].overrides = {
-			deprecationDate: '2026-01-02'
-		};
+		Object.assign(deploymentBoundary.graph.deployments['openai-gpt-test'], {
+			retirementDate: '2026-01-02'
+		});
 		expect(
-			buildCatalogs(deploymentBoundary).runtime.graph.deployments['openai-gpt-test'].deprecationDate
+			buildCatalogs(deploymentBoundary).runtime.graph.deployments['openai-gpt-test'].retirementDate
 		).toBe('2026-01-02');
 	});
 
 	testRejections([
 		[
-			'rejects deployment deprecation before the model release',
+			'rejects deployment retirement before the model release',
 			(source) => {
-				source.graph.deployments['openai-gpt-test'].overrides = {
-					deprecationDate: '2026-01-01'
-				};
+				Object.assign(source.graph.deployments['openai-gpt-test'], {
+					retirementDate: '2026-01-01'
+				});
 			},
-			'deprecationDate precedes model releaseDate'
+			'retirementDate precedes model releaseDate'
 		],
 		[
-			'rejects an impossible deployment deprecation date',
+			'rejects an impossible deployment retirement date',
 			(source) => {
-				source.graph.deployments['openai-gpt-test'].overrides = {
-					deprecationDate: '2026-02-30'
-				};
+				Object.assign(source.graph.deployments['openai-gpt-test'], {
+					retirementDate: '2026-02-30'
+				});
 			},
-			'deprecationDate is invalid'
+			'retirementDate is invalid'
 		]
 	]);
 
@@ -503,12 +497,14 @@ describe('catalog source compiler invariants', () => {
 		]);
 		const baseDeployment = base.runtime.graph.deployments['openai-gpt-test'];
 		expect(Object.keys(promotion.graph)).toEqual(['deployments']);
-		expect(promotion.graph.deployments['openai-gpt-test'].pricing).toEqual({
+		const route = (deployment: { routes: Record<string, Record<string, unknown>> }) =>
+			deployment.routes['openai-responses'];
+		expect(route(promotion.graph.deployments['openai-gpt-test']).pricing).toEqual({
 			input_tokens: { per_mill_tokens: '1' },
 			output_tokens: { per_mill_tokens: '1' }
 		});
-		expect(promotion.graph.deployments['openai-gpt-test'].chainHashes).not.toEqual(
-			baseDeployment.chainHashes
+		expect(chainHash(promotion.graph.deployments['openai-gpt-test'])).not.toBe(
+			chainHash(baseDeployment)
 		);
 		expect(limited.graph.models['gpt-test']).toMatchObject({
 			maxOutputTokens: 100,
@@ -516,21 +512,31 @@ describe('catalog source compiler invariants', () => {
 		});
 		expect(limited.graph.deployments['openai-gpt-test']).toMatchObject({
 			maxOutputTokens: 100,
-			reasoningEfforts: [],
-			pricing: { output_tokens: { per_mill_tokens: '1' } }
+			routes: {
+				'openai-responses': {
+					reasoningEfforts: [],
+					pricing: { output_tokens: { per_mill_tokens: '1' } }
+				}
+			}
 		});
 		expect(promotionAgain.graph).toEqual(promotion.graph);
-		expect(raised.graph.deployments['openai-gpt-test'].pricing).toEqual({
+		expect(route(raised.graph.deployments['openai-gpt-test']).pricing).toEqual({
 			input_tokens: { per_mill_tokens: '0.5' },
 			output_tokens: { per_mill_tokens: '2' }
 		});
+		const publicBase = base.public.graph.deployments['openai-gpt-test'];
 		expect(catalogs.public.schedule[0].graph).toEqual({
 			deployments: {
 				'openai-gpt-test': {
-					...base.public.graph.deployments['openai-gpt-test'],
-					pricing: {
-						input_tokens: { per_mill_tokens: '1' },
-						output_tokens: { per_mill_tokens: '1' }
+					...publicBase,
+					routes: {
+						'openai-responses': {
+							...route(publicBase),
+							pricing: {
+								input_tokens: { per_mill_tokens: '1' },
+								output_tokens: { per_mill_tokens: '1' }
+							}
+						}
 					}
 				}
 			}
@@ -562,19 +568,17 @@ describe('catalog source compiler invariants', () => {
 		expect(base.public.periods).toEqual([]);
 
 		// History holds each chain that a request could log, once.
-		const hash = (deployment: { chainHashes: Record<string, string> }) =>
-			deployment.chainHashes['openai-responses'];
 		expect(
 			[...everyStateCatalogChains(catalogs.public, catalogs.runtime)].map((entry) => entry.hash)
 		).toEqual([
-			hash(baseDeployment),
-			hash(promotion.graph.deployments['openai-gpt-test']),
-			hash(limited.graph.deployments['openai-gpt-test']),
-			hash(raised.graph.deployments['openai-gpt-test'])
+			chainHash(baseDeployment),
+			chainHash(promotion.graph.deployments['openai-gpt-test']),
+			chainHash(limited.graph.deployments['openai-gpt-test']),
+			chainHash(raised.graph.deployments['openai-gpt-test'])
 		]);
 		const altered = structuredClone(catalogs.runtime);
-		altered.schedule[1].graph.deployments['openai-gpt-test'].chainHashes['openai-responses'] =
-			hash(baseDeployment);
+		altered.schedule[1].graph.deployments['openai-gpt-test'].routes['openai-responses'].chainHash =
+			chainHash(baseDeployment);
 		expect(() => [...everyStateCatalogChains(catalogs.public, altered)]).toThrow(
 			'Compiled catalog chain differs from its history.'
 		);
@@ -585,8 +589,8 @@ describe('catalog source compiler invariants', () => {
 			promotion.graph.deployments['openai-gpt-test']
 		);
 		expect(at('2026-11-19T23:59:59Z').models['gpt-test'].maxOutputTokens).toBe(100);
-		expect(at('2027-01-01T00:00:00Z').deployments['openai-gpt-test'].pricing.input_tokens).toEqual({
-			per_mill_tokens: '0.5'
+		expect(route(at('2027-01-01T00:00:00Z').deployments['openai-gpt-test']).pricing).toMatchObject({
+			input_tokens: { per_mill_tokens: '0.5' }
 		});
 	});
 
@@ -745,19 +749,10 @@ describe('catalog source compiler invariants', () => {
 			expect(
 				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].maxInputTokens
 			).toBe(800);
-			source.graph.deployments['openai-gpt-test'].overrides = { maxInputTokens: 700 };
-			expect(buildCatalogs(source).runtime.graph.deployments['openai-gpt-test']).toMatchObject({
-				contextWindowTokens: 1000,
-				maxInputTokens: 700,
-				maxOutputTokens: 200
-			});
-			source.graph.deployments['openai-gpt-test'].overrides = { maxInputTokens: 901 };
-			expect(() => buildCatalogs(source)).toThrow('input limit may only narrow');
-			source.graph.deployments['openai-gpt-test'].overrides = {
-				contextWindowTokens: 800,
-				maxInputTokens: 850
-			};
-			expect(() => buildCatalogs(source)).toThrow('input limit may only narrow');
+			delete source.graph.deployments['openai-gpt-test'].overrides;
+			expect(
+				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].maxInputTokens
+			).toBe(900);
 			source.graph.models['gpt-test'].maxInputTokens = 1001;
 			expect(() => buildCatalogs(source)).toThrow('input limit must fit inside');
 		});
@@ -767,15 +762,19 @@ describe('catalog source compiler invariants', () => {
 				source.graph.deployments['openai-gpt-test'].overrides = {
 					contextWindowTokens: 800,
 					maxOutputTokens: 100,
-					inputModalities: ['text'],
+					capabilities: { structuredOutputs: false },
 					reasoningEfforts: ['high']
 				};
 			});
 			expect(buildCatalogs(valid).runtime.graph.deployments['openai-gpt-test']).toMatchObject({
 				contextWindowTokens: 800,
 				maxOutputTokens: 100,
-				inputModalities: ['text'],
-				reasoningEfforts: ['high']
+				routes: {
+					'openai-responses': {
+						capabilities: { structuredOutputs: false },
+						reasoningEfforts: ['high']
+					}
+				}
 			});
 		});
 
@@ -786,7 +785,17 @@ describe('catalog source compiler invariants', () => {
 					(source.graph.deployments['openai-gpt-test'].overrides = {
 						contextWindowTokens: 1000
 					}),
-				'redundantly repeats its inherited value'
+				'overrides.contextWindowTokens does not change what the deployment serves'
+			],
+			[
+				'capability the model already lacks',
+				(source: Source) => {
+					source.graph.models['gpt-test'].capabilities = { structuredOutputs: false };
+					source.graph.deployments['openai-gpt-test'].overrides = {
+						capabilities: { structuredOutputs: false }
+					};
+				},
+				'overrides.capabilities.structuredOutputs does not change what the deployment serves'
 			],
 			[
 				'wider context',
@@ -812,59 +821,14 @@ describe('catalog source compiler invariants', () => {
 				'output limit must fit inside the context window'
 			],
 			[
-				'new modality',
-				(source: Source) =>
-					(source.graph.deployments['openai-gpt-test'].overrides = {
-						inputModalities: ['text', 'video']
-					}),
-				'cannot enable model-unsupported inputModalities value video'
-			],
-			[
-				'noncanonical output modality override',
-				(source: Source) => {
-					source.graph.models['gpt-test'].outputModalities = ['text', 'image'];
-					source.graph.deployments['openai-gpt-test'].overrides = {
-						outputModalities: ['image', 'text']
-					};
-				},
-				'outputModalities must use canonical order without repeats'
-			],
-			[
-				'new model-disabled capability',
-				(source: Source) => {
-					source.graph.models['gpt-test'].capabilities = { structuredOutputs: false };
-					source.graph.deployments['openai-gpt-test'].overrides = {
-						capabilities: { structuredOutputs: true }
-					};
-				},
-				'cannot enable model-unsupported capability structuredOutputs'
-			],
-			[
-				'new route-disabled capability',
+				'enabled capability',
 				(source: Source) => {
 					source.graph.providers.openai.capabilities.structuredOutputs = false;
 					source.graph.deployments['openai-gpt-test'].overrides = {
 						capabilities: { structuredOutputs: true }
 					};
 				},
-				'cannot enable route-unsupported capability structuredOutputs'
-			],
-			[
-				'enabled unsupported reasoning',
-				(source: Source) => {
-					source.graph.models['gpt-test'].reasoning = 'unsupported';
-					source.graph.models['gpt-test'].reasoningEfforts = [];
-					source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'optional' };
-				},
-				'cannot enable model-unsupported reasoning'
-			],
-			[
-				'weakened required reasoning',
-				(source: Source) => {
-					source.graph.models['gpt-test'].reasoning = 'required';
-					source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'optional' };
-				},
-				'cannot weaken required model reasoning'
+				'overrides.capabilities.structuredOutputs may only remove a capability'
 			],
 			[
 				'new effort',
@@ -898,26 +862,51 @@ describe('catalog source compiler invariants', () => {
 				reasoningEffortsByInterface: { responses: ['low'] }
 			});
 			addSecondOpenAIRoute(source);
-			source.graph.routes['openai-chat-completions'].interfaces = ['chat_completions'];
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-			const deployment = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
-			expect(deployment.reasoningEfforts).toEqual(['low', 'high']);
-			expect(deployment.routeOverrides).toEqual({
-				'openai-responses': { reasoningEfforts: ['low'] }
+			const efforts = () =>
+				Object.fromEntries(
+					Object.entries(
+						buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].routes
+					).map(([routeId, route]) => [routeId, route.reasoningEfforts])
+				);
+			expect(efforts()).toEqual({
+				'openai-chat-completions': ['low', 'high'],
+				'openai-responses': ['low']
 			});
 
+			// A route that translates several interfaces keeps the deployment's list.
+			source.graph.deployments['openai-gpt-test'].routeIds = ['openai-responses'];
 			source.graph.routes['openai-responses'].interfaces = ['chat_completions', 'responses'];
-			source.graph.routes['openai-chat-completions'].interfaces = ['chat_completions', 'responses'];
-			expect(
-				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].routeOverrides
-			).toEqual({});
+			expect(efforts()).toEqual({ 'openai-responses': ['low', 'high'] });
 
 			source.graph.routes['openai-responses'].interfaces = ['responses'];
-			source.graph.deployments['openai-gpt-test'].routeIds = ['openai-responses'];
 			source.graph.deployments['openai-gpt-test'].overrides = { reasoningEfforts: ['high'] };
-			expect(
-				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].routeOverrides
-			).toEqual({ 'openai-responses': { reasoningEfforts: [] } });
+			expect(efforts()).toEqual({ 'openai-responses': [] });
+		});
+
+		test('keeps facts that differ between routes on each route', () => {
+			const source = sourceFixture();
+			addSecondOpenAIRoute(source);
+			source.graph.routes['openai-chat-completions'].overrides = {
+				capabilities: { streaming: false }
+			};
+			source.graph.routes['openai-chat-completions'].inputModalities = ['text'];
+			source.graph.routes['openai-responses'].pricing = {
+				openai_responses_web_search_calls: { per_1k_calls: '10' }
+			};
+			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
+			const { routes } = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+			expect(routes['openai-chat-completions'].capabilities.streaming).toBe(false);
+			expect(routes['openai-responses'].capabilities.streaming).toBe(true);
+			expect(routes['openai-chat-completions'].inputModalities).toEqual(['text']);
+			expect(routes['openai-responses'].inputModalities).toEqual(['text', 'image']);
+			expect(Object.keys(routes['openai-chat-completions'].pricing)).toEqual([
+				'input_tokens',
+				'output_tokens'
+			]);
+			expect(routes['openai-responses'].pricing.openai_responses_web_search_calls).toEqual({
+				per_1k_calls: '10'
+			});
 		});
 	});
 
@@ -974,9 +963,8 @@ describe('catalog source compiler invariants', () => {
 			};
 		});
 		const handling =
-			buildCatalogs(valid).runtime.graph.deployments['openai-gpt-test'].dataHandlingByRoute[
-				'openai-responses'
-			];
+			buildCatalogs(valid).runtime.graph.deployments['openai-gpt-test'].routes['openai-responses']
+				.dataHandling;
 		expect(handling).toMatchObject({
 			storageLocation: 'none',
 			retentionDays: 0,
@@ -1057,18 +1045,7 @@ describe('catalog source compiler invariants', () => {
 						'openai-responses',
 						'openai-responses'
 					]),
-				'routeIds must not repeat'
-			],
-			[
-				'conflicting route fact',
-				(source: Source) => {
-					addSecondOpenAIRoute(source);
-					source.graph.routes['openai-chat-completions'].overrides = {
-						capabilities: { streaming: false }
-					};
-					source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-				},
-				'route capabilities differs; split the deployment'
+				'routes must serve different interfaces'
 			],
 			[
 				'mixed providers',
@@ -1086,20 +1063,6 @@ describe('catalog source compiler invariants', () => {
 				'all routes must belong to one provider'
 			],
 			[
-				'conflicting route pricing',
-				(source: Source) => {
-					addSecondOpenAIRoute(source);
-					source.graph.routes['openai-responses'].pricing = {
-						openai_responses_web_search_calls: { per_1k_calls: '1' }
-					};
-					source.graph.routes['openai-chat-completions'].pricing = {
-						openai_responses_web_search_calls: { per_1k_calls: '2' }
-					};
-					source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-				},
-				'route pricing conflicts for openai_responses_web_search_calls'
-			],
-			[
 				'direct repetition of inherited pricing',
 				(source: Source) => {
 					source.graph.routes['openai-responses'].pricing = {
@@ -1109,7 +1072,7 @@ describe('catalog source compiler invariants', () => {
 						'openai_responses_web_search_calls'
 					] = { per_1k_calls: '2' };
 				},
-				'pricing.openai_responses_web_search_calls must use overrides.pricing'
+				'openai-gpt-test.pricing.openai_responses_web_search_calls repeats a price of route openai-responses'
 			],
 			[
 				'long prompt price that no prompt can reach',
@@ -1224,14 +1187,14 @@ describe('catalog source compiler invariants', () => {
 				'only Azure Anthropic-format models use the Azure Anthropic Messages route'
 			],
 			[
-				'Anthropic model with an extra route',
+				'Anthropic model on another route',
 				(source: Source) => {
 					asAzureClaude(source);
 					source.graph.routes['azure-responses'] = {
 						...source.graph.routes['azure-anthropic-messages'],
 						interfaces: ['responses']
 					};
-					source.graph.deployments['azure-gpt-test'].routeIds.push('azure-responses');
+					source.graph.deployments['azure-gpt-test'].routeIds = ['azure-responses'];
 				},
 				'only Azure Anthropic-format models use the Azure Anthropic Messages route'
 			],
@@ -1320,7 +1283,9 @@ describe('catalog source compiler invariants', () => {
 				'a Standard deployment that retires first',
 				(source: Source) => {
 					addFast(source);
-					source.graph.deployments['openai-gpt-test'].overrides = { deprecationDate: '2099-01-01' };
+					Object.assign(source.graph.deployments['openai-gpt-test'], {
+						retirementDate: '2099-01-01'
+					});
 				},
 				'Fast needs a Standard deployment'
 			]
@@ -1368,73 +1333,42 @@ describe('catalog source compiler invariants', () => {
 	});
 });
 
-describe('route-owned native file formats', () => {
+describe('route document formats', () => {
 	const pdf = { extensions: ['.pdf'], mediaTypes: ['application/pdf'] };
-	const text = { extensions: ['.txt'], mediaTypes: ['text/plain'] };
 	const documents = { extensions: ['.pdf', '.txt'], mediaTypes: ['application/pdf', 'text/plain'] };
 
-	test('keeps route formats distinct and lets a deployment replace all attached route formats', () => {
+	test('stay on each route and enter the chains of its deployments', () => {
 		const source = sourceFixture();
-		source.graph.routes['openai-responses'].nativeFileInputs = documents;
+		source.graph.routes['openai-responses'].documentFormats = documents;
 		addSecondOpenAIRoute(source);
-		source.graph.routes['openai-chat-completions'].nativeFileInputs = pdf;
+		source.graph.routes['openai-chat-completions'].documentFormats = pdf;
 		source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
 		const original = buildCatalogs(source);
-		expect(original.runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute).toEqual({
-			'openai-chat-completions': pdf,
-			'openai-responses': documents
-		});
-		source.graph.deployments['openai-gpt-test'].overrides = { nativeFileInputs: pdf };
-		const narrowed = buildCatalogs(source);
-		expect(narrowed.runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute).toEqual({
-			'openai-chat-completions': pdf,
-			'openai-responses': pdf
-		});
-		expect(
-			narrowed.runtime.graph.deployments['openai-gpt-test'].chainHashes['openai-responses']
-		).not.toBe(
-			original.runtime.graph.deployments['openai-gpt-test'].chainHashes['openai-responses']
+		for (const artifact of [original.runtime, original.public]) {
+			expect(artifact.graph.routes['openai-responses'].documentFormats).toEqual(documents);
+			expect(artifact.graph.routes['openai-chat-completions'].documentFormats).toEqual(pdf);
+		}
+		const deployment = original.runtime.graph.deployments['openai-gpt-test'];
+		expect(Object.keys(deployment.routes)).toEqual(['openai-chat-completions', 'openai-responses']);
+		expect(deployment.routes['openai-responses']).not.toHaveProperty('documentFormats');
+
+		source.graph.routes['openai-responses'].documentFormats = pdf;
+		const changedRoute = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+		expect(chainHash(changedRoute)).not.toBe(chainHash(deployment));
+		expect(changedRoute.routes['openai-chat-completions'].chainHash).toBe(
+			deployment.routes['openai-chat-completions'].chainHash
 		);
-		source.graph.deployments['openai-gpt-test'].overrides = { nativeFileInputs: text };
-		expect(
-			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute
-		).toEqual({
-			'openai-chat-completions': text,
-			'openai-responses': text
-		});
-		const added = { extensions: ['.md'], mediaTypes: ['text/markdown'] };
-		source.graph.deployments['openai-gpt-test'].overrides = { nativeFileInputs: added };
-		expect(
-			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute
-		).toEqual({
-			'openai-chat-completions': added,
-			'openai-responses': added
-		});
 	});
 
-	test('retains provider-processed PDFs for text-only models and deployment overrides', () => {
+	test('keep provider-processed PDFs for a text-only model', () => {
 		const source = sourceFixture();
-		source.graph.routes['openai-responses'].nativeFileInputs = documents;
+		source.graph.routes['openai-responses'].documentFormats = documents;
 		source.graph.models['gpt-test'].inputModalities = ['text'];
+		const { runtime } = buildCatalogs(source);
+		expect(runtime.graph.routes['openai-responses'].documentFormats).toEqual(documents);
 		expect(
-			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute
-		).toEqual({
-			'openai-responses': documents
-		});
-		source.graph.deployments['openai-gpt-test'].overrides = {
-			nativeFileInputs: {
-				extensions: ['.md', '.pdf'],
-				mediaTypes: ['application/pdf', 'text/markdown']
-			}
-		};
-		expect(
-			buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].nativeFileInputsByRoute
-		).toEqual({
-			'openai-responses': {
-				extensions: ['.md', '.pdf'],
-				mediaTypes: ['application/pdf', 'text/markdown']
-			}
-		});
+			runtime.graph.deployments['openai-gpt-test'].routes['openai-responses'].inputModalities
+		).toEqual(['text']);
 	});
 
 	test.each([
@@ -1447,14 +1381,7 @@ describe('route-owned native file formats', () => {
 		{ extensions: ['.pdf'], mediaTypes: ['application/pdf'], unknown: true }
 	])('rejects ambiguous format facts %j', (formats) => {
 		const source = sourceFixture();
-		source.graph.routes['openai-responses'].nativeFileInputs = formats;
-		expect(() => buildCatalogs(source)).toThrow(/nativeFileInputs/);
-	});
-
-	test('rejects a deployment format override that repeats its route', () => {
-		const source = sourceFixture();
-		source.graph.routes['openai-responses'].nativeFileInputs = documents;
-		source.graph.deployments['openai-gpt-test'].overrides = { nativeFileInputs: documents };
-		expect(() => buildCatalogs(source)).toThrow('redundantly');
+		source.graph.routes['openai-responses'].documentFormats = formats;
+		expect(() => buildCatalogs(source)).toThrow(/documentFormats/);
 	});
 });
