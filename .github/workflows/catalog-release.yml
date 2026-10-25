@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+# A release builds only from its tag, never from a cache that another run wrote.
+cache-mode: none
+
 jobs:
   build:
     name: Build Catalog
@@ -59,10 +62,12 @@ jobs:
           subject-checksums: dist/catalog/${{ github.ref_name }}/ATTESTATION-SHA256SUMS
 
       - name: Collect GitHub attestation
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
           release_dir="dist/catalog/$GITHUB_REF_NAME"
-          cp "${{ steps.attest.outputs.bundle-path }}" "$release_dir/github-attestation.jsonl"
+          cp "$BUNDLE_PATH" "$release_dir/github-attestation.jsonl"
           cd "$release_dir"
           sha256sum github-attestation.jsonl >> SHA256SUMS
           sha256sum -c SHA256SUMS
