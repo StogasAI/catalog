@@ -7,7 +7,26 @@ import { canonicalJson } from './canonical-json.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
-const MAX_CATALOG_ARTIFACT_BYTES = 64 * 1024 * 1024;
+/** Gateways and Web reject larger artifacts, so the build and every release step do too. */
+export const CATALOG_ARTIFACT_LIMITS = Object.freeze({
+	'catalog.public.json': 8 * 1024 * 1024,
+	'catalog.runtime.json': 16 * 1024 * 1024
+});
+
+/** Rejects an artifact over its limit and warns once it passes three quarters of it. */
+export function checkCatalogArtifactSize(name, bytes) {
+	const limit = CATALOG_ARTIFACT_LIMITS[name];
+	if (!limit) throw new Error(`${name} is not a catalog artifact.`);
+	if (bytes > limit) throw new Error(`${name} is ${bytes} bytes; the limit is ${limit}.`);
+	if (bytes > limit * 0.75) {
+		const message = `${name} is ${bytes} bytes, ${Math.floor((bytes / limit) * 100)}% of its ${limit / 1024 / 1024} MiB limit. Releases fail above the limit.`;
+		console.warn(
+			process.env.GITHUB_ACTIONS === 'true'
+				? `::warning title=Catalog size::${message}`
+				: `Warning: ${message}`
+		);
+	}
+}
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
 	const sequence = parseSequence(sequenceInput);
@@ -59,12 +78,12 @@ export function parseCatalogReleaseManifest(value) {
 		!hex(value.source.commit, 40) ||
 		!hex(value.source.sha256, 64) ||
 		!hasKeys(value.artifacts, ['catalog.public.json', 'catalog.runtime.json']) ||
-		!Object.values(value.artifacts).every(
-			(artifact) =>
+		!Object.entries(value.artifacts).every(
+			([name, artifact]) =>
 				hasKeys(artifact, ['sha256', 'size_bytes']) &&
 				hex(artifact.sha256, 64) &&
 				sequence(artifact.size_bytes) &&
-				artifact.size_bytes <= MAX_CATALOG_ARTIFACT_BYTES
+				artifact.size_bytes <= CATALOG_ARTIFACT_LIMITS[name]
 		)
 	) {
 		throw new Error('Catalog release document is invalid.');
@@ -123,8 +142,13 @@ function gatewayReleaseSequence(releaseTag) {
 export function catalogArtifact(repositoryRoot, filename) {
 	const path = join(repositoryRoot, 'generated', filename);
 	const stats = lstatSync(path);
-	if (stats.isSymbolicLink() || !stats.isFile() || stats.size > MAX_CATALOG_ARTIFACT_BYTES) {
-		throw new Error(`${filename} is not a bounded regular catalog artifact.`);
+	if (stats.isSymbolicLink() || !stats.isFile()) {
+		throw new Error(`${filename} is not a regular catalog artifact.`);
+	}
+	if (!(stats.size <= CATALOG_ARTIFACT_LIMITS[filename])) {
+		throw new Error(
+			`${filename} is ${stats.size} bytes; the limit is ${CATALOG_ARTIFACT_LIMITS[filename]}.`
+		);
 	}
 	const bytes = readFileSync(path);
 	return { bytes, digest: `sha256:${sha256(bytes)}` };
@@ -231,8 +255,8 @@ function gitBytes(repositoryRoot, args, input) {
 		cwd: repositoryRoot,
 		env: minimalProcessEnvironment(),
 		input,
-		// Every tracked generated artifact is bounded, and the source is far smaller.
-		maxBuffer: 4 * MAX_CATALOG_ARTIFACT_BYTES,
+		// The tracked generated artifacts take at most 24 MiB, and the source is far smaller.
+		maxBuffer: 64 * 1024 * 1024,
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 }

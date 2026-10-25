@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
+import { checkCatalogArtifactSize } from './release-format.mjs';
 import { ancestorGroupIds, orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
@@ -65,8 +66,6 @@ const canonicalCredentialModeRanks = new Map(
 );
 const maxAliasesPerNode = 8;
 const nodeIdPattern = /^[a-z0-9][a-z0-9._:-]*$/;
-const runtimeSizeLimit = 16 * 1024 * 1024;
-const publicSizeLimit = 8 * 1024 * 1024;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;
@@ -1192,11 +1191,6 @@ function writeIfChanged(path, content) {
 	}
 }
 
-function assertSize(name, content, limit) {
-	const size = Buffer.byteLength(content);
-	if (size > limit) throw new Error(`${name} is ${size} bytes; limit is ${limit}`);
-}
-
 export async function main(argv = process.argv.slice(2)) {
 	const args = new Set(argv);
 	for (const arg of args) {
@@ -1264,8 +1258,8 @@ export async function main(argv = process.argv.slice(2)) {
 		const publicJson = canonicalJson(catalogs.public);
 		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
 		const runtimeJson = canonicalJson(catalogs.runtime);
-		assertSize('runtime catalog', runtimeJson, runtimeSizeLimit);
-		assertSize('public catalog', publicJson, publicSizeLimit);
+		checkCatalogArtifactSize('catalog.runtime.json', Buffer.byteLength(runtimeJson));
+		checkCatalogArtifactSize('catalog.public.json', Buffer.byteLength(publicJson));
 
 		if (!args.has('--validate-only')) {
 			if (args.has('--check')) {

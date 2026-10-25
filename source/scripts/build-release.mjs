@@ -12,12 +12,10 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sha256 } from './release-format.mjs';
+import { CATALOG_ARTIFACT_LIMITS, checkCatalogArtifactSize, sha256 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const maxSnapshotBytes = 128 * 1024 * 1024;
-const maxRuntimeBytes = 16 * 1024 * 1024;
-const maxPublicBytes = 8 * 1024 * 1024;
 
 // Only this reviewed driver and the publisher run on the host. Package scripts
 // and their dependencies run in a container with no host process or write access.
@@ -82,8 +80,8 @@ export function buildCatalogRelease(root = repositoryRoot) {
 		}
 		// Docker has stopped every process before any output crosses the boundary.
 		// Read individual files through bounded tar streams; never extract a tree.
-		const runtime = readArtifact(container, 'catalog.runtime.json', maxRuntimeBytes);
-		const publicCatalog = readArtifact(container, 'catalog.public.json', maxPublicBytes);
+		const runtime = readArtifact(container, 'catalog.runtime.json');
+		const publicCatalog = readArtifact(container, 'catalog.public.json');
 		if (JSON.parse(runtime).publicDigest !== `sha256:${sha256(publicCatalog)}`) {
 			throw new Error('Isolated runtime does not commit to the public catalog.');
 		}
@@ -150,7 +148,8 @@ function captureSource(root) {
 	return { files, digest: hash.digest('hex') };
 }
 
-function readArtifact(container, path, limit) {
+function readArtifact(container, path) {
+	const limit = CATALOG_ARTIFACT_LIMITS[path];
 	const archive = run('docker', ['cp', `${container}:/workspace/generated/${path}`, '-'], {
 		maxBuffer: limit + 1024 * 1024
 	});
@@ -159,6 +158,8 @@ function readArtifact(container, path, limit) {
 		maxBuffer: limit
 	});
 	if (!bytes.length) throw new Error(`${path} must be a nonempty regular catalog artifact.`);
+	// The container's own warning stays inside it.
+	checkCatalogArtifactSize(path, bytes.length);
 	return bytes;
 }
 

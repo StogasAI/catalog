@@ -846,9 +846,9 @@ describe('compiled catalog', () => {
 		expect(checked).toHaveLength(26);
 	});
 
-	test('keeps deterministic runtime and public artifacts within defensive limits', () => {
+	test('keeps deterministic runtime and public artifacts within their limits', () => {
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
-		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(64 * 1024 * 1024);
+		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(8 * 1024 * 1024);
 		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
 		expect(publicCatalog.schema).toBe('stogas.catalog.public.v5');
 		expect(runtimeCatalog.schedule).toEqual([]);

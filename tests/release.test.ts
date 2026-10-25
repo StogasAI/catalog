@@ -12,10 +12,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
 	catalogApprovalLedgerKey,
 	canonicalJsonValue,
+	checkCatalogArtifactSize,
 	parseCatalogReleaseEvidence,
 	resolveDestructiveOutput,
 	sourceDigest,
@@ -179,6 +180,32 @@ describe('catalog release metadata', () => {
 		).toThrow('valid runtime and public digests');
 	});
 
+	test('rejects artifacts over their limits and warns past three quarters of them', () => {
+		const warn = spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const mib = 1024 * 1024;
+			checkCatalogArtifactSize('catalog.public.json', 6 * mib);
+			checkCatalogArtifactSize('catalog.runtime.json', 12 * mib);
+			expect(warn).not.toHaveBeenCalled();
+			checkCatalogArtifactSize('catalog.public.json', 6 * mib + 1);
+			expect(warn.mock.calls[0]?.[0]).toContain(
+				'catalog.public.json is 6291457 bytes, 75% of its 8 MiB limit.'
+			);
+			checkCatalogArtifactSize('catalog.runtime.json', 16 * mib);
+			expect(warn.mock.calls[1]?.[0]).toContain('100% of its 16 MiB limit.');
+			expect(() => checkCatalogArtifactSize('catalog.public.json', 8 * mib + 1)).toThrow(
+				'the limit is 8388608'
+			);
+			expect(() => checkCatalogArtifactSize('catalog.runtime.json', 16 * mib + 1)).toThrow(
+				'the limit is 16777216'
+			);
+			expect(() => checkCatalogArtifactSize('catalog.json', 1)).toThrow('not a catalog artifact');
+			expect(warn).toHaveBeenCalledTimes(2);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
 	test('builds one compact release over content-addressed artifacts', () => {
 		const output = mkdtempSync(join(tmpdir(), 'stogas-catalog-release-'));
 		try {
@@ -214,7 +241,21 @@ describe('catalog release metadata', () => {
 			}
 			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(2);
 			const source = envelope.document.source;
+			const sized = (name: string, size_bytes: number) => ({
+				...envelope,
+				document: {
+					...envelope.document,
+					artifacts: {
+						...envelope.document.artifacts,
+						[name]: { ...envelope.document.artifacts[name], size_bytes }
+					}
+				}
+			});
+			parseCatalogReleaseEvidence(sized('catalog.public.json', 8 * 1024 * 1024));
+			parseCatalogReleaseEvidence(sized('catalog.runtime.json', 16 * 1024 * 1024));
 			for (const changed of [
+				sized('catalog.public.json', 8 * 1024 * 1024 + 1),
+				sized('catalog.runtime.json', 16 * 1024 * 1024 + 1),
 				{ ...envelope, schema: 'extra' },
 				{ ...envelope, signature: { key_id: 'key', signature: 'AA' } },
 				{ ...envelope, provenance: [proof] },
