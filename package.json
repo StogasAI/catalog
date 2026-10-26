@@ -11,9 +11,6 @@
 		"./public": "./generated/catalog.public.json"
 	},
 	"packageManager": "bun@1.4.4",
-	"overrides": {
-		"typescript": "6.0.3"
-	},
 	"engines": {
 		"bun": ">=1.4.4",
 		"node": ">=24.6.0"
