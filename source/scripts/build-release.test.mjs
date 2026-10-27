@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -10,15 +10,15 @@ const driverUrl = new URL('./build-release.mjs', import.meta.url).href;
 const json = (value) => `${JSON.stringify(value)}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
-function fixture(t, probe = '', parts = []) {
+function fixture(t, probe = '', archive = null) {
 	const parent = mkdtempSync(join(tmpdir(), 'stogas-catalog-isolation-'));
 	t.after(() => rmSync(parent, { recursive: true, force: true }));
 	const root = join(parent, 'catalog');
 	mkdirSync(root);
 	const publicBytes = json({
-		schema: 'stogas.catalog.public.v3',
-		graph: {},
-		parts: parts.map((part) => ({ sha256: digest(part), size: Buffer.byteLength(part) }))
+		schema: 'stogas.catalog.public.v7',
+		archive: archive && { sha256: digest(archive), size: Buffer.byteLength(archive) },
+		graph: {}
 	});
 	const canary = `test-publication-canary-${randomUUID()}`;
 	const secretFile = join(parent, 'publisher-secret');
@@ -36,14 +36,14 @@ function fixture(t, probe = '', parts = []) {
 		`
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 const runtime = { schema: 'stogas.catalog.runtime.v3', graph: {}, publicDigest: ${JSON.stringify(`sha256:${digest(publicBytes)}`)}, containerId: hostname() };
 mkdirSync('generated', { recursive: true });
 writeFileSync('generated/catalog.runtime.json', JSON.stringify(runtime));
 writeFileSync('generated/catalog.public.json', ${JSON.stringify(publicBytes)});
-mkdirSync('generated/catalog.public.parts', { recursive: true });
-for (const [name, part] of ${JSON.stringify(parts.map((part) => [`${digest(part)}.json`, part]))}) writeFileSync('generated/catalog.public.parts/' + name, part);
+const archive = ${JSON.stringify(archive)};
+if (archive) writeFileSync('generated/catalog.archive.json', archive);
 const secretFile = ${JSON.stringify(secretFile)};
 const canary = ${JSON.stringify(canary)};
 ${probe}
@@ -146,23 +146,26 @@ helper.unref();
 	}
 );
 
-test('installs the parts that the root lists and removes the others', { timeout: 900_000 }, (t) => {
-	const parts = ['{"part":1}\n', '{"part":2}\n'];
-	const source = fixture(t, '', parts);
-	const installed = join(source.root, 'generated/catalog.public.parts');
-	mkdirSync(installed, { recursive: true });
-	writeFileSync(join(installed, `${'0'.repeat(64)}.json`), '{"stale":true}\n');
-	const result = build(source);
-	assert.equal(result.status, 0, result.stderr);
-	assert.deepEqual(
-		readdirSync(installed).sort(),
-		parts.map((part) => `${digest(part)}.json`).sort()
-	);
-	for (const part of parts)
-		assert.equal(readFileSync(join(installed, `${digest(part)}.json`), 'utf8'), part);
-});
+test(
+	'installs the archive that the public catalog names, and removes one it no longer names',
+	{ timeout: 900_000 },
+	(t) => {
+		const archive = '{"archived":true}\n';
+		const installed = (source) => join(source.root, 'generated/catalog.archive.json');
+		const named = fixture(t, '', archive);
+		assert.equal(build(named).status, 0);
+		assert.equal(readFileSync(installed(named), 'utf8'), archive);
 
-for (const [name, probe, message, parts = []] of [
+		const unnamed = fixture(t);
+		mkdirSync(join(unnamed.root, 'generated'));
+		writeFileSync(installed(unnamed), '{"stale":true}\n');
+		const result = build(unnamed);
+		assert.equal(result.status, 0, result.stderr);
+		assert.equal(existsSync(installed(unnamed)), false);
+	}
+);
+
+for (const [name, probe, message, archive = null] of [
 	[
 		'symlink',
 		"rmSync('generated/catalog.runtime.json'); symlinkSync('/etc/hostname', 'generated/catalog.runtime.json');",
@@ -170,7 +173,7 @@ for (const [name, probe, message, parts = []] of [
 	],
 	[
 		'oversized artifact',
-		"truncateSync('generated/catalog.runtime.json', 16 * 1024 * 1024 + 1);",
+		"truncateSync('generated/catalog.runtime.json', 32 * 1024 * 1024 + 1);",
 		/ENOBUFS/
 	],
 	[
@@ -179,20 +182,20 @@ for (const [name, probe, message, parts = []] of [
 		/does not commit to the public catalog/
 	],
 	[
-		'changed part',
-		"for (const name of readdirSync('generated/catalog.public.parts')) writeFileSync('generated/catalog.public.parts/' + name, '{}');",
-		/part [0-9a-f]{64} differs from the root/,
-		['{"part":1}\n']
+		'changed archive',
+		"writeFileSync('generated/catalog.archive.json', '{}');",
+		/archive differs from the public catalog/,
+		'{"archived":true}\n'
 	],
 	[
-		'missing part',
-		"rmSync('generated/catalog.public.parts', { recursive: true });",
+		'missing archive',
+		"rmSync('generated/catalog.archive.json');",
 		/docker failed/,
-		['{"part":1}\n']
+		'{"archived":true}\n'
 	]
 ]) {
 	test(`rejects ${name} before installing any build output`, { timeout: 900_000 }, (t) => {
-		const source = fixture(t, probe, parts);
+		const source = fixture(t, probe, archive);
 		mkdirSync(join(source.root, 'generated'));
 		const previous = '{"previous":true}\n';
 		writeFileSync(join(source.root, 'generated/catalog.runtime.json'), previous);

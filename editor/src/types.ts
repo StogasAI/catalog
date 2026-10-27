@@ -13,8 +13,8 @@ export type CatalogGraph = {
 	deployments: Record<string, Record<string, unknown>>;
 };
 
-// The editor shows the base graph of the whole catalog, its root with every part; each node's
-// dated periods appear in its source.
+// The editor shows the base graph of the catalog with each archived record as it was on its last
+// day; each node's dated periods appear in its source.
 export type Catalog = {
 	schema: typeof PUBLIC_CATALOG_SCHEMA;
 	graph: CatalogGraph;

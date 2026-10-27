@@ -1,5 +1,10 @@
 type ReleaseArtifact = { sha256: string; size_bytes: number };
 
+/** The largest size of each artifact that a release names, in bytes. */
+export const CATALOG_ARTIFACT_LIMITS: Readonly<
+	Record<'catalog.public.json' | 'catalog.runtime.json', number>
+>;
+
 /** The staging build proof for a catalog release manifest and its two artifacts. */
 export function stagingDevelopmentProvenance(manifest: {
 	artifacts: Record<'catalog.public.json' | 'catalog.runtime.json', ReleaseArtifact>;

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import {
 	chmodSync,
 	cpSync,
@@ -432,26 +433,39 @@ exit 1
 			'  pricing:\n'
 		].join('\n');
 
-	test('checks every part and removes parts that the root no longer lists', () => {
+	test('writes, checks and removes the archive as its date moves', () => {
 		const root = catalogCopy();
-		const parts = join(root, 'generated/catalog.public.parts');
-		const [first] = readPublicCatalog(join(root, 'generated')).root.parts;
-		const firstPath = join(parts, `${first!.sha256}.json`);
-		const firstJson = readFileSync(firstPath, 'utf8');
-		const stale = join(parts, `${'0'.repeat(64)}.json`);
+		const policyPath = join(root, 'source/release-policy.json');
+		const policy = readFileSync(policyPath, 'utf8');
+		const archivePath = join(root, 'generated/catalog.archive.json');
+		const active = readPublicCatalog(join(root, 'generated')).catalog;
+		const retiring = Object.entries(active.graph.deployments)
+			.filter(([, { retirementDate }]) => retirementDate === '2027-09-01')
+			.map(([id]) => id);
+		expect(retiring.length).toBeGreaterThan(0);
 
-		writeFileSync(stale, '{}\n');
+		writeFileSync(
+			policyPath,
+			policy.replace(/"archive_through": "[^"]+"/, '"archive_through": "2027-09-01"')
+		);
 		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		rmSync(stale);
-		writeFileSync(firstPath, firstJson.replace('"modelId"', '"modelId" '));
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		rmSync(firstPath);
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-
-		writeFileSync(stale, '{}\n');
 		expectBuildSuccess(runBuild(root));
-		expect(existsSync(stale)).toBe(false);
-		expect(readFileSync(firstPath, 'utf8')).toBe(firstJson);
+		const { catalog, archive } = readPublicCatalog(join(root, 'generated'));
+		const bytes = readFileSync(archivePath);
+		expect(catalog.archive).toEqual({
+			sha256: createHash('sha256').update(bytes).digest('hex'),
+			size: bytes.byteLength
+		});
+		expect(Object.keys(archive!.graph.deployments).sort()).toEqual(retiring.sort());
+		for (const id of retiring) expect(catalog.graph.deployments[id]).toBeUndefined();
+		expectBuildSuccess(runBuild(root, ['--check']));
+		writeFileSync(archivePath, bytes.toString('utf8').replace('"modelId"', '"modelId" '));
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+
+		writeFileSync(policyPath, policy);
+		expectBuildSuccess(runBuild(root));
+		expect(existsSync(archivePath)).toBe(false);
+		expect(readPublicCatalog(join(root, 'generated')).catalog).toEqual(active);
 		expectBuildSuccess(runBuild(root, ['--check']));
 	});
 
@@ -473,14 +487,7 @@ exit 1
 					.pricing.input_tokens.per_mill_tokens
 			).toBe('2');
 		}
-		// A price leaves the deployment's summary alone, so only its part lists the change; the root
-		// still names both starts.
-		expect(publicCatalog.root.schedule).toEqual(starts.map((start) => ({ start, graph: {} })));
-		const { part } = publicCatalog.root.graph.deployments['openai-gpt-5.6-sol'];
-		expect(publicCatalog.parts.map(({ schedule }) => schedule.map(({ start }) => start))).toEqual(
-			publicCatalog.parts.map((_, index) => (index === part ? [starts[0]] : []))
-		);
-		expect(publicCatalog.root.periods).toEqual([
+		expect(publicCatalog.catalog.periods).toEqual([
 			{
 				kind: 'deployments',
 				id: 'openai-gpt-5.6-sol',

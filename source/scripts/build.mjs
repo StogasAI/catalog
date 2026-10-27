@@ -16,12 +16,11 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
-import { PUBLIC_CATALOG_SCHEMA } from './public-catalog.mjs';
-import { partitionPublicCatalog } from './public-parts.mjs';
+import { CATALOG_ARCHIVE_SCHEMA, PUBLIC_CATALOG_SCHEMA } from './public-catalog.mjs';
 import {
-	CATALOG_PARTS_DIRECTORY,
-	checkCatalogArtifactSize,
-	checkCatalogPublicSize
+	CATALOG_ARCHIVE_FILE,
+	catalogReleasePolicy,
+	checkCatalogArtifactSize
 } from './release-format.mjs';
 import { ancestorGroupIds, orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
@@ -32,7 +31,7 @@ const repositoryRoot = join(sourceRoot, '..');
 const generatedRoot = join(repositoryRoot, 'generated');
 const runtimePath = join(generatedRoot, 'catalog.runtime.json');
 const publicPath = join(generatedRoot, 'catalog.public.json');
-const partsRoot = join(generatedRoot, CATALOG_PARTS_DIRECTORY);
+const archivePath = join(generatedRoot, CATALOG_ARCHIVE_FILE);
 const tempBuildRoot = join(sourceRoot, '.tmp-catalog-build');
 const cueVersion = 'v0.16.1';
 const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
@@ -634,7 +633,7 @@ function validateDocumentFormats(value, owner) {
 	}
 }
 
-export function buildCatalogs(source) {
+export function buildCatalogs(source, archiveThrough) {
 	for (const [kind, nodes] of Object.entries(source.graph)) {
 		for (const id of Object.keys(nodes)) validateNodeId(id, kind);
 	}
@@ -647,20 +646,112 @@ export function buildCatalogs(source) {
 		addScheduleEntry(runtimeSchedule, state.start, compiled.runtime, stateCompiled.runtime);
 		addScheduleEntry(publicSchedule, state.start, compiled.public, stateCompiled.public);
 	}
+	const archived = archivedNodes(
+		{ graph: compiled.public, schedule: publicSchedule },
+		archiveThrough
+	);
+	const isArchived = (kind, id) => Object.hasOwn(archived[kind] ?? {}, id);
+	const deploymentDates = Object.fromEntries(
+		Object.keys(archived.deployments).map((id) => [
+			id,
+			compiled.public.deployments[id].retirementDate
+		])
+	);
 	return {
 		runtime: {
-			schema: 'stogas.catalog.runtime.v5',
-			graph: compiled.runtime,
-			schedule: runtimeSchedule
+			schema: 'stogas.catalog.runtime.v6',
+			graph: withoutArchived(compiled.runtime, archived),
+			schedule: activeSchedule(runtimeSchedule, archived),
+			// Requests that name an archived deployment or model learn when it retired.
+			retired: {
+				deployments: deploymentDates,
+				models: Object.fromEntries(
+					Object.keys(archived.models).map((id) => [id, lastRetirement(compiled.public, id)])
+				)
+			}
 		},
-		// The whole public catalog, which the build splits into its root and parts.
+		// The build adds the archive's digest, or null while no record has moved there.
 		public: {
 			schema: PUBLIC_CATALOG_SCHEMA,
-			graph: compiled.public,
-			schedule: publicSchedule,
-			periods
-		}
+			graph: withoutArchived(compiled.public, archived),
+			schedule: activeSchedule(publicSchedule, archived),
+			periods: periods.filter(({ kind, id }) => !isArchived(kind, id))
+		},
+		archive: Object.keys(archived.deployments).length
+			? { schema: CATALOG_ARCHIVE_SCHEMA, graph: archived }
+			: null
 	};
+}
+
+/**
+ * The deployments that retired on or before `archiveThrough`, and the models whose deployments
+ * all did, each as it stood the day before it retired. A model without deployments stays, because
+ * it is listed on purpose.
+ */
+function archivedNodes(catalog, archiveThrough) {
+	const { deployments } = catalog.graph;
+	const before = (date) => Date.parse(`${date}T00:00:00Z`) - 1;
+	const archived = { deployments: {}, models: {} };
+	for (const [id, { retirementDate }] of Object.entries(deployments))
+		if (retirementDate !== null && retirementDate <= archiveThrough)
+			archived.deployments[id] = nodeAt(catalog, 'deployments', id, before(retirementDate));
+	const modelDeployments = Map.groupBy(Object.entries(deployments), ([, { modelId }]) => modelId);
+	for (const [modelId, entries] of modelDeployments)
+		if (entries.every(([id]) => Object.hasOwn(archived.deployments, id)))
+			archived.models[modelId] = nodeAt(
+				catalog,
+				'models',
+				modelId,
+				before(lastRetirement(catalog.graph, modelId))
+			);
+	return archived;
+}
+
+/** The day that a model retired: the retirement of its last deployment. */
+function lastRetirement(graph, modelId) {
+	return Object.values(graph.deployments)
+		.filter((deployment) => deployment.modelId === modelId)
+		.map(({ retirementDate }) => retirementDate)
+		.sort()
+		.at(-1);
+}
+
+/** A node as the latest schedule entry that started by an instant has it. */
+function nodeAt({ graph, schedule }, kind, id, at) {
+	let node = graph[kind][id];
+	for (const entry of schedule) {
+		if (Date.parse(entry.start) > at) break;
+		node = entry.graph[kind]?.[id] ?? graph[kind][id];
+	}
+	return node;
+}
+
+function withoutArchived(graph, archived) {
+	return Object.fromEntries(
+		Object.entries(graph).map(([kind, nodes]) => [
+			kind,
+			archived[kind]
+				? Object.fromEntries(
+						Object.entries(nodes).filter(([id]) => !Object.hasOwn(archived[kind], id))
+					)
+				: nodes
+		])
+	);
+}
+
+// Without the archived nodes, an entry can describe the same state as the one before it, or the
+// base graph; neither is kept.
+function activeSchedule(schedule, archived) {
+	const active = [];
+	for (const { start, graph } of schedule) {
+		const kept = Object.fromEntries(
+			Object.entries(withoutArchived(graph, archived)).filter(
+				([, nodes]) => Object.keys(nodes).length
+			)
+		);
+		if (!same(kept, active.at(-1)?.graph ?? {})) active.push({ start, graph: kept });
+	}
+	return active;
 }
 
 // An entry lists every node that differs from the base graph, so a reader needs only the
@@ -1217,11 +1308,10 @@ export async function main(argv = process.argv.slice(2)) {
 		return;
 	}
 
-	for (const directory of [generatedRoot, partsRoot]) {
-		if (!existsSync(directory)) continue;
-		const stats = lstatSync(directory);
+	if (existsSync(generatedRoot)) {
+		const stats = lstatSync(generatedRoot);
 		if (stats.isSymbolicLink() || !stats.isDirectory()) {
-			throw new Error(`${relative(repositoryRoot, directory)} must be a regular directory`);
+			throw new Error(`${relative(repositoryRoot, generatedRoot)} must be a regular directory`);
 		}
 	}
 
@@ -1258,36 +1348,35 @@ export async function main(argv = process.argv.slice(2)) {
 				});
 			})
 		);
-		const catalogs = buildCatalogs(source);
-		const { root, parts } = partitionPublicCatalog(catalogs.public);
-		const publicJson = canonicalJson(root);
-		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
+		const { archive_through: archiveThrough } = catalogReleasePolicy(repositoryRoot);
+		const catalogs = buildCatalogs(source, archiveThrough);
+		const archiveJson = catalogs.archive && canonicalJson(catalogs.archive);
+		const sha256 = (json) => createHash('sha256').update(json).digest('hex');
+		catalogs.public.archive = archiveJson && {
+			sha256: sha256(archiveJson),
+			size: Buffer.byteLength(archiveJson)
+		};
+		const publicJson = canonicalJson(catalogs.public);
+		catalogs.runtime.publicDigest = `sha256:${sha256(publicJson)}`;
 		const runtimeJson = canonicalJson(catalogs.runtime);
 		checkCatalogArtifactSize('catalog.runtime.json', Buffer.byteLength(runtimeJson));
 		checkCatalogArtifactSize('catalog.public.json', Buffer.byteLength(publicJson));
-		checkCatalogPublicSize(
-			Buffer.byteLength(publicJson),
-			parts.map(({ size }) => size)
-		);
-		const partFiles = new Map(parts.map(({ json, sha256 }) => [`${sha256}.json`, json]));
+		if (archiveJson) checkCatalogArtifactSize(CATALOG_ARCHIVE_FILE, Buffer.byteLength(archiveJson));
 
 		if (!args.has('--validate-only')) {
 			if (args.has('--check')) {
 				const current = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
-				const currentParts = existsSync(partsRoot) ? readdirSync(partsRoot).sort() : [];
 				if (
 					current(runtimePath) !== runtimeJson ||
 					current(publicPath) !== publicJson ||
-					currentParts.join('\n') !== [...partFiles.keys()].sort().join('\n') ||
-					currentParts.some((name) => current(join(partsRoot, name)) !== partFiles.get(name))
+					current(archivePath) !== archiveJson
 				) {
 					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
 				}
 			} else {
-				mkdirSync(partsRoot, { recursive: true });
-				for (const [name, json] of partFiles) writeIfChanged(join(partsRoot, name), json);
-				for (const name of readdirSync(partsRoot))
-					if (!partFiles.has(name)) rmSync(join(partsRoot, name));
+				mkdirSync(generatedRoot, { recursive: true });
+				if (archiveJson) writeIfChanged(archivePath, archiveJson);
+				else rmSync(archivePath, { force: true });
 				writeIfChanged(runtimePath, runtimeJson);
 				writeIfChanged(publicPath, publicJson);
 			}

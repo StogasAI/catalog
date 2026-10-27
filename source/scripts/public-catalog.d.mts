@@ -1,44 +1,31 @@
-export const PUBLIC_CATALOG_SCHEMA: 'stogas.catalog.public.v6';
-export const PUBLIC_CATALOG_PART_SCHEMA: 'stogas.catalog.public.part.v6';
-export const PUBLIC_CATALOG_ROOT_LIMIT: number;
-export const PUBLIC_CATALOG_PART_LIMIT: number;
+export const PUBLIC_CATALOG_SCHEMA: 'stogas.catalog.public.v7';
+export const CATALOG_ARCHIVE_SCHEMA: 'stogas.catalog.archive.v1';
 export const PUBLIC_CATALOG_LIMIT: number;
-
-/** What the root keeps of a deployment. */
-export type PublicDeploymentSummary = {
-	modelId: string;
-	part: number;
-	retirementDate: string | null;
-	routeIds: string[];
-};
+export const CATALOG_ARCHIVE_LIMIT: number;
 
 type Nodes = Record<string, object>;
-type DeploymentRecord = { modelId: string; retirementDate: string | null; routes: Nodes };
 
-export type PublicCatalogRoot = {
+/** What the public catalog names its archive by, or `null` while the archive is empty. */
+export type CatalogArchiveReference = { sha256: string; size: number } | null;
+
+export type PublicCatalog = {
 	schema: typeof PUBLIC_CATALOG_SCHEMA;
-	graph: { [kind: string]: Nodes; deployments: Record<string, PublicDeploymentSummary> };
-	parts: { sha256: string; size: number }[];
+	archive: CatalogArchiveReference;
+	graph: { deployments: Nodes; models: Nodes; [kind: string]: Nodes };
 	periods: object[];
 	schedule: { start: string; graph: { [kind: string]: Nodes } }[];
 };
 
-export type PublicCatalogPart = {
-	schema: typeof PUBLIC_CATALOG_PART_SCHEMA;
-	deployments: Record<string, DeploymentRecord>;
-	schedule: { start: string; deployments: Record<string, DeploymentRecord> }[];
+export type CatalogArchive = {
+	schema: typeof CATALOG_ARCHIVE_SCHEMA;
+	graph: { deployments: Nodes; models: Nodes };
 };
 
-export function deploymentSummary(
-	deployment: DeploymentRecord,
-	part: number
-): PublicDeploymentSummary;
-
 /**
- * The whole catalog from a root and its parts, in the root's order, with each deployment's
- * record as its part holds it. `Catalog` names the caller's own types for the result.
+ * The catalog with the archived deployments and models beside the others. `Catalog` names the
+ * caller's own catalog type.
  */
-export function assemblePublicCatalog<Catalog = PublicCatalogRoot>(
-	root: PublicCatalogRoot,
-	parts: readonly PublicCatalogPart[]
+export function withArchive<Catalog extends { graph: { deployments: Nodes; models: Nodes } }>(
+	catalog: Catalog,
+	archive: CatalogArchive
 ): Catalog;

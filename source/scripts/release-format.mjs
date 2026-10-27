@@ -4,40 +4,23 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { canonicalJson } from './canonical-json.mjs';
-import {
-	PUBLIC_CATALOG_LIMIT,
-	PUBLIC_CATALOG_PART_LIMIT,
-	PUBLIC_CATALOG_ROOT_LIMIT
-} from './public-catalog.mjs';
+import { CATALOG_ARCHIVE_LIMIT, PUBLIC_CATALOG_LIMIT } from './public-catalog.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
 /** Gateways and Web reject larger artifacts, so the build and every release step do too. */
 export const CATALOG_ARTIFACT_LIMITS = Object.freeze({
-	'catalog.public.json': PUBLIC_CATALOG_ROOT_LIMIT,
-	'catalog.runtime.json': 16 * 1024 * 1024
+	'catalog.public.json': PUBLIC_CATALOG_LIMIT,
+	'catalog.runtime.json': 32 * 1024 * 1024
 });
-/** Where the build writes the parts of the public catalog, each named by its SHA-256. */
-export const CATALOG_PARTS_DIRECTORY = 'catalog.public.parts';
+/** The archive, which the public catalog names by digest instead of the release manifest. */
+export const CATALOG_ARCHIVE_FILE = 'catalog.archive.json';
 
 /** Rejects an artifact over its limit and warns once it passes three quarters of it. */
 export function checkCatalogArtifactSize(name, bytes) {
-	const limit = CATALOG_ARTIFACT_LIMITS[name];
+	const limit =
+		name === CATALOG_ARCHIVE_FILE ? CATALOG_ARCHIVE_LIMIT : CATALOG_ARTIFACT_LIMITS[name];
 	if (!limit) throw new Error(`${name} is not a catalog artifact.`);
-	checkSize(name, bytes, limit);
-}
-
-/** Rejects a part over its limit, and the public catalog over its limit with every part. */
-export function checkCatalogPublicSize(rootBytes, partSizes) {
-	for (const size of partSizes) checkSize('A public catalog part', size, PUBLIC_CATALOG_PART_LIMIT);
-	checkSize(
-		'The public catalog with its parts',
-		partSizes.reduce((total, size) => total + size, rootBytes),
-		PUBLIC_CATALOG_LIMIT
-	);
-}
-
-function checkSize(name, bytes, limit) {
 	if (bytes > limit) throw new Error(`${name} is ${bytes} bytes; the limit is ${limit}.`);
 	if (bytes > limit * 0.75) {
 		const message = `${name} is ${bytes} bytes, ${Math.floor((bytes / limit) * 100)}% of its ${limit / 1024 / 1024} MiB limit. Releases fail above the limit.`;
@@ -49,44 +32,34 @@ function checkSize(name, bytes, limit) {
 	}
 }
 
-/** The parts that a public catalog root lists, each by SHA-256 and size. */
-export function catalogPublicParts(rootBytes) {
-	const root = JSON.parse(Buffer.from(rootBytes).toString('utf8'));
-	const seen = new Set();
+/** The archive that a public catalog names by SHA-256 and size, or null when it names none. */
+export function catalogArchiveReference(publicBytes) {
+	const { archive } = JSON.parse(Buffer.from(publicBytes).toString('utf8')) ?? {};
+	if (archive === null) return null;
 	if (
-		!Array.isArray(root?.parts) ||
-		!root.parts.every(
-			(part) =>
-				hasKeys(part, ['sha256', 'size']) &&
-				/^[0-9a-f]{64}$/.test(part.sha256) &&
-				!seen.has(part.sha256) &&
-				seen.add(part.sha256) &&
-				Number.isSafeInteger(part.size) &&
-				part.size > 0 &&
-				part.size <= PUBLIC_CATALOG_PART_LIMIT
-		)
+		!hasKeys(archive, ['sha256', 'size']) ||
+		!/^[0-9a-f]{64}$/.test(archive.sha256) ||
+		!Number.isSafeInteger(archive.size) ||
+		archive.size < 1 ||
+		archive.size > CATALOG_ARCHIVE_LIMIT
 	)
-		throw new Error('The public catalog lists an invalid part.');
-	checkCatalogPublicSize(
-		Buffer.byteLength(rootBytes),
-		root.parts.map(({ size }) => size)
-	);
-	return root.parts;
+		throw new Error('The public catalog names an invalid archive.');
+	return archive;
 }
 
-/** The build's parts of the public catalog, each checked against the root that lists it. */
-export function catalogPartArtifacts(repositoryRoot) {
-	return catalogPublicParts(catalogArtifact(repositoryRoot, 'catalog.public.json').bytes).map(
-		({ sha256: digest, size }) => {
-			const path = join(repositoryRoot, 'generated', CATALOG_PARTS_DIRECTORY, `${digest}.json`);
-			const stats = lstatSync(path);
-			if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== size)
-				throw new Error(`Public catalog part ${digest} is not a regular file of its size.`);
-			const bytes = readFileSync(path);
-			if (sha256(bytes) !== digest) throw new Error(`Public catalog part ${digest} differs.`);
-			return { bytes, sha256: digest };
-		}
+/** The build's archive, checked against the public catalog that names it, or null. */
+export function catalogArchiveArtifact(repositoryRoot) {
+	const reference = catalogArchiveReference(
+		catalogArtifact(repositoryRoot, 'catalog.public.json').bytes
 	);
+	if (!reference) return null;
+	const path = join(repositoryRoot, 'generated', CATALOG_ARCHIVE_FILE);
+	const stats = lstatSync(path);
+	if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== reference.size)
+		throw new Error('The catalog archive is not a regular file of its size.');
+	const bytes = readFileSync(path);
+	if (sha256(bytes) !== reference.sha256) throw new Error('The catalog archive differs.');
+	return { bytes, digest: `sha256:${reference.sha256}` };
 }
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
@@ -173,13 +146,15 @@ export function catalogReleasePolicy(repositoryRoot) {
 		throw new Error(`Catalog release policy is invalid: ${error.message}`, { cause: error });
 	}
 	if (
-		!value ||
-		typeof value !== 'object' ||
-		Array.isArray(value) ||
-		Object.keys(value).join(',') !== 'minimum_gateway_release' ||
-		typeof value.minimum_gateway_release !== 'string'
+		!hasKeys(value, ['archive_through', 'minimum_gateway_release']) ||
+		typeof value.minimum_gateway_release !== 'string' ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(value.archive_through) ||
+		new Date(`${value.archive_through}T00:00:00Z`).toISOString().slice(0, 10) !==
+			value.archive_through
 	) {
-		throw new Error('Catalog release policy must contain only minimum_gateway_release.');
+		throw new Error(
+			'Catalog release policy must contain only archive_through, a date, and minimum_gateway_release.'
+		);
 	}
 	gatewayReleaseSequence(value.minimum_gateway_release);
 	return value;
@@ -311,8 +286,8 @@ function gitBytes(repositoryRoot, args, input) {
 		cwd: repositoryRoot,
 		env: minimalProcessEnvironment(),
 		input,
-		// The tracked generated artifacts take at most 48 MiB, and the source is far smaller.
-		maxBuffer: 96 * 1024 * 1024,
+		// The tracked generated artifacts take at most 96 MiB, and the source is far smaller.
+		maxBuffer: 160 * 1024 * 1024,
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 }

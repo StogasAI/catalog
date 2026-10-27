@@ -177,21 +177,17 @@ describe('catalog release metadata', () => {
 		const warn = spyOn(console, 'warn').mockImplementation(() => {});
 		try {
 			const mib = 1024 * 1024;
-			checkCatalogArtifactSize('catalog.public.json', 6 * mib);
-			checkCatalogArtifactSize('catalog.runtime.json', 12 * mib);
+			const names = ['catalog.public.json', 'catalog.runtime.json', 'catalog.archive.json'];
+			for (const name of names) checkCatalogArtifactSize(name, 24 * mib);
 			expect(warn).not.toHaveBeenCalled();
-			checkCatalogArtifactSize('catalog.public.json', 6 * mib + 1);
+			checkCatalogArtifactSize('catalog.public.json', 24 * mib + 1);
 			expect(warn.mock.calls[0]?.[0]).toContain(
-				'catalog.public.json is 6291457 bytes, 75% of its 8 MiB limit.'
+				'catalog.public.json is 25165825 bytes, 75% of its 32 MiB limit.'
 			);
-			checkCatalogArtifactSize('catalog.runtime.json', 16 * mib);
-			expect(warn.mock.calls[1]?.[0]).toContain('100% of its 16 MiB limit.');
-			expect(() => checkCatalogArtifactSize('catalog.public.json', 8 * mib + 1)).toThrow(
-				'the limit is 8388608'
-			);
-			expect(() => checkCatalogArtifactSize('catalog.runtime.json', 16 * mib + 1)).toThrow(
-				'the limit is 16777216'
-			);
+			checkCatalogArtifactSize('catalog.archive.json', 32 * mib);
+			expect(warn.mock.calls[1]?.[0]).toContain('100% of its 32 MiB limit.');
+			for (const name of names)
+				expect(() => checkCatalogArtifactSize(name, 32 * mib + 1)).toThrow('the limit is 33554432');
 			expect(() => checkCatalogArtifactSize('catalog.json', 1)).toThrow('not a catalog artifact');
 			expect(warn).toHaveBeenCalledTimes(2);
 		} finally {
@@ -211,8 +207,8 @@ describe('catalog release metadata', () => {
 			);
 			expect(result.exitCode).toBe(0);
 
-			// Control lists the approval in signed evidence, so only the artifacts and the parts that
-			// the public root lists are published.
+			// Control lists the approval in signed evidence, so only the artifacts and the archive
+			// that the public catalog names are published.
 			expect(readdirSync(output).sort()).toEqual(['SHA256SUMS', 'blobs', 'catalog-approval.json']);
 			const envelopeBytes = readFileSync(join(output, 'catalog-approval.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
@@ -235,23 +231,16 @@ describe('catalog release metadata', () => {
 					readFileSync(join('generated', name)).byteLength
 				);
 			}
-			const parts = JSON.parse(readFileSync('generated/catalog.public.json', 'utf8')).parts;
-			expect(parts.length).toBeGreaterThan(0);
+			// The checkout's catalog names no archive; the repair tests add one.
 			expect(readdirSync(join(output, 'blobs/sha256')).sort()).toEqual(
 				[
 					envelope.document.artifacts['catalog.runtime.json'].sha256,
-					envelope.document.artifacts['catalog.public.json'].sha256,
-					...parts.map(({ sha256 }: { sha256: string }) => sha256)
+					envelope.document.artifacts['catalog.public.json'].sha256
 				]
 					.map((digest) => `${digest}.json`)
 					.sort()
 			);
-			const sums = readFileSync(join(output, 'SHA256SUMS'), 'utf8').trim().split('\n');
-			expect(sums).toHaveLength(parts.length + 3);
-			for (const { sha256, size } of parts) {
-				expect(sums).toContain(`${sha256}  blobs/sha256/${sha256}.json`);
-				expect(readFileSync(join(output, 'blobs/sha256', `${sha256}.json`)).byteLength).toBe(size);
-			}
+			expect(readFileSync(join(output, 'SHA256SUMS'), 'utf8').trim().split('\n')).toHaveLength(3);
 			const source = envelope.document.source;
 			const sized = (name: string, size_bytes: number) => ({
 				...envelope,
@@ -263,11 +252,11 @@ describe('catalog release metadata', () => {
 					}
 				}
 			});
-			parseCatalogReleaseEvidence(sized('catalog.public.json', 8 * 1024 * 1024));
-			parseCatalogReleaseEvidence(sized('catalog.runtime.json', 16 * 1024 * 1024));
+			parseCatalogReleaseEvidence(sized('catalog.public.json', 32 * 1024 * 1024));
+			parseCatalogReleaseEvidence(sized('catalog.runtime.json', 32 * 1024 * 1024));
 			for (const changed of [
-				sized('catalog.public.json', 8 * 1024 * 1024 + 1),
-				sized('catalog.runtime.json', 16 * 1024 * 1024 + 1),
+				sized('catalog.public.json', 32 * 1024 * 1024 + 1),
+				sized('catalog.runtime.json', 32 * 1024 * 1024 + 1),
 				{ ...envelope, schema: 'extra' },
 				{ ...envelope, signature: { key_id: 'key', signature: 'AA' } },
 				{ ...envelope, provenance: [proof] },
@@ -349,23 +338,30 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 		);
 	}
 
-	/** The release's approval and the public root that it names. */
-	function approved(release: string) {
+	/**
+	 * Gives the release's public catalog `archive` as its reference, and an archive blob unless it
+	 * names none, as a build does once a record retires. Returns the archive blob's name.
+	 */
+	function archived(release: string, archive?: unknown) {
 		const approval = JSON.parse(readFileSync(join(release, 'catalog-approval.json'), 'utf8'));
 		const artifact = approval.document.artifacts['catalog.public.json'];
-		const root = JSON.parse(
-			readFileSync(join(release, 'blobs/sha256', `${artifact.sha256}.json`), 'utf8')
-		);
-		return { approval, artifact, root };
-	}
-
-	/** Turns the release into one from before the public catalog had parts. */
-	function withoutParts(release: string) {
-		const { approval, artifact, root: rootWithParts } = approved(release);
-		const { parts, ...root } = rootWithParts;
 		const blobs = join(release, 'blobs/sha256');
-		for (const { sha256 } of [artifact, ...parts]) rmSync(join(blobs, `${sha256}.json`));
-		const bytes = Buffer.from(JSON.stringify({ ...root, schema: 'stogas.catalog.public.v5' }));
+		const catalog = JSON.parse(readFileSync(join(blobs, `${artifact.sha256}.json`), 'utf8'));
+		const archiveBytes = Buffer.from(
+			JSON.stringify({
+				schema: 'stogas.catalog.archive.v1',
+				graph: { deployments: {}, models: {} }
+			})
+		);
+		const name = `${digest(archiveBytes)}.json`;
+		writeFileSync(join(blobs, name), archiveBytes);
+		rmSync(join(blobs, `${artifact.sha256}.json`));
+		const bytes = Buffer.from(
+			JSON.stringify({
+				...catalog,
+				archive: archive ?? { sha256: digest(archiveBytes), size: archiveBytes.byteLength }
+			})
+		);
 		writeFileSync(join(blobs, `${digest(bytes)}.json`), bytes);
 		approval.document.artifacts['catalog.public.json'] = {
 			...artifact,
@@ -374,6 +370,7 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 		};
 		writeFileSync(join(release, 'catalog-approval.json'), JSON.stringify(approval));
 		writeSums(release);
+		return name;
 	}
 
 	function repair(root: string) {
@@ -416,22 +413,26 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 	}
 
 	test('publishes exactly the blobs that a release names', () => {
-		const { root, release, blobs } = fixture();
-		try {
-			const { parts } = approved(release).root;
-			expect(parts.length).toBeGreaterThan(0);
-			const result = repair(root);
-			expect(result.stderr).toBe('');
-			expect(result.exitCode).toBe(0);
-			expect(result.stored).toEqual(keys(blobs));
-			expect(result.stored).toHaveLength(2 * (2 + parts.length));
-		} finally {
-			rmSync(root, { recursive: true, force: true });
+		for (const [withArchive, count] of [
+			[false, 2],
+			[true, 3]
+		] as const) {
+			const { root, release, blobs } = fixture();
+			try {
+				if (withArchive) archived(release);
+				const result = repair(root);
+				expect(result.stderr).toBe('');
+				expect(result.exitCode).toBe(0);
+				expect(result.stored).toEqual(keys(blobs));
+				expect(result.stored).toHaveLength(2 * count);
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
 		}
 	});
 
 	test('publishes nothing when the blobs differ from what the release names', () => {
-		const cases: [string, (release: string, blobs: string, part: string) => void, string][] = [
+		const cases: [string, (release: string, blobs: string) => void, string][] = [
 			[
 				'an unlisted blob',
 				(release, blobs) => {
@@ -441,28 +442,31 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 				'exactly the blobs'
 			],
 			[
-				'a missing part',
-				(release, blobs, part) => {
-					rmSync(join(blobs, part));
+				'a missing archive',
+				(release, blobs) => {
+					rmSync(join(blobs, archived(release)));
 					writeSums(release);
 				},
 				'exactly the blobs'
 			],
 			[
-				'a changed part',
-				(release, blobs, part) => {
-					writeFileSync(join(blobs, part), '{}');
+				'a changed archive',
+				(release, blobs) => {
+					writeFileSync(join(blobs, archived(release)), '{}');
 					writeSums(release);
 				},
 				'differs from its approved digest'
 			],
-			['a root without parts', (release) => withoutParts(release), 'invalid part']
+			[
+				'an invalid archive reference',
+				(release) => archived(release, { sha256: 'a'.repeat(64) }),
+				'invalid archive'
+			]
 		];
 		for (const [, change, message] of cases) {
 			const { root, release, blobs } = fixture();
 			try {
-				const { parts } = approved(release).root;
-				change(release, blobs, `${parts[0].sha256}.json`);
+				change(release, blobs);
 				const result = repair(root);
 				expect(result.exitCode).not.toBe(0);
 				expect(result.stderr).toContain(message);

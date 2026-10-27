@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { publicCatalog, publicParts, publicRoot } from './generated-catalog';
+import { publicArchive, publicCatalog } from './generated-catalog';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
@@ -32,7 +32,7 @@ describe('compiled catalog', () => {
 
 	test('binds runtime policy to the public ownership artifact', () => {
 		const expected = `sha256:${createHash('sha256')
-			.update(`${JSON.stringify(publicRoot)}\n`)
+			.update(`${JSON.stringify(publicCatalog)}\n`)
 			.digest('hex')}`;
 		expect(runtimeCatalog.publicDigest).toBe(expected);
 	});
@@ -847,46 +847,18 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps deterministic runtime and public artifacts within their limits', () => {
-		const partSizes = publicRoot.parts.map(({ size }) => size);
-		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
-		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(8 * 1024 * 1024);
-		expect(Math.max(...partSizes)).toBeLessThanOrEqual(1024 * 1024);
-		expect(
-			partSizes.reduce(
-				(total, size) => total + size,
-				Bun.file('generated/catalog.public.json').size
-			)
-		).toBeLessThanOrEqual(32 * 1024 * 1024);
-		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
-		expect(publicRoot.schema).toBe('stogas.catalog.public.v6');
-		expect(publicParts.every(({ schema }) => schema === 'stogas.catalog.public.part.v6')).toBe(
-			true
-		);
+		for (const name of ['catalog.runtime.json', 'catalog.public.json'])
+			expect(Bun.file(`generated/${name}`).size).toBeLessThanOrEqual(32 * 1024 * 1024);
+		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v6');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v7');
 		expect(runtimeCatalog.schedule).toEqual([]);
 		expect(publicCatalog.schedule).toEqual([]);
 	});
 
-	test('keeps only deployment summaries in the public root', () => {
-		const { deployments, ...nodes } = publicRoot.graph;
-		expect(Object.keys(nodes).sort()).toEqual([
-			'authors',
-			'groups',
-			'models',
-			'providers',
-			'routes'
-		]);
-		for (const [kind, records] of Object.entries(nodes))
-			expect(records).toEqual(publicCatalog.graph[kind]);
-		for (const [id, summary] of Object.entries(deployments)) {
-			const { routes } = publicCatalog.graph.deployments[id];
-			expect(Object.keys(summary).sort()).toEqual([
-				'modelId',
-				'part',
-				'retirementDate',
-				'routeIds'
-			]);
-			expect(summary.routeIds).toEqual(Object.keys(routes).sort());
-			expect(Object.hasOwn(publicParts[summary.part].deployments, id)).toBe(true);
-		}
+	test('keeps every record active while none retired by the archive date', () => {
+		// No deployment retires before 2027, so the build writes no archive yet.
+		expect(publicCatalog.archive).toBeNull();
+		expect(publicArchive).toBeNull();
+		expect(runtimeCatalog.retired).toEqual({ deployments: {}, models: {} });
 	});
 });

@@ -615,6 +615,67 @@ describe('catalog source compiler invariants', () => {
 		]);
 	});
 
+	test('archives retired deployments, and models with none left, as they last were', () => {
+		const source = sourceFixture();
+		const deployment = source.graph.deployments['openai-gpt-test'];
+		const { models, deployments } = source.graph;
+		models['gpt-other'] = { ...models['gpt-test'], name: 'GPT Other' };
+		models['gpt-listed'] = { ...models['gpt-test'], name: 'GPT Listed' };
+		deployments['openai-gpt-later'] = {
+			...structuredClone(deployment),
+			upstream: { model: 'gpt-later' },
+			retirementDate: '2026-09-01'
+		};
+		deployments['openai-gpt-other'] = {
+			...structuredClone(deployment),
+			modelId: 'gpt-other',
+			upstream: { model: 'gpt-other' },
+			retirementDate: '2026-05-01'
+		};
+		Object.assign(deployment, { retirementDate: '2026-06-01' });
+		setPeriods(deployment, [
+			{
+				name: 'Last price',
+				start: '2026-05-01T00:00:00Z',
+				set: { 'pricing.input_tokens.per_mill_tokens': '0.5' }
+			}
+		]);
+		const whole = buildCatalogs(source);
+		expect(whole.archive).toBeNull();
+		expect(whole.runtime.retired).toEqual({ deployments: {}, models: {} });
+		expect(buildCatalogs(source, '2026-04-30').archive).toBeNull();
+
+		const { archive, public: publicCatalog, runtime } = buildCatalogs(source, '2026-06-01');
+		const lastState = whole.public.schedule[0].graph.deployments['openai-gpt-test'];
+		expect(lastState.routes['openai-responses'].pricing.input_tokens).toEqual({
+			per_mill_tokens: '0.5'
+		});
+		expect(archive).toEqual({
+			schema: 'stogas.catalog.archive.v1',
+			graph: {
+				deployments: {
+					'openai-gpt-other': whole.public.graph.deployments['openai-gpt-other'],
+					'openai-gpt-test': lastState
+				},
+				models: { 'gpt-other': whole.public.graph.models['gpt-other'] }
+			}
+		});
+		expect(runtime.retired).toEqual({
+			deployments: { 'openai-gpt-other': '2026-05-01', 'openai-gpt-test': '2026-06-01' },
+			models: { 'gpt-other': '2026-05-01' }
+		});
+		// The public catalog lists a model without deployments; the runtime omits it.
+		expect(Object.keys(publicCatalog.graph.models).sort()).toEqual(['gpt-listed', 'gpt-test']);
+		expect(Object.keys(runtime.graph.models)).toEqual(['gpt-test']);
+		for (const catalog of [publicCatalog, runtime]) {
+			expect(Object.keys(catalog.graph.deployments)).toEqual(['openai-gpt-later']);
+			// The only period belonged to an archived deployment.
+			expect(catalog.schedule).toEqual([]);
+		}
+		expect(publicCatalog.periods).toEqual([]);
+		expect(publicCatalog.graph.routes).toEqual(whole.public.graph.routes);
+	});
+
 	testRejections([
 		[
 			'rejects a period that ends when it starts',
@@ -695,6 +756,14 @@ describe('catalog source compiler invariants', () => {
 					{ name: 'Test', start: '2026-11-01T00:00:00Z', set: { modelId: 'other' } }
 				]),
 			'cannot change modelId; add or edit nodes instead'
+		],
+		[
+			'rejects a period that moves a retirement',
+			(source) =>
+				setPeriods(source.graph.deployments['openai-gpt-test'], [
+					{ name: 'Test', start: '2026-11-01T00:00:00Z', set: { retirementDate: '2027-01-01' } }
+				]),
+			'cannot change retirementDate'
 		],
 		[
 			'rejects a period that changes a field and its parent',

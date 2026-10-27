@@ -1,3 +1,4 @@
 {
-	"minimum_gateway_release": "v1.5.115"
+	"archive_through": "2026-10-27",
+	"minimum_gateway_release": "v1.5.116"
 }

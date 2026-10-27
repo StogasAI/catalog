@@ -2,8 +2,9 @@ import { canonicalJson } from './canonical-json.mjs';
 
 const nodeKinds = ['authors', 'groups', 'models', 'providers', 'routes', 'deployments'];
 
-// A period changes facts about a node, never its identity or its edges, so every dated
-// state has the same nodes, selectors and links as the base graph.
+// A period changes facts about a node, never its identity, its edges or when it retires, so
+// every dated state has the same nodes, selectors and links as the base graph, and the archive
+// takes a deployment on one date.
 const structuralFields = new Set([
 	'aliases',
 	'authorId',
@@ -13,6 +14,7 @@ const structuralFields = new Set([
 	'parentIds',
 	'periods',
 	'providerId',
+	'retirementDate',
 	'routeIds'
 ]);
 

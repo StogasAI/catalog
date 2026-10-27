@@ -4,7 +4,6 @@ import {
 	lstatSync,
 	mkdirSync,
 	mkdtempSync,
-	readdirSync,
 	readFileSync,
 	renameSync,
 	rmSync,
@@ -13,11 +12,11 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PUBLIC_CATALOG_LIMIT, PUBLIC_CATALOG_PART_LIMIT } from './public-catalog.mjs';
+import { CATALOG_ARCHIVE_LIMIT } from './public-catalog.mjs';
 import {
+	CATALOG_ARCHIVE_FILE,
 	CATALOG_ARTIFACT_LIMITS,
-	CATALOG_PARTS_DIRECTORY,
-	catalogPublicParts,
+	catalogArchiveReference,
 	checkCatalogArtifactSize,
 	sha256
 } from './release-format.mjs';
@@ -93,15 +92,19 @@ export function buildCatalogRelease(root = repositoryRoot) {
 		if (JSON.parse(runtime).publicDigest !== `sha256:${sha256(publicCatalog)}`) {
 			throw new Error('Isolated runtime does not commit to the public catalog.');
 		}
-		const parts = readParts(container, publicCatalog);
+		const reference = catalogArchiveReference(publicCatalog);
+		const archive = reference && readArtifact(container, CATALOG_ARCHIVE_FILE);
+		if (archive && (archive.length !== reference.size || sha256(archive) !== reference.sha256)) {
+			throw new Error('Isolated archive differs from the public catalog.');
+		}
 		if (captureSource(root).digest !== source.digest) {
 			throw new Error('Catalog source changed during the isolated release build.');
 		}
-		const artifacts = new Map([
+		installArtifacts(root, [
 			['catalog.runtime.json', runtime],
-			['catalog.public.json', publicCatalog]
+			['catalog.public.json', publicCatalog],
+			[CATALOG_ARCHIVE_FILE, archive]
 		]);
-		installArtifacts(root, artifacts, parts);
 		console.log('Catalog release build and checks passed in an isolated container.');
 	} finally {
 		try {
@@ -158,7 +161,8 @@ function captureSource(root) {
 }
 
 function readArtifact(container, path) {
-	const limit = CATALOG_ARTIFACT_LIMITS[path];
+	const limit =
+		path === CATALOG_ARCHIVE_FILE ? CATALOG_ARCHIVE_LIMIT : CATALOG_ARTIFACT_LIMITS[path];
 	const archive = run('docker', ['cp', `${container}:/workspace/generated/${path}`, '-'], {
 		maxBuffer: limit + 1024 * 1024
 	});
@@ -172,42 +176,19 @@ function readArtifact(container, path) {
 	return bytes;
 }
 
-/** The parts that the root lists, each read from one bounded archive of the parts directory. */
-function readParts(container, publicCatalog) {
-	const listed = catalogPublicParts(publicCatalog);
-	if (!listed.length) return new Map();
-	const archive = run(
-		'docker',
-		['cp', `${container}:/workspace/generated/${CATALOG_PARTS_DIRECTORY}`, '-'],
-		{ maxBuffer: PUBLIC_CATALOG_LIMIT + 4 * 1024 * 1024 }
-	);
-	return new Map(
-		listed.map(({ sha256: digest, size }) => {
-			const bytes = run('tar', ['-xOf', '-', '--', `${CATALOG_PARTS_DIRECTORY}/${digest}.json`], {
-				input: archive,
-				maxBuffer: PUBLIC_CATALOG_PART_LIMIT
-			});
-			if (bytes.length !== size || sha256(bytes) !== digest)
-				throw new Error(`Isolated public catalog part ${digest} differs from the root.`);
-			return [`${digest}.json`, bytes];
-		})
-	);
-}
-
-function installArtifacts(root, artifacts, parts) {
+/** Writes each artifact in place, and removes one that the build no longer makes. */
+function installArtifacts(root, artifacts) {
 	const generated = join(root, 'generated');
-	const partsDirectory = join(generated, CATALOG_PARTS_DIRECTORY);
-	mkdirSync(partsDirectory, { recursive: true });
-	for (const directory of [generated, partsDirectory]) {
-		if (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) {
-			throw new Error('The catalog output directories must not be symbolic links.');
-		}
+	mkdirSync(generated, { recursive: true });
+	if (!lstatSync(generated).isDirectory() || lstatSync(generated).isSymbolicLink()) {
+		throw new Error('The catalog output directory must not be a symbolic link.');
 	}
-	const entries = [
-		...[...artifacts].map(([path, bytes]) => [join(generated, path), bytes]),
-		...[...parts].map(([name, bytes]) => [join(partsDirectory, name), bytes])
-	];
-	for (const [target, bytes] of entries) {
+	for (const [name, bytes] of artifacts) {
+		const target = join(generated, name);
+		if (!bytes) {
+			rmSync(target, { force: true });
+			continue;
+		}
 		const temporary = `${target}.${randomUUID()}.tmp`;
 		try {
 			writeFileSync(temporary, bytes, { mode: 0o644, flag: 'wx' });
@@ -216,8 +197,6 @@ function installArtifacts(root, artifacts, parts) {
 			rmSync(temporary, { force: true });
 		}
 	}
-	for (const name of readdirSync(partsDirectory))
-		if (!parts.has(name)) rmSync(join(partsDirectory, name), { force: true });
 }
 
 function run(command, args, options = {}) {

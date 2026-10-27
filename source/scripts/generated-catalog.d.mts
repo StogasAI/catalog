@@ -1,10 +1,10 @@
-import type { PublicCatalogPart, PublicCatalogRoot } from './public-catalog.mjs';
+import type { CatalogArchive, PublicCatalog } from './public-catalog.mjs';
 
 /**
- * A build's public root, its parts in the root's order, and the whole catalog they make, from
- * this checkout's build unless `directory` names another. `Catalog` names the caller's own types
- * for the whole catalog.
+ * A build's public catalog and the archive that it names, or null while it names none, from this
+ * checkout's build unless `directory` names another. `Catalog` names the caller's own type for
+ * the public catalog.
  */
-export function readGeneratedPublicCatalog<Catalog = PublicCatalogRoot>(
+export function readGeneratedPublicCatalog<Catalog = PublicCatalog>(
 	directory?: string
-): { root: PublicCatalogRoot; parts: PublicCatalogPart[]; catalog: Catalog };
+): { catalog: Catalog; archive: CatalogArchive | null };

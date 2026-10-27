@@ -3,18 +3,16 @@ import { readGeneratedPublicCatalog } from '../source/scripts/generated-catalog.
 type Nodes = Record<string, Record<string, any>>;
 type Catalog = {
 	schema: string;
+	archive: { sha256: string; size: number } | null;
 	graph: Record<string, Nodes>;
 	schedule: { start: string; graph: Record<string, Nodes> }[];
 	periods: Record<string, any>[];
 };
 
-/** A build's public root, its parts in the root's order, and the whole catalog they make. */
+/** A build's public catalog and the archive that it names. */
 export const readPublicCatalog = (generated: string) =>
 	readGeneratedPublicCatalog<Catalog>(generated);
 
-const generated = readGeneratedPublicCatalog<Catalog>();
-
-/** The checkout's public catalog root and its parts. */
-export const { root: publicRoot, parts: publicParts } = generated;
-/** The checkout's whole public catalog, as readers that need every deployment assemble it. */
-export const publicCatalog = generated.catalog;
+/** The checkout's public catalog and the archive that it names. */
+export const { catalog: publicCatalog, archive: publicArchive } =
+	readGeneratedPublicCatalog<Catalog>();

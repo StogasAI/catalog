@@ -21,7 +21,7 @@ const catalog = parseCatalog(publicCatalog);
 describe('catalog editor graph', () => {
 	test('keeps a nested group diamond as real edges and one execution choice', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.public.v6',
+			schema: 'stogas.catalog.public.v7',
 			graph: {
 				authors: { author: { name: 'Author' } },
 				groups: {
@@ -70,12 +70,12 @@ describe('catalog editor graph', () => {
 		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
 		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
 		expect(() =>
-			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v6' })
+			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v7' })
 		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
 				graph: { authors: [], groups: {}, deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v6'
+				schema: 'stogas.catalog.public.v7'
 			})
 		).toThrow('authors collection');
 		expect(() =>
@@ -88,7 +88,7 @@ describe('catalog editor graph', () => {
 					providers: {},
 					routes: {}
 				},
-				schema: 'stogas.catalog.public.v6'
+				schema: 'stogas.catalog.public.v7'
 			})
 		).toThrow('authors.bad entry');
 	});

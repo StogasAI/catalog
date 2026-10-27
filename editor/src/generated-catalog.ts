@@ -1,18 +1,19 @@
-import catalogRoot from '../../generated/catalog.public.json';
+import publicCatalog from '../../generated/catalog.public.json';
 import {
-	assemblePublicCatalog,
-	type PublicCatalogPart,
-	type PublicCatalogRoot
+	withArchive,
+	type CatalogArchive,
+	type PublicCatalog
 } from '../../source/scripts/public-catalog.mjs';
 
-const partFiles: Record<string, PublicCatalogPart> = import.meta.glob(
-	'../../generated/catalog.public.parts/*.json',
-	{ eager: true, import: 'default' }
+// The build writes no archive while nothing has moved there.
+const [archive] = Object.values(
+	import.meta.glob<CatalogArchive>('../../generated/catalog.archive.json', {
+		eager: true,
+		import: 'default'
+	})
 );
-const root = catalogRoot as PublicCatalogRoot;
 
-/** The build's whole public catalog, from its root and parts. */
-export const generatedCatalog: unknown = assemblePublicCatalog(
-	root,
-	root.parts.map(({ sha256 }) => partFiles[`../../generated/catalog.public.parts/${sha256}.json`]!)
-);
+/** The build's public catalog, with each archived record beside the others. */
+export const generatedCatalog: unknown = archive
+	? withArchive(publicCatalog as PublicCatalog, archive)
+	: publicCatalog;
