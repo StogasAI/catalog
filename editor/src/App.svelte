@@ -10,7 +10,12 @@
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
 	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
-	import catalogJson from '../../generated/catalog.public.json';
+	import catalogRoot from '../../generated/catalog.public.json';
+	import {
+		assemblePublicCatalog,
+		type PublicCatalogPart,
+		type PublicCatalogRoot
+	} from '../../source/scripts/public-catalog.mjs';
 	import CatalogNode from './CatalogNode.svelte';
 	import PanelResizer from './PanelResizer.svelte';
 	import SourceEditor from './SourceEditor.svelte';
@@ -31,7 +36,19 @@
 	} from './catalog';
 	import { parseCatalog, type LineageNode, type NodeType, type SourcePayload } from './types';
 
-	const catalog = parseCatalog(catalogJson);
+	const partFiles: Record<string, PublicCatalogPart> = import.meta.glob(
+		'../../generated/catalog.public.parts/*.json',
+		{ eager: true, import: 'default' }
+	);
+	const root = catalogRoot as PublicCatalogRoot;
+	const catalog = parseCatalog(
+		assemblePublicCatalog(
+			root,
+			root.parts.map(
+				({ sha256 }) => partFiles[`../../generated/catalog.public.parts/${sha256}.json`]!
+			)
+		)
+	);
 	const nodeTypes: NodeTypes = { catalog: CatalogNode };
 	const compact = new MediaQuery('(max-width: 640px)');
 	setNodeSelection(selectGraphNode);

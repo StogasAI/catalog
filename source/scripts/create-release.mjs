@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	catalogArtifact,
 	catalogManifest,
+	catalogPartArtifacts,
 	parseCatalogReleaseEvidence,
 	parseSequence,
 	resolveDestructiveOutput,
@@ -38,29 +39,27 @@ const envelope = parseCatalogReleaseEvidence({
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
-const runtime = addBlob('catalog.runtime.json');
-const publicCatalog = addBlob('catalog.public.json');
+const blobs = [
+	addBlob(catalogArtifact(repositoryRoot, 'catalog.runtime.json')),
+	addBlob(catalogArtifact(repositoryRoot, 'catalog.public.json')),
+	...catalogPartArtifacts(repositoryRoot).map(({ bytes, sha256: digest }) =>
+		addBlob({ bytes, digest: `sha256:${digest}` })
+	)
+];
 
-// Control lists this approval in signed evidence; only its two artifacts are published.
+// Control lists this approval in signed evidence; only its artifacts and the parts that the
+// public root lists are published.
 writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),
 	[
 		`${sha256(canonicalJson(envelope))}  catalog-approval.json`,
-		`${runtime.digest.slice('sha256:'.length)}  ${runtime.path}`,
-		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`
+		...blobs.map(({ digest, path }) => `${digest.slice('sha256:'.length)}  ${path}`)
 	].join('\n') + '\n'
 );
 
-function addBlob(filename) {
-	const artifact = catalogArtifact(repositoryRoot, filename);
-	const { bytes } = artifact;
-	const digest = artifact.digest.slice('sha256:'.length);
-	const extension = filename.endsWith('.json') ? '.json' : '';
-	const relativePath = `blobs/sha256/${digest}${extension}`;
+function addBlob({ bytes, digest }) {
+	const relativePath = `blobs/sha256/${digest.slice('sha256:'.length)}.json`;
 	writeFileSync(join(outputRoot, relativePath), bytes);
-	return {
-		digest: `sha256:${digest}`,
-		path: relativePath
-	};
+	return { digest, path: relativePath };
 }

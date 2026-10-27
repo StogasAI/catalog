@@ -13,10 +13,33 @@ export const CATALOG_ARTIFACT_LIMITS = Object.freeze({
 	'catalog.runtime.json': 16 * 1024 * 1024
 });
 
+/**
+ * Each part of the public catalog, and the root with every part, which readers that need the
+ * whole catalog hold at once.
+ */
+export const CATALOG_PART_LIMIT = 1024 * 1024;
+export const CATALOG_PUBLIC_LIMIT = 32 * 1024 * 1024;
+/** Where the build writes the parts of the public catalog, each named by its SHA-256. */
+export const CATALOG_PARTS_DIRECTORY = 'catalog.public.parts';
+
 /** Rejects an artifact over its limit and warns once it passes three quarters of it. */
 export function checkCatalogArtifactSize(name, bytes) {
 	const limit = CATALOG_ARTIFACT_LIMITS[name];
 	if (!limit) throw new Error(`${name} is not a catalog artifact.`);
+	checkSize(name, bytes, limit);
+}
+
+/** Rejects a part over its limit, and the public catalog over its limit with every part. */
+export function checkCatalogPublicSize(rootBytes, partSizes) {
+	for (const size of partSizes) checkSize('A public catalog part', size, CATALOG_PART_LIMIT);
+	checkSize(
+		'The public catalog with its parts',
+		partSizes.reduce((total, size) => total + size, rootBytes),
+		CATALOG_PUBLIC_LIMIT
+	);
+}
+
+function checkSize(name, bytes, limit) {
 	if (bytes > limit) throw new Error(`${name} is ${bytes} bytes; the limit is ${limit}.`);
 	if (bytes > limit * 0.75) {
 		const message = `${name} is ${bytes} bytes, ${Math.floor((bytes / limit) * 100)}% of its ${limit / 1024 / 1024} MiB limit. Releases fail above the limit.`;
@@ -26,6 +49,50 @@ export function checkCatalogArtifactSize(name, bytes) {
 				: `Warning: ${message}`
 		);
 	}
+}
+
+/**
+ * The parts that a public catalog root lists, each by SHA-256 and size. Catalogs released
+ * before the catalog had parts list none.
+ */
+export function catalogPublicParts(rootBytes) {
+	const root = JSON.parse(Buffer.from(rootBytes).toString('utf8'));
+	if (root?.parts === undefined) return [];
+	const seen = new Set();
+	if (
+		!Array.isArray(root.parts) ||
+		!root.parts.every(
+			(part) =>
+				hasKeys(part, ['sha256', 'size']) &&
+				/^[0-9a-f]{64}$/.test(part.sha256) &&
+				!seen.has(part.sha256) &&
+				seen.add(part.sha256) &&
+				Number.isSafeInteger(part.size) &&
+				part.size > 0 &&
+				part.size <= CATALOG_PART_LIMIT
+		)
+	)
+		throw new Error('The public catalog lists an invalid part.');
+	checkCatalogPublicSize(
+		Buffer.byteLength(rootBytes),
+		root.parts.map(({ size }) => size)
+	);
+	return root.parts;
+}
+
+/** The build's parts of the public catalog, each checked against the root that lists it. */
+export function catalogPartArtifacts(repositoryRoot) {
+	return catalogPublicParts(catalogArtifact(repositoryRoot, 'catalog.public.json').bytes).map(
+		({ sha256: digest, size }) => {
+			const path = join(repositoryRoot, 'generated', CATALOG_PARTS_DIRECTORY, `${digest}.json`);
+			const stats = lstatSync(path);
+			if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== size)
+				throw new Error(`Public catalog part ${digest} is not a regular file of its size.`);
+			const bytes = readFileSync(path);
+			if (sha256(bytes) !== digest) throw new Error(`Public catalog part ${digest} differs.`);
+			return { bytes, sha256: digest };
+		}
+	);
 }
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
@@ -250,8 +317,8 @@ function gitBytes(repositoryRoot, args, input) {
 		cwd: repositoryRoot,
 		env: minimalProcessEnvironment(),
 		input,
-		// The tracked generated artifacts take at most 24 MiB, and the source is far smaller.
-		maxBuffer: 64 * 1024 * 1024,
+		// The tracked generated artifacts take at most 48 MiB, and the source is far smaller.
+		maxBuffer: 96 * 1024 * 1024,
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 }

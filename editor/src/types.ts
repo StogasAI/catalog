@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/svelte';
 import { orderModelGroups, type ModelGroup } from '../../source/scripts/model-groups.mjs';
+import { PUBLIC_CATALOG_SCHEMA } from '../../source/scripts/public-catalog.mjs';
 
 export type NodeType = 'author' | 'group' | 'model' | 'provider' | 'route' | 'deployment';
 
@@ -12,14 +13,15 @@ export type CatalogGraph = {
 	deployments: Record<string, Record<string, unknown>>;
 };
 
-// The editor shows the base graph; each node's dated periods appear in its source.
+// The editor shows the base graph of the whole catalog, its root with every part; each node's
+// dated periods appear in its source.
 export type Catalog = {
-	schema: 'stogas.catalog.public.v5';
+	schema: typeof PUBLIC_CATALOG_SCHEMA;
 	graph: CatalogGraph;
 };
 
 export function parseCatalog(value: unknown): Catalog {
-	if (!isObject(value) || value.schema !== 'stogas.catalog.public.v5' || !isObject(value.graph)) {
+	if (!isObject(value) || value.schema !== PUBLIC_CATALOG_SCHEMA || !isObject(value.graph)) {
 		throw new TypeError('The generated public catalog is invalid.');
 	}
 	const graph = value.graph;

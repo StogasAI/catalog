@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import publicCatalog from '../generated/catalog.public.json';
+import { publicCatalog } from './generated-catalog';
 import reviewSources from '../source/review-sources.json';
 
 const allowedDomains = new Set([

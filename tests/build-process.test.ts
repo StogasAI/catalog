@@ -13,6 +13,7 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readPublicCatalog } from './generated-catalog';
 
 // These cases launch real compilers; use the same bound as each build process.
 setDefaultTimeout(60_000);
@@ -159,6 +160,9 @@ describe('catalog build process boundaries', () => {
 		expectBuildSuccess(runBuild(root));
 		expect(readFileSync(join(root, 'generated/catalog.runtime.json'), 'utf8')).toBe(runtime);
 		expect(readFileSync(join(root, 'generated/catalog.public.json'), 'utf8')).toBe(publicCatalog);
+		expect(readPublicCatalog(join(root, 'generated')).catalog).toEqual(
+			readPublicCatalog(join(catalogRoot, 'generated')).catalog
+		);
 		mkdirSync(join(root, 'source/.tmp-catalog-build'));
 		expectBuildSuccess(runBuild(root, ['--clean']));
 		expect(existsSync(join(root, 'generated'))).toBe(false);
@@ -428,28 +432,55 @@ exit 1
 			'  pricing:\n'
 		].join('\n');
 
+	test('checks every part and removes parts that the root no longer lists', () => {
+		const root = catalogCopy();
+		const parts = join(root, 'generated/catalog.public.parts');
+		const [first] = readPublicCatalog(join(root, 'generated')).root.parts;
+		const firstPath = join(parts, `${first!.sha256}.json`);
+		const firstJson = readFileSync(firstPath, 'utf8');
+		const stale = join(parts, `${'0'.repeat(64)}.json`);
+
+		writeFileSync(stale, '{}\n');
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+		rmSync(stale);
+		writeFileSync(firstPath, firstJson.replace('"modelId"', '"modelId" '));
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+		rmSync(firstPath);
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+
+		writeFileSync(stale, '{}\n');
+		expectBuildSuccess(runBuild(root));
+		expect(existsSync(stale)).toBe(false);
+		expect(readFileSync(firstPath, 'utf8')).toBe(firstJson);
+		expectBuildSuccess(runBuild(root, ['--check']));
+	});
+
 	test('compiles a dated period from source into both schedules', () => {
 		const root = catalogCopy();
 		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
 		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
 		expectBuildSuccess(runBuild(root));
-		for (const artifact of ['runtime', 'public']) {
-			const catalog = JSON.parse(
-				readFileSync(join(root, `generated/catalog.${artifact}.json`), 'utf8')
-			);
-			expect(catalog.schedule.map(({ start }: { start: string }) => start)).toEqual([
-				'2026-11-01T00:00:00Z',
-				'2026-12-01T00:00:00Z'
-			]);
+		const generated = join(root, 'generated');
+		const publicCatalog = readPublicCatalog(generated);
+		const starts = ['2026-11-01T00:00:00Z', '2026-12-01T00:00:00Z'];
+		for (const catalog of [
+			JSON.parse(readFileSync(join(generated, 'catalog.runtime.json'), 'utf8')),
+			publicCatalog.catalog
+		]) {
+			expect(catalog.schedule.map(({ start }: { start: string }) => start)).toEqual(starts);
 			expect(
 				catalog.schedule[0].graph.deployments['openai-gpt-5.6-sol'].routes['openai-responses']
 					.pricing.input_tokens.per_mill_tokens
 			).toBe('2');
 		}
-		const publicCatalog = JSON.parse(
-			readFileSync(join(root, 'generated/catalog.public.json'), 'utf8')
+		// A price leaves the deployment's summary alone, so only its part lists the change; the root
+		// still names both starts.
+		expect(publicCatalog.root.schedule).toEqual(starts.map((start) => ({ start, graph: {} })));
+		const { part } = publicCatalog.root.graph.deployments['openai-gpt-5.6-sol'];
+		expect(publicCatalog.parts.map(({ schedule }) => schedule.map(({ start }) => start))).toEqual(
+			publicCatalog.parts.map((_, index) => (index === part ? [starts[0]] : []))
 		);
-		expect(publicCatalog.periods).toEqual([
+		expect(publicCatalog.root.periods).toEqual([
 			{
 				kind: 'deployments',
 				id: 'openai-gpt-5.6-sol',

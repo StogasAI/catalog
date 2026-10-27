@@ -16,7 +16,13 @@ import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
-import { checkCatalogArtifactSize } from './release-format.mjs';
+import { PUBLIC_CATALOG_SCHEMA } from './public-catalog.mjs';
+import { partitionPublicCatalog } from './public-parts.mjs';
+import {
+	CATALOG_PARTS_DIRECTORY,
+	checkCatalogArtifactSize,
+	checkCatalogPublicSize
+} from './release-format.mjs';
 import { ancestorGroupIds, orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
@@ -26,6 +32,7 @@ const repositoryRoot = join(sourceRoot, '..');
 const generatedRoot = join(repositoryRoot, 'generated');
 const runtimePath = join(generatedRoot, 'catalog.runtime.json');
 const publicPath = join(generatedRoot, 'catalog.public.json');
+const partsRoot = join(generatedRoot, CATALOG_PARTS_DIRECTORY);
 const tempBuildRoot = join(sourceRoot, '.tmp-catalog-build');
 const cueVersion = 'v0.16.1';
 const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
@@ -646,8 +653,9 @@ export function buildCatalogs(source) {
 			graph: compiled.runtime,
 			schedule: runtimeSchedule
 		},
+		// The whole public catalog, which the build splits into its root and parts.
 		public: {
-			schema: 'stogas.catalog.public.v5',
+			schema: PUBLIC_CATALOG_SCHEMA,
 			graph: compiled.public,
 			schedule: publicSchedule,
 			periods
@@ -1209,11 +1217,7 @@ export async function main(argv = process.argv.slice(2)) {
 		return;
 	}
 
-	for (const directory of [
-		generatedRoot,
-		join(generatedRoot, 'blobs'),
-		join(generatedRoot, 'blobs', 'sha256')
-	]) {
+	for (const directory of [generatedRoot, partsRoot]) {
 		if (!existsSync(directory)) continue;
 		const stats = lstatSync(directory);
 		if (stats.isSymbolicLink() || !stats.isDirectory()) {
@@ -1255,21 +1259,35 @@ export async function main(argv = process.argv.slice(2)) {
 			})
 		);
 		const catalogs = buildCatalogs(source);
-		const publicJson = canonicalJson(catalogs.public);
+		const { root, parts } = partitionPublicCatalog(catalogs.public);
+		const publicJson = canonicalJson(root);
 		catalogs.runtime.publicDigest = `sha256:${createHash('sha256').update(publicJson).digest('hex')}`;
 		const runtimeJson = canonicalJson(catalogs.runtime);
 		checkCatalogArtifactSize('catalog.runtime.json', Buffer.byteLength(runtimeJson));
 		checkCatalogArtifactSize('catalog.public.json', Buffer.byteLength(publicJson));
+		checkCatalogPublicSize(
+			Buffer.byteLength(publicJson),
+			parts.map(({ size }) => size)
+		);
+		const partFiles = new Map(parts.map(({ json, sha256 }) => [`${sha256}.json`, json]));
 
 		if (!args.has('--validate-only')) {
 			if (args.has('--check')) {
-				const currentRuntime = existsSync(runtimePath) ? readFileSync(runtimePath, 'utf8') : null;
-				const currentPublic = existsSync(publicPath) ? readFileSync(publicPath, 'utf8') : null;
-				if (currentRuntime !== runtimeJson || currentPublic !== publicJson) {
+				const current = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
+				const currentParts = existsSync(partsRoot) ? readdirSync(partsRoot).sort() : [];
+				if (
+					current(runtimePath) !== runtimeJson ||
+					current(publicPath) !== publicJson ||
+					currentParts.join('\n') !== [...partFiles.keys()].sort().join('\n') ||
+					currentParts.some((name) => current(join(partsRoot, name)) !== partFiles.get(name))
+				) {
 					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
 				}
 			} else {
-				mkdirSync(generatedRoot, { recursive: true });
+				mkdirSync(partsRoot, { recursive: true });
+				for (const [name, json] of partFiles) writeIfChanged(join(partsRoot, name), json);
+				for (const name of readdirSync(partsRoot))
+					if (!partFiles.has(name)) rmSync(join(partsRoot, name));
 				writeIfChanged(runtimePath, runtimeJson);
 				writeIfChanged(publicPath, publicJson);
 			}

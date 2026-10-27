@@ -18,6 +18,7 @@ import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import {
 	catalogArtifact,
 	catalogManifest,
+	catalogPublicParts,
 	parseCatalogReleaseEvidence,
 	canonicalJsonValue,
 	parseSequence,
@@ -43,9 +44,12 @@ const requestTimeoutMs = 30_000;
 const maxObjectBytes = 128 * 1024 * 1024;
 const maxErrorBytes = 64 * 1024;
 const retryableObjectStoreStatus = new Set([409, 429, 500, 502, 503, 504]);
+// Uploads and readbacks at once; a large catalog has hundreds of parts.
+const objectConcurrency = 8;
 let r2CredentialsPromise;
 // A catalog becomes current only when Control lists its approval in signed evidence, so
-// publication uploads just the two content-addressed artifacts to both evidence origins.
+// publication uploads just its two content-addressed artifacts and the parts that the public
+// root lists to both evidence origins.
 const destinations = [
 	{ get: getR2Object, name: 'R2', put: putR2Object },
 	{ get: getS3Object, name: 'S3', put: putS3Object }
@@ -87,7 +91,7 @@ async function preparePlaceholderRelease() {
 	}
 	verifyChecksums(outputRoot);
 	parseEnvelope(approvalPath);
-	for (const path of artifactPaths(outputRoot)) await publishImmutable(path, outputRoot);
+	await publishImmutables(artifactPaths(outputRoot), outputRoot);
 	console.log(`Prepared staging catalog ${sequence} with placeholder GitHub proof.`);
 	console.log(`  approval ${approvalPath}`);
 }
@@ -119,7 +123,7 @@ async function prepareRelease() {
 		if (canonicalJsonValue(envelope.document) !== canonicalJsonValue(proposedManifest)) {
 			throw new Error('The Stogas manifest differs from the GitHub Actions manifest.');
 		}
-		for (const path of artifactPaths(outputRoot)) await publishImmutable(path, outputRoot);
+		await publishImmutables(artifactPaths(outputRoot), outputRoot);
 		if (publicationEnvironment === 'prod') {
 			publishGitHubRelease(envelope);
 		}
@@ -156,7 +160,7 @@ function readPreparedRelease() {
 async function repairRelease() {
 	readPreparedRelease();
 	const paths = artifactPaths(outputRoot);
-	for (const path of paths) await publishImmutable(path, outputRoot);
+	await publishImmutables(paths, outputRoot);
 	await requireImmutableReadbacks(paths, outputRoot);
 	console.log(`Repaired catalog ${sequence} artifacts.`);
 }
@@ -331,20 +335,45 @@ function artifactPaths(root) {
 	assertContainedDirectory(root, 'blobs/sha256');
 	const entries = readdirSync(directory, { withFileTypes: true });
 	const envelope = parseEnvelope(join(root, 'catalog-approval.json'));
-	const artifacts = Object.values(envelope.document.artifacts);
-	const expected = new Set(artifacts.map((artifact) => `${artifact.sha256}.json`));
+	const blob = ({ sha256: digest, size }) => {
+		const bytes = readContainedRegularFile(root, `blobs/sha256/${digest}.json`);
+		if (bytes.byteLength !== size || sha256(bytes) !== digest)
+			throw new Error('Catalog blob differs from its approved digest');
+		return bytes;
+	};
+	const artifacts = Object.values(envelope.document.artifacts).map((artifact) => ({
+		sha256: artifact.sha256,
+		size: artifact.size_bytes
+	}));
+	const publicRoot = blob({
+		sha256: envelope.document.artifacts['catalog.public.json'].sha256,
+		size: envelope.document.artifacts['catalog.public.json'].size_bytes
+	});
+	const blobs = [...artifacts, ...catalogPublicParts(publicRoot)];
+	const expected = new Set(blobs.map((artifact) => `${artifact.sha256}.json`));
 	if (
 		entries.length !== expected.size ||
 		entries.some((entry) => !entry.isFile() || !expected.has(entry.name))
 	) {
-		throw new Error('Catalog release must contain exactly the blobs that its manifest names.');
+		throw new Error(
+			'Catalog release must contain exactly the blobs that its manifest and public root name.'
+		);
 	}
-	for (const artifact of artifacts) {
-		const bytes = readContainedRegularFile(root, `blobs/sha256/${artifact.sha256}.json`);
-		if (bytes.byteLength !== artifact.size_bytes || sha256(bytes) !== artifact.sha256)
-			throw new Error('Catalog blob differs from its approved digest');
-	}
+	for (const artifact of blobs) blob(artifact);
 	return entries.map((entry) => join(directory, entry.name)).sort();
+}
+
+async function publishImmutables(paths, root) {
+	await eachLimited(paths, (path) => publishImmutable(path, root));
+}
+
+async function eachLimited(items, task) {
+	const queue = [...items];
+	await Promise.all(
+		Array.from({ length: Math.min(objectConcurrency, queue.length) }, async () => {
+			while (queue.length) await task(queue.shift());
+		})
+	);
 }
 
 async function publishImmutable(path, root) {
@@ -376,16 +405,15 @@ async function publishImmutable(path, root) {
 }
 
 async function requireImmutableReadbacks(paths, root) {
-	await Promise.all(
-		destinations.flatMap((destination) =>
-			paths.map(async (path) => {
-				const key = objectKey(relative(root, path).replaceAll('\\', '/'));
-				const published = await destination.get(key);
-				if (!published || !readBoundedRegularFile(path).equals(published.bytes)) {
-					throw new Error(`Catalog object ${key} is absent or different in ${destination.name}.`);
-				}
-			})
-		)
+	await eachLimited(
+		destinations.flatMap((destination) => paths.map((path) => ({ destination, path }))),
+		async ({ destination, path }) => {
+			const key = objectKey(relative(root, path).replaceAll('\\', '/'));
+			const published = await destination.get(key);
+			if (!published || !readBoundedRegularFile(path).equals(published.bytes)) {
+				throw new Error(`Catalog object ${key} is absent or different in ${destination.name}.`);
+			}
+		}
 	);
 }
 

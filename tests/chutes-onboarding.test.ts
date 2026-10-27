@@ -1,5 +1,5 @@
 import { describe, test } from 'bun:test';
-import publicCatalog from '../generated/catalog.public.json';
+import { publicCatalog } from './generated-catalog';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 import {
 	assertProviderOnboardingContract,

@@ -211,7 +211,8 @@ describe('catalog release metadata', () => {
 			);
 			expect(result.exitCode).toBe(0);
 
-			// Control lists the approval in signed evidence, so only the artifacts are published.
+			// Control lists the approval in signed evidence, so only the artifacts and the parts that
+			// the public root lists are published.
 			expect(readdirSync(output).sort()).toEqual(['SHA256SUMS', 'blobs', 'catalog-approval.json']);
 			const envelopeBytes = readFileSync(join(output, 'catalog-approval.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
@@ -234,7 +235,23 @@ describe('catalog release metadata', () => {
 					readFileSync(join('generated', name)).byteLength
 				);
 			}
-			expect(readdirSync(join(output, 'blobs/sha256'))).toHaveLength(2);
+			const parts = JSON.parse(readFileSync('generated/catalog.public.json', 'utf8')).parts;
+			expect(parts.length).toBeGreaterThan(0);
+			expect(readdirSync(join(output, 'blobs/sha256')).sort()).toEqual(
+				[
+					envelope.document.artifacts['catalog.runtime.json'].sha256,
+					envelope.document.artifacts['catalog.public.json'].sha256,
+					...parts.map(({ sha256 }: { sha256: string }) => sha256)
+				]
+					.map((digest) => `${digest}.json`)
+					.sort()
+			);
+			const sums = readFileSync(join(output, 'SHA256SUMS'), 'utf8').trim().split('\n');
+			expect(sums).toHaveLength(parts.length + 3);
+			for (const { sha256, size } of parts) {
+				expect(sums).toContain(`${sha256}  blobs/sha256/${sha256}.json`);
+				expect(readFileSync(join(output, 'blobs/sha256', `${sha256}.json`)).byteLength).toBe(size);
+			}
 			const source = envelope.document.source;
 			const sized = (name: string, size_bytes: number) => ({
 				...envelope,
@@ -277,6 +294,184 @@ describe('catalog release metadata', () => {
 			});
 		} finally {
 			rmSync(output, { force: true, recursive: true });
+		}
+	});
+});
+
+describe('catalog release repair', () => {
+	// Every request goes to in-memory R2 and S3, which record the objects they hold on exit.
+	const fakeStores = `
+import { writeFileSync } from 'node:fs';
+const objects = new Map();
+globalThis.fetch = async (input, init = {}) => {
+	const url = new URL(input);
+	if (url.hostname === 'api.cloudflare.com')
+		return Response.json({ success: true, result: { id: 'test-key', status: 'active' } });
+	const key = url.hostname.split('.').slice(1, 3).join('.') + ':' + url.pathname;
+	if (init.method === 'PUT') {
+		if (objects.has(key)) return new Response(null, { status: 412 });
+		objects.set(key, Buffer.from(init.body));
+		return new Response(null, { status: 200 });
+	}
+	return objects.has(key) ? new Response(objects.get(key)) : new Response(null, { status: 404 });
+};
+process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects.keys()].sort())));
+`;
+	const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+
+	/** A copy of the scripts and a release of the checkout's catalog, as sequence 7. */
+	function fixture() {
+		const root = mkdtempSync(join(tmpdir(), 'stogas-catalog-repair-'));
+		cpSync('source', join(root, 'source'), {
+			recursive: true,
+			filter: (path) => !basename(path).includes('.tmp-')
+		});
+		writeFileSync(join(root, 'fake-stores.mjs'), fakeStores);
+		const proofPath = join(root, 'attestation.json');
+		writeFileSync(proofPath, JSON.stringify({ testAttestation: true }));
+		const release = join(root, 'release/catalog-v7');
+		const created = Bun.spawnSync(
+			['node', 'source/scripts/create-release.mjs', '7', release, proofPath],
+			{ cwd: process.cwd() }
+		);
+		expect(created.exitCode).toBe(0);
+		return { root, release, blobs: join(release, 'blobs/sha256') };
+	}
+
+	function writeSums(release: string) {
+		const files = [
+			'catalog-approval.json',
+			...readdirSync(join(release, 'blobs/sha256')).map((name) => `blobs/sha256/${name}`)
+		];
+		writeFileSync(
+			join(release, 'SHA256SUMS'),
+			files.map((file) => `${digest(readFileSync(join(release, file)))}  ${file}`).join('\n') + '\n'
+		);
+	}
+
+	/** The release's approval and the public root that it names. */
+	function approved(release: string) {
+		const approval = JSON.parse(readFileSync(join(release, 'catalog-approval.json'), 'utf8'));
+		const artifact = approval.document.artifacts['catalog.public.json'];
+		const root = JSON.parse(
+			readFileSync(join(release, 'blobs/sha256', `${artifact.sha256}.json`), 'utf8')
+		);
+		return { approval, artifact, root };
+	}
+
+	/** Turns the release into one from before the public catalog had parts. */
+	function withoutParts(release: string) {
+		const { approval, artifact, root: rootWithParts } = approved(release);
+		const { parts, ...root } = rootWithParts;
+		const blobs = join(release, 'blobs/sha256');
+		for (const { sha256 } of [artifact, ...parts]) rmSync(join(blobs, `${sha256}.json`));
+		const bytes = Buffer.from(JSON.stringify({ ...root, schema: 'stogas.catalog.public.v5' }));
+		writeFileSync(join(blobs, `${digest(bytes)}.json`), bytes);
+		approval.document.artifacts['catalog.public.json'] = {
+			...artifact,
+			sha256: digest(bytes),
+			size_bytes: bytes.byteLength
+		};
+		writeFileSync(join(release, 'catalog-approval.json'), JSON.stringify(approval));
+		writeSums(release);
+	}
+
+	function repair(root: string) {
+		const result = Bun.spawnSync(
+			[
+				'node',
+				'--import',
+				'./fake-stores.mjs',
+				'source/scripts/publish-release.mjs',
+				'repair',
+				'7',
+				'release/catalog-v7'
+			],
+			{
+				cwd: root,
+				env: {
+					PATH: process.env.PATH,
+					CATALOG_PUBLICATION_ENVIRONMENT: 'staging',
+					CLOUDFLARE_ACCOUNT_ID: '0'.repeat(32),
+					CLOUDFLARE_API_TOKEN: 'test-token',
+					AWS_ACCESS_KEY_ID: 'test-access',
+					AWS_SECRET_ACCESS_KEY: 'test-secret',
+					AWS_BUCKET: 'test-bucket',
+					AWS_REGION: 'us-east-1',
+					R2_BUCKET: 'test-bucket'
+				}
+			}
+		);
+		const stored: string[] = JSON.parse(readFileSync(join(root, 'stored.json'), 'utf8'));
+		return { exitCode: result.exitCode, stderr: result.stderr.toString(), stored };
+	}
+
+	/** The keys that both stores hold for these blobs. */
+	function keys(blobs: string) {
+		const names = readdirSync(blobs).sort();
+		return [
+			...names.map((name) => `r2.cloudflarestorage:/test-bucket/catalog/blobs/sha256/${name}`),
+			...names.map((name) => `s3.us-east-1:/catalog/blobs/sha256/${name}`)
+		].sort();
+	}
+
+	test('publishes exactly the blobs that a release names, with or without parts', () => {
+		for (const before of [false, true]) {
+			const { root, release, blobs } = fixture();
+			try {
+				if (before) withoutParts(release);
+				const { parts } = approved(release).root;
+				expect(parts === undefined).toBe(before);
+				const result = repair(root);
+				expect(result.stderr).toBe('');
+				expect(result.exitCode).toBe(0);
+				expect(result.stored).toEqual(keys(blobs));
+				expect(result.stored).toHaveLength(2 * (2 + (parts?.length ?? 0)));
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
+		}
+	});
+
+	test('publishes nothing when the blobs differ from what the release names', () => {
+		const cases: [string, (release: string, blobs: string, part: string) => void, string][] = [
+			[
+				'an unlisted blob',
+				(release, blobs) => {
+					writeFileSync(join(blobs, `${'0'.repeat(64)}.json`), '{}');
+					writeSums(release);
+				},
+				'exactly the blobs'
+			],
+			[
+				'a missing part',
+				(release, blobs, part) => {
+					rmSync(join(blobs, part));
+					writeSums(release);
+				},
+				'exactly the blobs'
+			],
+			[
+				'a changed part',
+				(release, blobs, part) => {
+					writeFileSync(join(blobs, part), '{}');
+					writeSums(release);
+				},
+				'differs from its approved digest'
+			]
+		];
+		for (const [, change, message] of cases) {
+			const { root, release, blobs } = fixture();
+			try {
+				const { parts } = approved(release).root;
+				change(release, blobs, `${parts[0].sha256}.json`);
+				const result = repair(root);
+				expect(result.exitCode).not.toBe(0);
+				expect(result.stderr).toContain(message);
+				expect(result.stored).toEqual([]);
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
 		}
 	});
 });

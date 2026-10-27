@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import publicCatalog from '../generated/catalog.public.json';
+import { publicCatalog, publicParts, publicRoot } from './generated-catalog';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
@@ -32,7 +32,7 @@ describe('compiled catalog', () => {
 
 	test('binds runtime policy to the public ownership artifact', () => {
 		const expected = `sha256:${createHash('sha256')
-			.update(`${JSON.stringify(publicCatalog)}\n`)
+			.update(`${JSON.stringify(publicRoot)}\n`)
 			.digest('hex')}`;
 		expect(runtimeCatalog.publicDigest).toBe(expected);
 	});
@@ -847,11 +847,46 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps deterministic runtime and public artifacts within their limits', () => {
+		const partSizes = publicRoot.parts.map(({ size }) => size);
 		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(8 * 1024 * 1024);
+		expect(Math.max(...partSizes)).toBeLessThanOrEqual(1024 * 1024);
+		expect(
+			partSizes.reduce(
+				(total, size) => total + size,
+				Bun.file('generated/catalog.public.json').size
+			)
+		).toBeLessThanOrEqual(32 * 1024 * 1024);
 		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v5');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v5');
+		expect(publicRoot.schema).toBe('stogas.catalog.public.v6');
+		expect(publicParts.every(({ schema }) => schema === 'stogas.catalog.public.part.v6')).toBe(
+			true
+		);
 		expect(runtimeCatalog.schedule).toEqual([]);
 		expect(publicCatalog.schedule).toEqual([]);
+	});
+
+	test('keeps only deployment summaries in the public root', () => {
+		const { deployments, ...nodes } = publicRoot.graph;
+		expect(Object.keys(nodes).sort()).toEqual([
+			'authors',
+			'groups',
+			'models',
+			'providers',
+			'routes'
+		]);
+		for (const [kind, records] of Object.entries(nodes))
+			expect(records).toEqual(publicCatalog.graph[kind]);
+		for (const [id, summary] of Object.entries(deployments)) {
+			const { routes } = publicCatalog.graph.deployments[id];
+			expect(Object.keys(summary).sort()).toEqual([
+				'modelId',
+				'part',
+				'retirementDate',
+				'routeIds'
+			]);
+			expect(summary.routeIds).toEqual(Object.keys(routes).sort());
+			expect(Object.hasOwn(publicParts[summary.part].deployments, id)).toBe(true);
+		}
 	});
 });
