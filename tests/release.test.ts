@@ -415,21 +415,18 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 		].sort();
 	}
 
-	test('publishes exactly the blobs that a release names, with or without parts', () => {
-		for (const before of [false, true]) {
-			const { root, release, blobs } = fixture();
-			try {
-				if (before) withoutParts(release);
-				const { parts } = approved(release).root;
-				expect(parts === undefined).toBe(before);
-				const result = repair(root);
-				expect(result.stderr).toBe('');
-				expect(result.exitCode).toBe(0);
-				expect(result.stored).toEqual(keys(blobs));
-				expect(result.stored).toHaveLength(2 * (2 + (parts?.length ?? 0)));
-			} finally {
-				rmSync(root, { recursive: true, force: true });
-			}
+	test('publishes exactly the blobs that a release names', () => {
+		const { root, release, blobs } = fixture();
+		try {
+			const { parts } = approved(release).root;
+			expect(parts.length).toBeGreaterThan(0);
+			const result = repair(root);
+			expect(result.stderr).toBe('');
+			expect(result.exitCode).toBe(0);
+			expect(result.stored).toEqual(keys(blobs));
+			expect(result.stored).toHaveLength(2 * (2 + parts.length));
+		} finally {
+			rmSync(root, { recursive: true, force: true });
 		}
 	});
 
@@ -458,7 +455,8 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 					writeSums(release);
 				},
 				'differs from its approved digest'
-			]
+			],
+			['a root without parts', (release) => withoutParts(release), 'invalid part']
 		];
 		for (const [, change, message] of cases) {
 			const { root, release, blobs } = fixture();

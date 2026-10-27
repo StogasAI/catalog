@@ -18,9 +18,7 @@ function fixture(t, probe = '', parts = []) {
 	const publicBytes = json({
 		schema: 'stogas.catalog.public.v3',
 		graph: {},
-		...(parts.length && {
-			parts: parts.map((part) => ({ sha256: digest(part), size: Buffer.byteLength(part) }))
-		})
+		parts: parts.map((part) => ({ sha256: digest(part), size: Buffer.byteLength(part) }))
 	});
 	const canary = `test-publication-canary-${randomUUID()}`;
 	const secretFile = join(parent, 'publisher-secret');

@@ -4,21 +4,19 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { canonicalJson } from './canonical-json.mjs';
+import {
+	PUBLIC_CATALOG_LIMIT,
+	PUBLIC_CATALOG_PART_LIMIT,
+	PUBLIC_CATALOG_ROOT_LIMIT
+} from './public-catalog.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
 /** Gateways and Web reject larger artifacts, so the build and every release step do too. */
 export const CATALOG_ARTIFACT_LIMITS = Object.freeze({
-	'catalog.public.json': 8 * 1024 * 1024,
+	'catalog.public.json': PUBLIC_CATALOG_ROOT_LIMIT,
 	'catalog.runtime.json': 16 * 1024 * 1024
 });
-
-/**
- * Each part of the public catalog, and the root with every part, which readers that need the
- * whole catalog hold at once.
- */
-export const CATALOG_PART_LIMIT = 1024 * 1024;
-export const CATALOG_PUBLIC_LIMIT = 32 * 1024 * 1024;
 /** Where the build writes the parts of the public catalog, each named by its SHA-256. */
 export const CATALOG_PARTS_DIRECTORY = 'catalog.public.parts';
 
@@ -31,11 +29,11 @@ export function checkCatalogArtifactSize(name, bytes) {
 
 /** Rejects a part over its limit, and the public catalog over its limit with every part. */
 export function checkCatalogPublicSize(rootBytes, partSizes) {
-	for (const size of partSizes) checkSize('A public catalog part', size, CATALOG_PART_LIMIT);
+	for (const size of partSizes) checkSize('A public catalog part', size, PUBLIC_CATALOG_PART_LIMIT);
 	checkSize(
 		'The public catalog with its parts',
 		partSizes.reduce((total, size) => total + size, rootBytes),
-		CATALOG_PUBLIC_LIMIT
+		PUBLIC_CATALOG_LIMIT
 	);
 }
 
@@ -51,16 +49,12 @@ function checkSize(name, bytes, limit) {
 	}
 }
 
-/**
- * The parts that a public catalog root lists, each by SHA-256 and size. Catalogs released
- * before the catalog had parts list none.
- */
+/** The parts that a public catalog root lists, each by SHA-256 and size. */
 export function catalogPublicParts(rootBytes) {
 	const root = JSON.parse(Buffer.from(rootBytes).toString('utf8'));
-	if (root?.parts === undefined) return [];
 	const seen = new Set();
 	if (
-		!Array.isArray(root.parts) ||
+		!Array.isArray(root?.parts) ||
 		!root.parts.every(
 			(part) =>
 				hasKeys(part, ['sha256', 'size']) &&
@@ -69,7 +63,7 @@ export function catalogPublicParts(rootBytes) {
 				seen.add(part.sha256) &&
 				Number.isSafeInteger(part.size) &&
 				part.size > 0 &&
-				part.size <= CATALOG_PART_LIMIT
+				part.size <= PUBLIC_CATALOG_PART_LIMIT
 		)
 	)
 		throw new Error('The public catalog lists an invalid part.');

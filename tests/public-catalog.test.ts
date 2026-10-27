@@ -263,11 +263,12 @@ describe('public catalog limits', () => {
 	const root = (parts: unknown) => Buffer.from(JSON.stringify({ parts }));
 	const part = (sha256 = 'a'.repeat(64), size = 1) => ({ sha256, size });
 
-	test('list the parts that a root names, and none for a root from before parts', () => {
-		expect(catalogPublicParts(Buffer.from('{"schema":"stogas.catalog.public.v5"}'))).toEqual([]);
+	test('list the parts that a root names, and refuse a root without them', () => {
 		const listed = [part(), part('b'.repeat(64), mib / 2)];
 		expect(catalogPublicParts(root(listed))).toEqual(listed);
+		expect(catalogPublicParts(root([]))).toEqual([]);
 		for (const invalid of [
+			undefined,
 			{},
 			[part(), part()],
 			[part('A'.repeat(64))],

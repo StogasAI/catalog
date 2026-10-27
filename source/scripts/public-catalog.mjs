@@ -7,6 +7,14 @@
 export const PUBLIC_CATALOG_SCHEMA = 'stogas.catalog.public.v6';
 export const PUBLIC_CATALOG_PART_SCHEMA = 'stogas.catalog.public.part.v6';
 
+/**
+ * The largest root, part, and root with every part, in bytes. The build rejects larger ones, so
+ * readers can refuse them before they download them.
+ */
+export const PUBLIC_CATALOG_ROOT_LIMIT = 8 * 1024 * 1024;
+export const PUBLIC_CATALOG_PART_LIMIT = 1024 * 1024;
+export const PUBLIC_CATALOG_LIMIT = 32 * 1024 * 1024;
+
 /** What the root keeps of a deployment: what pages need to place it in the graph. */
 export function deploymentSummary(deployment, part) {
 	return {

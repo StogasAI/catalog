@@ -1,11 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import {
-	assemblePublicCatalog,
-	type PublicCatalogPart,
-	type PublicCatalogRoot
-} from '../source/scripts/public-catalog.mjs';
-import { CATALOG_PARTS_DIRECTORY } from '../source/scripts/release-format.mjs';
+import { readGeneratedPublicCatalog } from '../source/scripts/generated-catalog.mjs';
 
 type Nodes = Record<string, Record<string, any>>;
 type Catalog = {
@@ -16,16 +9,10 @@ type Catalog = {
 };
 
 /** A build's public root, its parts in the root's order, and the whole catalog they make. */
-export function readPublicCatalog(generated: string) {
-	const read = (path: string) => JSON.parse(readFileSync(join(generated, path), 'utf8'));
-	const root: PublicCatalogRoot = read('catalog.public.json');
-	const parts: PublicCatalogPart[] = root.parts.map(({ sha256 }) =>
-		read(join(CATALOG_PARTS_DIRECTORY, `${sha256}.json`))
-	);
-	return { root, parts, catalog: assemblePublicCatalog<Catalog>(root, parts) };
-}
+export const readPublicCatalog = (generated: string) =>
+	readGeneratedPublicCatalog<Catalog>(generated);
 
-const generated = readPublicCatalog(join(import.meta.dir, '..', 'generated'));
+const generated = readGeneratedPublicCatalog<Catalog>();
 
 /** The checkout's public catalog root and its parts. */
 export const { root: publicRoot, parts: publicParts } = generated;

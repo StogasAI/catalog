@@ -13,11 +13,10 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PUBLIC_CATALOG_LIMIT, PUBLIC_CATALOG_PART_LIMIT } from './public-catalog.mjs';
 import {
 	CATALOG_ARTIFACT_LIMITS,
-	CATALOG_PART_LIMIT,
 	CATALOG_PARTS_DIRECTORY,
-	CATALOG_PUBLIC_LIMIT,
 	catalogPublicParts,
 	checkCatalogArtifactSize,
 	sha256
@@ -180,13 +179,13 @@ function readParts(container, publicCatalog) {
 	const archive = run(
 		'docker',
 		['cp', `${container}:/workspace/generated/${CATALOG_PARTS_DIRECTORY}`, '-'],
-		{ maxBuffer: CATALOG_PUBLIC_LIMIT + 4 * 1024 * 1024 }
+		{ maxBuffer: PUBLIC_CATALOG_LIMIT + 4 * 1024 * 1024 }
 	);
 	return new Map(
 		listed.map(({ sha256: digest, size }) => {
 			const bytes = run('tar', ['-xOf', '-', '--', `${CATALOG_PARTS_DIRECTORY}/${digest}.json`], {
 				input: archive,
-				maxBuffer: CATALOG_PART_LIMIT
+				maxBuffer: PUBLIC_CATALOG_PART_LIMIT
 			});
 			if (bytes.length !== size || sha256(bytes) !== digest)
 				throw new Error(`Isolated public catalog part ${digest} differs from the root.`);

@@ -1,5 +1,8 @@
 export const PUBLIC_CATALOG_SCHEMA: 'stogas.catalog.public.v6';
 export const PUBLIC_CATALOG_PART_SCHEMA: 'stogas.catalog.public.part.v6';
+export const PUBLIC_CATALOG_ROOT_LIMIT: number;
+export const PUBLIC_CATALOG_PART_LIMIT: number;
+export const PUBLIC_CATALOG_LIMIT: number;
 
 /** What the root keeps of a deployment. */
 export type PublicDeploymentSummary = {
