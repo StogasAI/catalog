@@ -15,10 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
-import { r2WriteConditionETag } from './r2-etag.mjs';
 import {
 	catalogArtifact,
-	catalogApprovalLedgerKey,
 	catalogManifest,
 	parseCatalogReleaseEvidence,
 	canonicalJsonValue,
@@ -34,32 +32,23 @@ const action = process.argv[2];
 const sequence = parseSequence(process.argv[3]);
 const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
+const approvalPath = join(outputRoot, 'catalog-approval.json');
 const targetBucket = process.argv[5]?.trim();
 const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
 if (publicationEnvironment !== 'staging' && publicationEnvironment !== 'prod') {
 	throw new Error('CATALOG_PUBLICATION_ENVIRONMENT must be staging or prod.');
 }
-const latestBrowserCacheControl = 'public, max-age=0, must-revalidate, stale-if-error=0';
-const latestEdgeCacheControl = 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0';
 const immutableCacheControl = 'public, max-age=31536000, immutable';
 const requestTimeoutMs = 30_000;
 const maxObjectBytes = 128 * 1024 * 1024;
 const maxErrorBytes = 64 * 1024;
 const retryableObjectStoreStatus = new Set([409, 429, 500, 502, 503, 504]);
 let r2CredentialsPromise;
+// A catalog becomes current only when Control lists its approval in signed evidence, so
+// publication uploads just the two content-addressed artifacts to both evidence origins.
 const destinations = [
-	{
-		get: getR2Object,
-		latestCacheControl: latestBrowserCacheControl,
-		name: 'R2',
-		put: putR2Object
-	},
-	{
-		get: getS3Object,
-		latestCacheControl: latestEdgeCacheControl,
-		name: 'S3',
-		put: putS3Object
-	}
+	{ get: getR2Object, name: 'R2', put: putR2Object },
+	{ get: getS3Object, name: 'S3', put: putS3Object }
 ];
 
 if (action === 'prepare') {
@@ -68,11 +57,9 @@ if (action === 'prepare') {
 	await preparePlaceholderRelease();
 } else if (action === 'repair') {
 	await repairRelease();
-} else if (action === 'activate') {
-	await activateRelease();
 } else {
 	throw new Error(
-		'Use: publish-release.mjs <prepare|prepare-placeholder|repair|activate> <sequence> <release-output-dir> [r2-bucket]'
+		'Use: publish-release.mjs <prepare|prepare-placeholder|repair> <sequence> <release-output-dir> [r2-bucket]'
 	);
 }
 
@@ -99,16 +86,8 @@ async function preparePlaceholderRelease() {
 		rmSync(proofRoot, { recursive: true, force: true });
 	}
 	verifyChecksums(outputRoot);
-	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
-	const envelope = parseEnvelope(releasePath);
-	const approval = envelope;
-	const approvalPath = writeApproval(approval);
-
-	const latest = await readLatest();
-	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
-	for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
-		await publishImmutable(path, outputRoot);
-	}
+	parseEnvelope(approvalPath);
+	for (const path of artifactPaths(outputRoot)) await publishImmutable(path, outputRoot);
 	console.log(`Prepared staging catalog ${sequence} with placeholder GitHub proof.`);
 	console.log(`  approval ${approvalPath}`);
 }
@@ -135,21 +114,12 @@ async function prepareRelease() {
 			commandEnvironment(process.execPath)
 		);
 		verifyChecksums(outputRoot);
-		const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
-		const envelope = parseEnvelope(releasePath);
+		const envelope = parseEnvelope(approvalPath);
 		const proposedManifest = parseJsonFile(join(proposalRoot, 'catalog-release.json'));
 		if (canonicalJsonValue(envelope.document) !== canonicalJsonValue(proposedManifest)) {
 			throw new Error('The Stogas manifest differs from the GitHub Actions manifest.');
 		}
-
-		const approval = envelope;
-		const approvalPath = writeApproval(approval);
-
-		const latest = await readLatest();
-		assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
-		for (const path of [...artifactPaths(outputRoot), releasePath, approvalPath]) {
-			await publishImmutable(path, outputRoot);
-		}
+		for (const path of artifactPaths(outputRoot)) await publishImmutable(path, outputRoot);
 		if (publicationEnvironment === 'prod') {
 			publishGitHubRelease(envelope);
 		}
@@ -160,27 +130,10 @@ async function prepareRelease() {
 	}
 }
 
-function writeApproval(approval) {
-	const approvalPath = join(outputRoot, 'approvals', `${sequence}.json`);
-	mkdirSync(join(outputRoot, 'approvals'), { recursive: true });
-	writeFileSync(approvalPath, canonicalJson(approval));
-	writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(approval));
-	appendChecksum(outputRoot, approvalPath);
-	verifyChecksums(outputRoot);
-	return approvalPath;
-}
-
 function readPreparedRelease() {
 	requireStorageEnvironment();
 	verifyChecksums(outputRoot);
-	const releasePath = join(outputRoot, 'releases', `${sequence}.json`);
-	const approvalPath = join(outputRoot, 'approvals', `${sequence}.json`);
-	const latestPath = join(outputRoot, 'latest.json');
-	const envelope = parseEnvelope(releasePath);
-	const approval = parseJsonFile(approvalPath);
-	if (canonicalJsonValue(approval) !== canonicalJsonValue(envelope)) {
-		throw new Error('Catalog approval and release differ.');
-	}
+	const approval = parseEnvelope(approvalPath);
 	if (
 		!approval.provenance ||
 		typeof approval.provenance !== 'object' ||
@@ -193,37 +146,19 @@ function readPreparedRelease() {
 		if (
 			publicationEnvironment !== 'staging' ||
 			canonicalJsonValue(proof) !==
-				canonicalJsonValue(stagingDevelopmentProvenance(envelope.document))
+				canonicalJsonValue(stagingDevelopmentProvenance(approval.document))
 		) {
 			throw new Error('Catalog placeholder proof is invalid for this target.');
 		}
 	}
-	if (!readBoundedRegularFile(latestPath).equals(readBoundedRegularFile(releasePath))) {
-		throw new Error('Catalog latest candidate and release differ.');
-	}
-	return { approvalPath, latestPath, releasePath };
 }
 
 async function repairRelease() {
-	const { approvalPath, releasePath } = readPreparedRelease();
-	const latest = await readLatest();
-	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
-	const immutablePaths = [...artifactPaths(outputRoot), releasePath, approvalPath];
-	for (const path of immutablePaths) await publishImmutable(path, outputRoot);
-	await requireImmutableReadbacks(immutablePaths, outputRoot);
-	console.log(`Repaired immutable catalog ${sequence} objects.`);
-}
-
-async function activateRelease() {
-	const { approvalPath, latestPath, releasePath } = readPreparedRelease();
-	const latest = await readLatest();
-	assertMayPublishSequence(latest, readBoundedRegularFile(releasePath));
-	await requireImmutableReadbacks(
-		[...artifactPaths(outputRoot), releasePath, approvalPath],
-		outputRoot
-	);
-	await activateLatest(latest, latestPath);
-	console.log(`Activated catalog ${sequence}.`);
+	readPreparedRelease();
+	const paths = artifactPaths(outputRoot);
+	for (const path of paths) await publishImmutable(path, outputRoot);
+	await requireImmutableReadbacks(paths, outputRoot);
+	console.log(`Repaired catalog ${sequence} artifacts.`);
 }
 
 function requireCommands(commands) {
@@ -391,21 +326,11 @@ function verifyChecksums(root) {
 	}
 }
 
-function appendChecksum(root, path) {
-	const relativePath = relative(root, path).replaceAll('\\', '/');
-	const checksumPath = join(root, 'SHA256SUMS');
-	const current = readBoundedRegularFile(checksumPath).toString('utf8').replace(/\s*$/, '\n');
-	writeFileSync(
-		checksumPath,
-		`${current}${sha256(readBoundedRegularFile(path))}  ${relativePath}\n`
-	);
-}
-
 function artifactPaths(root) {
 	const directory = join(root, 'blobs', 'sha256');
 	assertContainedDirectory(root, 'blobs/sha256');
 	const entries = readdirSync(directory, { withFileTypes: true });
-	const envelope = parseEnvelope(join(root, 'releases', `${sequence}.json`));
+	const envelope = parseEnvelope(join(root, 'catalog-approval.json'));
 	const artifacts = Object.values(envelope.document.artifacts);
 	const expected = new Set(artifacts.map((artifact) => `${artifact.sha256}.json`));
 	if (
@@ -423,7 +348,7 @@ function artifactPaths(root) {
 }
 
 async function publishImmutable(path, root) {
-	const key = immutableObjectKey(relative(root, path).replaceAll('\\', '/'));
+	const key = objectKey(relative(root, path).replaceAll('\\', '/'));
 	const bytes = readBoundedRegularFile(path);
 	await Promise.all(
 		destinations.map(async (destination) => {
@@ -438,8 +363,7 @@ async function publishImmutable(path, root) {
 			}
 			await destination.put(key, bytes, {
 				cacheControl: immutableCacheControl,
-				ifNoneMatch: '*',
-				immutable: true
+				ifNoneMatch: '*'
 			});
 			const published = await destination.get(key);
 			if (!published || !bytes.equals(published.bytes)) {
@@ -455,7 +379,7 @@ async function requireImmutableReadbacks(paths, root) {
 	await Promise.all(
 		destinations.flatMap((destination) =>
 			paths.map(async (path) => {
-				const key = immutableObjectKey(relative(root, path).replaceAll('\\', '/'));
+				const key = objectKey(relative(root, path).replaceAll('\\', '/'));
 				const published = await destination.get(key);
 				if (!published || !readBoundedRegularFile(path).equals(published.bytes)) {
 					throw new Error(`Catalog object ${key} is absent or different in ${destination.name}.`);
@@ -485,93 +409,6 @@ function publishGitHubRelease(envelope) {
 	]);
 }
 
-async function readLatest() {
-	const key = objectKey('latest.json');
-	const states = await Promise.all(
-		destinations.map(async (destination) => {
-			const current = await destination.get(key);
-			if (!current) return { current: null, destination, envelope: null };
-			return {
-				current,
-				destination,
-				envelope: parsePublishedEnvelope(current.bytes, destination.name)
-			};
-		})
-	);
-	const published = states.filter((state) => state.envelope);
-	for (let left = 0; left < published.length; left++) {
-		for (let right = left + 1; right < published.length; right++) {
-			if (
-				published[left].envelope.document.sequence ===
-					published[right].envelope.document.sequence &&
-				!published[left].current.bytes.equals(published[right].current.bytes)
-			) {
-				throw new Error(
-					`Catalog sequence ${published[left].envelope.document.sequence} is bound to different bytes in ${published[left].destination.name} and ${published[right].destination.name}.`
-				);
-			}
-		}
-	}
-	published.sort(
-		(left, right) => right.envelope.document.sequence - left.envelope.document.sequence
-	);
-	return { bytes: published[0]?.current.bytes, envelope: published[0]?.envelope ?? null, states };
-}
-
-function assertMayPublishSequence(latest, releaseBytes) {
-	if (latest.envelope?.document.sequence > sequence) {
-		throw new Error(
-			`Catalog latest is already sequence ${latest.envelope.document.sequence}; ${sequence} would roll it back.`
-		);
-	}
-	if (
-		latest.envelope?.document.sequence === sequence &&
-		latest.bytes &&
-		!releaseBytes.equals(latest.bytes)
-	) {
-		throw new Error(`Catalog sequence ${sequence} is already bound to different content.`);
-	}
-}
-
-async function activateLatest(latest, path) {
-	const bytes = readBoundedRegularFile(path);
-	const key = objectKey('latest.json');
-	await Promise.all(
-		latest.states.map(async ({ current, destination, envelope }) => {
-			if (envelope?.document.sequence === sequence) {
-				if (!bytes.equals(current.bytes)) {
-					throw new Error(
-						`Catalog sequence ${sequence} is already bound to different content in ${destination.name}.`
-					);
-				}
-				if (current.cacheControl === destination.latestCacheControl) return;
-			}
-			await destination.put(key, bytes, {
-				cacheControl: destination.latestCacheControl,
-				ifMatch: current?.etag ?? undefined,
-				ifNoneMatch: current ? undefined : '*'
-			});
-			const published = await destination.get(key);
-			if (!published || !bytes.equals(published.bytes)) {
-				throw new Error(
-					`Catalog latest.json failed ${destination.name} post-publication verification.`
-				);
-			}
-		})
-	);
-}
-
-function parsePublishedEnvelope(bytes, destination) {
-	const envelope = parseCatalogReleaseEvidence(JSON.parse(bytes.toString('utf8')));
-	if (
-		envelope.document?.schema !== 'stogas.catalog.release.v1' ||
-		!Number.isSafeInteger(envelope.document?.sequence)
-	) {
-		throw new Error(`Published catalog latest.json in ${destination} is invalid.`);
-	}
-	return envelope;
-}
-
 async function getR2Object(key) {
 	const response = await r2Request('GET', key);
 	if (response.status === 404) {
@@ -582,11 +419,7 @@ async function getR2Object(key) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`R2 GET ${key} failed (${response.status}).`);
 	}
-	return {
-		bytes: await readBoundedResponseBuffer(response, maxObjectBytes),
-		cacheControl: response.headers.get('cache-control'),
-		etag: r2WriteConditionETag(response.headers.get('etag'))
-	};
+	return { bytes: await readBoundedResponseBuffer(response, maxObjectBytes) };
 }
 
 async function putR2Object(key, bytes, options = {}) {
@@ -594,7 +427,6 @@ async function putR2Object(key, bytes, options = {}) {
 		'cache-control': options.cacheControl,
 		'content-type': 'application/json'
 	};
-	if (options.ifMatch) headers['if-match'] = options.ifMatch;
 	if (options.ifNoneMatch) headers['if-none-match'] = options.ifNoneMatch;
 	const response = await r2Request('PUT', key, bytes, headers);
 	if (!response.ok) {
@@ -743,11 +575,6 @@ function objectKey(path) {
 	const prefix = (process.env.R2_PREFIX ?? 'catalog').trim().replace(/^\/+|\/+$/g, '');
 	const normalizedPath = validObjectPath(path, 'Catalog object path');
 	return prefix ? `${validObjectPath(prefix, 'R2 prefix')}/${normalizedPath}` : normalizedPath;
-}
-
-function immutableObjectKey(path) {
-	const normalizedPath = validObjectPath(path, 'Catalog object path');
-	return catalogApprovalLedgerKey(normalizedPath) ?? objectKey(normalizedPath);
 }
 
 function validObjectPath(value, label) {

@@ -14,7 +14,6 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import {
-	catalogApprovalLedgerKey,
 	canonicalJsonValue,
 	checkCatalogArtifactSize,
 	parseCatalogReleaseEvidence,
@@ -107,12 +106,6 @@ describe('catalog release metadata', () => {
 		} finally {
 			rmSync(root, { force: true, recursive: true });
 		}
-	});
-
-	test('publishes approvals under the shared ledger path only', () => {
-		expect(catalogApprovalLedgerKey('approvals/32.json')).toBe('ledger/v1/catalogs/32.json');
-		expect(catalogApprovalLedgerKey('releases/32.json')).toBeNull();
-		expect(catalogApprovalLedgerKey('approvals/0.json')).toBeNull();
 	});
 
 	test('restricts destructive release output paths', () => {
@@ -218,7 +211,9 @@ describe('catalog release metadata', () => {
 			);
 			expect(result.exitCode).toBe(0);
 
-			const envelopeBytes = readFileSync(join(output, 'releases/7.json'));
+			// Control lists the approval in signed evidence, so only the artifacts are published.
+			expect(readdirSync(output).sort()).toEqual(['SHA256SUMS', 'blobs', 'catalog-approval.json']);
+			const envelopeBytes = readFileSync(join(output, 'catalog-approval.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
 			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance']);
@@ -280,7 +275,6 @@ describe('catalog release metadata', () => {
 				sha256: sourceDigest(process.cwd(), head),
 				tag: 'catalog-v7'
 			});
-			expect(readFileSync(join(output, 'latest.json'))).toEqual(envelopeBytes);
 		} finally {
 			rmSync(output, { force: true, recursive: true });
 		}

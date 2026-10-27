@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { putS3Object } from '../source/scripts/aws-s3.mjs';
-import { r2WriteConditionETag } from '../source/scripts/r2-etag.mjs';
 
 const originalFetch = globalThis.fetch;
+const fileKey = `catalog/blobs/sha256/${'a'.repeat(64)}.json`;
 const originalEnvironment = {
 	AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
 	AWS_BUCKET: process.env.AWS_BUCKET,
@@ -20,13 +20,7 @@ afterEach(() => {
 });
 
 describe('catalog S3 publication', () => {
-	test('uses the strong R2 object validator for conditional writes', () => {
-		expect(r2WriteConditionETag('W/"abc123"')).toBe('"abc123"');
-		expect(r2WriteConditionETag('"abc123"')).toBe('"abc123"');
-		expect(r2WriteConditionETag(null)).toBeNull();
-	});
-
-	test('locks immutable catalog objects for 100 years and leaves aliases unlocked', async () => {
+	test('locks each catalog file for 100 years', async () => {
 		process.env.AWS_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
 		process.env.AWS_BUCKET = 'stogas-catalog-test';
 		delete process.env.AWS_OBJECT_LOCK_ENABLED;
@@ -39,28 +33,22 @@ describe('catalog S3 publication', () => {
 		};
 
 		const startedAt = new Date();
-		await putS3Object('catalog/releases/7.json', Buffer.from('{}'), {
+		await putS3Object(fileKey, Buffer.from('{}'), {
 			cacheControl: 'public, max-age=31536000, immutable',
-			ifNoneMatch: '*',
-			immutable: true
-		});
-		await putS3Object('catalog/latest.json', Buffer.from('{}'), {
-			cacheControl: 'public, max-age=5, stale-while-revalidate=2, stale-if-error=0',
 			ifNoneMatch: '*'
 		});
 		const completedAt = new Date();
 
-		expect(requests).toHaveLength(2);
+		expect(requests).toHaveLength(1);
 		expect(requests[0]!.headers.get('x-amz-object-lock-mode')).toBe('GOVERNANCE');
-		expect(requests.every((request) => request.redirect === 'error')).toBe(true);
+		expect(requests[0]!.headers.get('if-none-match')).toBe('*');
+		expect(requests[0]!.redirect).toBe('error');
 		const retainedUntil = new Date(
 			requests[0]!.headers.get('x-amz-object-lock-retain-until-date')!
 		);
 		expect(retainedUntil.getTime()).toBeGreaterThanOrEqual(addUtcYears(startedAt, 100).getTime());
 		expect(retainedUntil.getTime()).toBeLessThanOrEqual(addUtcYears(completedAt, 100).getTime());
 		expect(requests[0]!.headers.get('x-amz-checksum-sha256')).toBeTruthy();
-		expect(requests[1]!.headers.get('x-amz-object-lock-mode')).toBeNull();
-		expect(requests[1]!.headers.get('cache-control')).toContain('stale-while-revalidate=2');
 	});
 
 	test('rejects unsafe S3 virtual-host configuration before sending credentials', async () => {
@@ -80,7 +68,7 @@ describe('catalog S3 publication', () => {
 		]) {
 			process.env.AWS_BUCKET = bucket;
 			process.env.AWS_REGION = region;
-			await expect(putS3Object('catalog/latest.json', Buffer.from('{}'))).rejects.toThrow();
+			await expect(putS3Object(fileKey, Buffer.from('{}'))).rejects.toThrow();
 		}
 		expect(requests).toBe(0);
 	});
@@ -97,10 +85,9 @@ describe('catalog S3 publication', () => {
 			return new Response(null, { headers: { etag: '"written"' } });
 		};
 
-		await putS3Object('catalog/releases/7.json', Buffer.from('{}'), {
+		await putS3Object(fileKey, Buffer.from('{}'), {
 			cacheControl: 'public, max-age=31536000, immutable',
-			ifNoneMatch: '*',
-			immutable: true
+			ifNoneMatch: '*'
 		});
 
 		expect(request?.headers.get('x-amz-object-lock-mode')).toBeNull();

@@ -41,13 +41,12 @@ mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const runtime = addBlob('catalog.runtime.json');
 const publicCatalog = addBlob('catalog.public.json');
 
-mkdirSync(join(outputRoot, 'releases'), { recursive: true });
-writeFileSync(join(outputRoot, 'releases', `${sequence}.json`), canonicalJson(envelope));
-writeFileSync(join(outputRoot, 'latest.json'), canonicalJson(envelope));
+// Control lists this approval in signed evidence; only its two artifacts are published.
+writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),
 	[
-		`${sha256(canonicalJson(envelope))}  releases/${sequence}.json`,
+		`${sha256(canonicalJson(envelope))}  catalog-approval.json`,
 		`${runtime.digest.slice('sha256:'.length)}  ${runtime.path}`,
 		`${publicCatalog.digest.slice('sha256:'.length)}  ${publicCatalog.path}`
 	].join('\n') + '\n'

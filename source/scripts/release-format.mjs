@@ -201,11 +201,6 @@ export function parseSequence(value) {
 	return parsed;
 }
 
-export function catalogApprovalLedgerKey(relativePath) {
-	const approval = /^approvals\/([1-9][0-9]*)[.]json$/.exec(relativePath);
-	return approval ? `ledger/v1/catalogs/${approval[1]}.json` : null;
-}
-
 export function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }

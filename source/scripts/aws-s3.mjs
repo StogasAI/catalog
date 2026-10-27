@@ -21,23 +21,19 @@ export async function getS3Object(key) {
 	if (!response.ok) {
 		throw await responseError(response, `S3 GET ${key}`);
 	}
-	return {
-		bytes: await readBoundedResponseBuffer(response, MAX_OBJECT_BYTES),
-		cacheControl: response.headers.get('cache-control'),
-		etag: response.headers.get('etag')
-	};
+	return { bytes: await readBoundedResponseBuffer(response, MAX_OBJECT_BYTES) };
 }
 
+/** Catalog objects never change, so production locks each one. */
 export async function putS3Object(key, bytes, options = {}) {
 	const headers = {
 		'cache-control': options.cacheControl,
 		'content-type': 'application/json',
-		'if-match': options.ifMatch,
 		'if-none-match': options.ifNoneMatch,
 		'x-amz-checksum-sha256': createHash('sha256').update(bytes).digest('base64'),
 		'x-amz-sdk-checksum-algorithm': 'SHA256'
 	};
-	if (options.immutable && objectLockEnabled()) {
+	if (objectLockEnabled()) {
 		headers['x-amz-object-lock-mode'] = 'GOVERNANCE';
 		headers['x-amz-object-lock-retain-until-date'] = catalogRetentionUntil().toISOString();
 	}
@@ -46,7 +42,6 @@ export async function putS3Object(key, bytes, options = {}) {
 		throw await responseError(response, `S3 PUT ${key}`);
 	}
 	await response.body?.cancel().catch(() => {});
-	return { etag: response.headers.get('etag') };
 }
 
 function catalogRetentionUntil(now = new Date()) {
