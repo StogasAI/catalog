@@ -15,12 +15,9 @@ function fixture(t, probe = '', part = null) {
 	t.after(() => rmSync(parent, { recursive: true, force: true }));
 	const root = join(parent, 'catalog');
 	mkdirSync(root);
-	const publicBytes = json({
-		schema: 'stogas.catalog.public.v8',
-		archive: null,
-		graph: {},
-		parts: part ? [{ sha256: digest(part), size: Buffer.byteLength(part) }] : []
-	});
+	const parts = part
+		? [{ sha256: digest(part), size: Buffer.byteLength(part), through: null }]
+		: [];
 	const canary = `test-publication-canary-${randomUUID()}`;
 	const secretFile = join(parent, 'publisher-secret');
 	writeFileSync(secretFile, canary);
@@ -39,14 +36,13 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-const runtime = { schema: 'stogas.catalog.runtime.v3', graph: {}, publicDigest: ${JSON.stringify(`sha256:${digest(publicBytes)}`)}, containerId: hostname() };
+const root = { schema: 'stogas.catalog.v9', summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
 mkdirSync('generated', { recursive: true });
-writeFileSync('generated/catalog.runtime.json', JSON.stringify(runtime));
-writeFileSync('generated/catalog.public.json', ${JSON.stringify(publicBytes)});
+writeFileSync('generated/catalog.json', JSON.stringify(root));
 const part = ${JSON.stringify(part)};
-const partPath = ${JSON.stringify(part && `generated/catalog.public.parts/${digest(part)}.json`)};
+const partPath = ${JSON.stringify(part && `generated/catalog.parts/${digest(part)}.json`)};
 if (part) {
-	mkdirSync('generated/catalog.public.parts');
+	mkdirSync('generated/catalog.parts');
 	writeFileSync(partPath, part);
 }
 const secretFile = ${JSON.stringify(secretFile)};
@@ -70,7 +66,7 @@ ${probe}
 		],
 		root
 	);
-	return { root, canary, secretFile, publicBytes };
+	return { root, canary, secretFile, parts };
 }
 
 function run(command, args, cwd) {
@@ -137,26 +133,23 @@ helper.unref();
 		const result = build(source);
 		assert.equal(result.status, 0, result.stderr);
 		assert.equal(readFileSync(source.secretFile, 'utf8'), source.canary);
-		assert.equal(
-			readFileSync(join(source.root, 'generated/catalog.public.json'), 'utf8'),
-			source.publicBytes
+		const { containerId, ...root } = JSON.parse(
+			readFileSync(join(source.root, 'generated/catalog.json'), 'utf8')
 		);
-		const runtime = JSON.parse(
-			readFileSync(join(source.root, 'generated/catalog.runtime.json'), 'utf8')
-		);
-		assert.match(runtime.containerId, /^[a-f0-9]{12}$/);
-		const state = spawnSync('docker', ['inspect', runtime.containerId], { encoding: 'utf8' });
+		assert.deepEqual(root, { schema: 'stogas.catalog.v9', summaries: {}, parts: source.parts });
+		assert.match(containerId, /^[a-f0-9]{12}$/);
+		const state = spawnSync('docker', ['inspect', containerId], { encoding: 'utf8' });
 		assert.notEqual(state.status, 0);
 		assert.match(state.stderr, /no such object/i);
 	}
 );
 
 test(
-	'installs the parts that the public root names, and removes those it no longer names',
+	'installs the parts that the root names, and removes every other generated file',
 	{ timeout: 900_000 },
 	(t) => {
 		const part = '{"part":true}\n';
-		const parts = (source) => join(source.root, 'generated/catalog.public.parts');
+		const parts = (source) => join(source.root, 'generated/catalog.parts');
 		const named = fixture(t, '', part);
 		assert.equal(build(named).status, 0);
 		assert.equal(readFileSync(join(parts(named), `${digest(part)}.json`), 'utf8'), part);
@@ -164,48 +157,43 @@ test(
 		const unnamed = fixture(t);
 		mkdirSync(parts(unnamed), { recursive: true });
 		writeFileSync(join(parts(unnamed), `${digest('{}')}.json`), '{}');
+		writeFileSync(join(unnamed.root, 'generated/catalog.runtime.json'), '{}');
 		const result = build(unnamed);
 		assert.equal(result.status, 0, result.stderr);
 		assert.equal(existsSync(join(parts(unnamed), `${digest('{}')}.json`)), false);
+		assert.equal(existsSync(join(unnamed.root, 'generated/catalog.runtime.json')), false);
 	}
 );
 
 for (const [name, probe, message, part = null] of [
 	[
 		'symlink',
-		"rmSync('generated/catalog.runtime.json'); symlinkSync('/etc/hostname', 'generated/catalog.runtime.json');",
-		/nonempty regular catalog artifact/
+		"rmSync('generated/catalog.json'); symlinkSync('/etc/hostname', 'generated/catalog.json');",
+		/nonempty regular file/
 	],
+	['oversized root', "truncateSync('generated/catalog.json', 16 * 1024 * 1024 + 1);", /ENOBUFS/],
 	[
-		'oversized artifact',
-		"truncateSync('generated/catalog.runtime.json', 32 * 1024 * 1024 + 1);",
-		/ENOBUFS/
-	],
-	[
-		'public digest mismatch',
-		"runtime.publicDigest = 'sha256:' + '0'.repeat(64); writeFileSync('generated/catalog.runtime.json', JSON.stringify(runtime));",
-		/does not commit to the public catalog/
+		'invalid root',
+		"writeFileSync('generated/catalog.json', JSON.stringify({ ...root, parts: [{ sha256: 'part' }] }));",
+		/names an invalid part/
 	],
 	[
 		'changed part',
-		"writeFileSync(partPath, '{}');",
+		"writeFileSync(partPath, part.replace('true', 'TRUE'));",
 		/part [0-9a-f]{64} differs from the root/,
 		'{"part":true}\n'
 	],
-	['missing part', 'rmSync(partPath);', /tar failed/, '{"part":true}\n']
+	['missing part', 'rmSync(partPath);', /parts differ from the root/, '{"part":true}\n']
 ]) {
 	test(`rejects ${name} before installing any build output`, { timeout: 900_000 }, (t) => {
 		const source = fixture(t, probe, part);
 		mkdirSync(join(source.root, 'generated'));
 		const previous = '{"previous":true}\n';
-		writeFileSync(join(source.root, 'generated/catalog.runtime.json'), previous);
+		writeFileSync(join(source.root, 'generated/catalog.json'), previous);
 		const result = build(source);
 		assert.notEqual(result.status, 0);
 		assert.match(result.stderr, message);
-		assert.equal(
-			readFileSync(join(source.root, 'generated/catalog.runtime.json'), 'utf8'),
-			previous
-		);
+		assert.equal(readFileSync(join(source.root, 'generated/catalog.json'), 'utf8'), previous);
 		assert.equal(readFileSync(source.secretFile, 'utf8'), source.canary);
 	});
 }

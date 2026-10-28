@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { canonicalJson } from '../source/scripts/canonical-json.mjs';
-import { buildCatalogs, main } from '../source/scripts/build.mjs';
+import { buildCatalog, catalogFiles, main } from '../source/scripts/build.mjs';
+import { partsInEffect } from '../source/scripts/catalog-files.mjs';
 import { everyStateCatalogChains } from '../source/scripts/resolved-chains.mjs';
 import { catalogAt } from '../source/scripts/schedule.mjs';
 
@@ -89,7 +90,7 @@ function changed(mutator: Mutator) {
 
 function testRejections(cases: RejectionCase[]) {
 	test.each(cases)('%s', (_name, mutate, message) => {
-		expect(() => buildCatalogs(changed(mutate))).toThrow(message);
+		expect(() => buildCatalog(changed(mutate))).toThrow(message);
 	});
 }
 
@@ -170,14 +171,14 @@ describe('catalog source compiler invariants', () => {
 			for (const id of ['Uppercase', 'has/slash', '__proto__', 'trailing\n', 'a: injected']) {
 				const source = sourceFixture();
 				source.graph[kind] = { ...source.graph[kind], [id]: { unvalidated: true } };
-				expect(() => buildCatalogs(source)).toThrow(`${kind}: invalid node ID`);
+				expect(() => buildCatalog(source)).toThrow(`${kind}: invalid node ID`);
 			}
 		}
 	});
 
 	test('compiles nested groups with shared ancestors without changing execution identity', () => {
 		const source = sourceFixture();
-		const original = buildCatalogs(source);
+		const original = buildCatalog(source);
 		source.graph.groups = {
 			root: { authorId: 'openai', name: 'Root' },
 			left: { authorId: 'openai', name: 'Left', parentIds: ['root'] },
@@ -185,18 +186,11 @@ describe('catalog source compiler invariants', () => {
 			leaf: { authorId: 'openai', name: 'Leaf', parentIds: ['right', 'left'] }
 		};
 		source.graph.models['gpt-test'].groupIds = ['leaf'];
-		const grouped = buildCatalogs(source);
-		expect(grouped.public.graph.groups.leaf.parentIds).toEqual(['left', 'right']);
-		expect(grouped.public.graph.models['gpt-test'].groupIds).toEqual(['leaf']);
-		expect(grouped.runtime.graph.groups).toBeUndefined();
-		expect(grouped.runtime.graph.models['gpt-test'].groupIds).toEqual([
-			'leaf',
-			'left',
-			'right',
-			'root'
-		]);
-		expect(chainHash(grouped.runtime.graph.deployments['openai-gpt-test'])).toBe(
-			chainHash(original.runtime.graph.deployments['openai-gpt-test'])
+		const grouped = buildCatalog(source);
+		expect(grouped.graph.groups.leaf.parentIds).toEqual(['left', 'right']);
+		expect(grouped.graph.models['gpt-test'].groupIds).toEqual(['leaf']);
+		expect(chainHash(grouped.graph.deployments['openai-gpt-test'])).toBe(
+			chainHash(original.graph.deployments['openai-gpt-test'])
 		);
 		for (const [mutate, message] of [
 			[
@@ -233,43 +227,39 @@ describe('catalog source compiler invariants', () => {
 		] as const) {
 			const invalid = structuredClone(source);
 			mutate(invalid);
-			expect(() => buildCatalogs(invalid)).toThrow(message);
+			expect(() => buildCatalog(invalid)).toThrow(message);
 		}
 	});
 
 	test.each(['0', '0.001', '0.042', '0.000000000000000000000000000000000001', '1000000000000'])(
-		'preserves exact rate %s USD in both catalog artifacts',
+		'preserves exact rate %s USD',
 		(rate) => {
 			const source = sourceFixture();
 			source.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens = rate;
-			const catalogs = buildCatalogs(source);
-			for (const artifact of [catalogs.public, catalogs.runtime]) {
-				expect(
-					artifact.graph.deployments['openai-gpt-test'].routes['openai-responses'].pricing
-						.output_tokens.per_mill_tokens
-				).toBe(rate);
-			}
+			expect(
+				buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses'].pricing
+					.output_tokens.per_mill_tokens
+			).toBe(rate);
 		}
 	);
-	test('materializes one minimal graph without leaking public-only policy into runtime', () => {
-		const catalogs = buildCatalogs(sourceFixture());
-		expect(catalogs.runtime.graph.deployments['openai-gpt-test']).toMatchObject({
+	test('materializes one minimal graph without provider defaults', () => {
+		const catalogs = buildCatalog(sourceFixture());
+		expect(catalogs.graph.deployments['openai-gpt-test']).toMatchObject({
 			contextWindowTokens: 1000,
 			maxOutputTokens: 200,
 			routes: { 'openai-responses': { reasoningEfforts: ['low', 'high'] } }
 		});
-		expect(catalogs.runtime.graph.providers.openai).toEqual({
+		expect(catalogs.graph.providers.openai).toEqual({
 			aliases: [],
 			credentialModes: ['byok'],
 			name: 'OpenAI'
 		});
-		expect(catalogs.public.graph.providers.openai).not.toHaveProperty('moderated');
 	});
 
 	test('accepts an alias that respells the model ID', () => {
 		const source = sourceFixture();
 		Object.assign(source.graph.models['gpt-test'], { aliases: ['gpt.test'] });
-		expect(buildCatalogs(source).runtime.graph.models['gpt-test'].aliases).toEqual(['gpt.test']);
+		expect(buildCatalog(source).graph.models['gpt-test'].aliases).toEqual(['gpt.test']);
 	});
 
 	test('is deterministic across source map insertion order', () => {
@@ -283,7 +273,7 @@ describe('catalog source compiler invariants', () => {
 				Object.entries(reversed.graph[key]).reverse()
 			) as never;
 		}
-		expect(canonicalJson(buildCatalogs(reversed))).toBe(canonicalJson(buildCatalogs(source)));
+		expect(canonicalJson(buildCatalog(reversed))).toBe(canonicalJson(buildCatalog(source)));
 	});
 
 	describe('rejects invalid references and derivation graphs', () => {
@@ -339,7 +329,7 @@ describe('catalog source compiler invariants', () => {
 			}
 			source.graph.models['gpt-test'].derivedFrom = ['gpt-parent', 'gpt-sibling'];
 			source.graph.models['gpt-sibling'].derivedFrom = ['gpt-parent'];
-			expect(buildCatalogs(source).public.graph.models['gpt-test'].derivedFrom).toEqual([
+			expect(buildCatalog(source).graph.models['gpt-test'].derivedFrom).toEqual([
 				'gpt-parent',
 				'gpt-sibling'
 			]);
@@ -422,8 +412,8 @@ describe('catalog source compiler invariants', () => {
 		source.graph.deployments['azure-gpt-test'].overrides = {
 			dataHandling: { processingLocation: 'unknown' }
 		};
-		const catalogs = buildCatalogs(source);
-		expect(catalogs.public.graph.models['gpt-test']).toMatchObject({
+		const catalogs = buildCatalog(source);
+		expect(catalogs.graph.models['gpt-test']).toMatchObject({
 			snapshot: '2026-01-02',
 			reasoningMaxTokens: { minimum: 1, maximum: 199 }
 		});
@@ -433,7 +423,7 @@ describe('catalog source compiler invariants', () => {
 			retirementDate: '2026-01-02'
 		});
 		expect(
-			buildCatalogs(deploymentBoundary).runtime.graph.deployments['openai-gpt-test'].retirementDate
+			buildCatalog(deploymentBoundary).graph.deployments['openai-gpt-test'].retirementDate
 		).toBe('2026-01-02');
 	});
 
@@ -482,20 +472,19 @@ describe('catalog source compiler invariants', () => {
 				unset: ['reasoningEfforts']
 			}
 		]);
-		const catalogs = buildCatalogs(source);
-		const base = buildCatalogs(sourceFixture());
-		expect(catalogs.runtime.graph).toEqual(base.runtime.graph);
-		expect(catalogs.public.graph).toEqual(base.public.graph);
-		expect(base.runtime.schedule).toEqual([]);
+		const catalogs = buildCatalog(source);
+		const base = buildCatalog(sourceFixture());
+		expect(catalogs.graph).toEqual(base.graph);
+		expect(base.schedule).toEqual([]);
 
-		const [promotion, limited, promotionAgain, raised] = catalogs.runtime.schedule;
-		expect(catalogs.runtime.schedule.map(({ start }) => start)).toEqual([
+		const [promotion, limited, promotionAgain, raised] = catalogs.schedule;
+		expect(catalogs.schedule.map(({ start }) => start)).toEqual([
 			'2026-11-01T00:00:00Z',
 			'2026-11-15T00:00:00Z',
 			'2026-11-20T00:00:00Z',
 			'2026-12-01T00:00:00Z'
 		]);
-		const baseDeployment = base.runtime.graph.deployments['openai-gpt-test'];
+		const baseDeployment = base.graph.deployments['openai-gpt-test'];
 		expect(Object.keys(promotion.graph)).toEqual(['deployments']);
 		const route = (deployment: { routes: Record<string, Record<string, unknown>> }) =>
 			deployment.routes['openai-responses'];
@@ -524,25 +513,20 @@ describe('catalog source compiler invariants', () => {
 			input_tokens: { per_mill_tokens: '0.5' },
 			output_tokens: { per_mill_tokens: '2' }
 		});
-		const publicBase = base.public.graph.deployments['openai-gpt-test'];
-		expect(catalogs.public.schedule[0].graph).toEqual({
-			deployments: {
-				'openai-gpt-test': {
-					...publicBase,
-					routes: {
-						'openai-responses': {
-							...route(publicBase),
-							pricing: {
-								input_tokens: { per_mill_tokens: '1' },
-								output_tokens: { per_mill_tokens: '1' }
-							}
-						}
-					}
+		// The promotion changes the price and so the chain, and nothing else.
+		const promoted = promotion.graph.deployments['openai-gpt-test'];
+		expect({
+			...promoted,
+			routes: {
+				'openai-responses': {
+					...route(promoted),
+					chainHash: route(baseDeployment).chainHash,
+					pricing: route(baseDeployment).pricing
 				}
 			}
-		});
+		}).toEqual(baseDeployment);
 
-		expect(catalogs.public.periods).toEqual([
+		expect(catalogs.periods).toEqual([
 			{
 				kind: 'deployments',
 				id: 'openai-gpt-test',
@@ -565,26 +549,24 @@ describe('catalog source compiler invariants', () => {
 				end: null
 			}
 		]);
-		expect(base.public.periods).toEqual([]);
+		expect(base.periods).toEqual([]);
 
 		// History holds each chain that a request could log, once.
-		expect(
-			[...everyStateCatalogChains(catalogs.public, catalogs.runtime)].map((entry) => entry.hash)
-		).toEqual([
+		expect([...everyStateCatalogChains(catalogs)].map((entry) => entry.hash)).toEqual([
 			chainHash(baseDeployment),
 			chainHash(promotion.graph.deployments['openai-gpt-test']),
 			chainHash(limited.graph.deployments['openai-gpt-test']),
 			chainHash(raised.graph.deployments['openai-gpt-test'])
 		]);
-		const altered = structuredClone(catalogs.runtime);
+		const altered = structuredClone(catalogs);
 		altered.schedule[1].graph.deployments['openai-gpt-test'].routes['openai-responses'].chainHash =
 			chainHash(baseDeployment);
-		expect(() => [...everyStateCatalogChains(catalogs.public, altered)]).toThrow(
+		expect(() => [...everyStateCatalogChains(altered)]).toThrow(
 			'Compiled catalog chain differs from its history.'
 		);
 
-		const at = (time: string) => catalogAt(catalogs.runtime, new Date(time));
-		expect(at('2026-10-31T23:59:59Z')).toEqual(base.runtime.graph);
+		const at = (time: string) => catalogAt(catalogs, new Date(time));
+		expect(at('2026-10-31T23:59:59Z')).toEqual(base.graph);
 		expect(at('2026-11-01T00:00:00Z').deployments['openai-gpt-test']).toEqual(
 			promotion.graph.deployments['openai-gpt-test']
 		);
@@ -604,18 +586,21 @@ describe('catalog source compiler invariants', () => {
 				set: { name: 'OpenAI Labs' }
 			}
 		]);
-		const { runtime, public: publicCatalog } = buildCatalogs(source);
-		expect(runtime.schedule).toHaveLength(2);
-		expect(runtime.schedule[0].graph.authors.openai.name).toBe('OpenAI Labs');
-		expect(Object.keys(runtime.schedule[0].graph.deployments)).toEqual(['openai-gpt-test']);
-		expect(runtime.schedule[1]).toEqual({ start: '2026-11-02T00:00:00Z', graph: {} });
-		expect(publicCatalog.schedule.map(({ graph }) => Object.keys(graph))).toEqual([
-			['authors'],
-			[]
-		]);
+		const catalog = buildCatalog(source);
+		expect(catalog.schedule).toHaveLength(2);
+		expect(catalog.schedule[0].graph.authors.openai.name).toBe('OpenAI Labs');
+		// The author is in the chain of each deployment of its models, so their hashes change too.
+		expect(Object.keys(catalog.schedule[0].graph.deployments)).toEqual(['openai-gpt-test']);
+		expect(catalog.schedule[1]).toEqual({ start: '2026-11-02T00:00:00Z', graph: {} });
+		// Only the author's summary differs, and the root keeps every start.
+		expect(
+			JSON.parse(catalogFiles(catalog).rootJson).schedule.map(
+				({ summaries }: { summaries: object }) => Object.keys(summaries)
+			)
+		).toEqual([['authors'], []]);
 	});
 
-	test('archives retired deployments, and models with none left, as they last were', () => {
+	test('keeps retired records, with the dates by which readers leave them out', () => {
 		const source = sourceFixture();
 		const deployment = source.graph.deployments['openai-gpt-test'];
 		const { models, deployments } = source.graph;
@@ -640,38 +625,27 @@ describe('catalog source compiler invariants', () => {
 				set: { 'pricing.input_tokens.per_mill_tokens': '0.5' }
 			}
 		]);
-		const whole = buildCatalogs(source);
-		expect(whole.archive).toBeNull();
-		expect(whole.runtime.retired).toEqual({ deployments: {}, models: {} });
-		expect(buildCatalogs(source, '2026-04-30').archive).toBeNull();
-
-		const { archive, public: publicCatalog, runtime } = buildCatalogs(source, '2026-06-01');
-		const lastState = whole.public.schedule[0].graph.deployments['openai-gpt-test'];
-		expect(lastState.routes['openai-responses'].pricing.input_tokens).toEqual({
-			per_mill_tokens: '0.5'
-		});
-		expect(archive).toEqual({
-			deployments: {
-				'openai-gpt-other': whole.public.graph.deployments['openai-gpt-other'],
-				'openai-gpt-test': lastState
-			},
-			models: { 'gpt-other': whole.public.graph.models['gpt-other'] }
-		});
-		// A request can name an archived model by its alias too.
-		expect(runtime.retired).toEqual({
-			deployments: { 'openai-gpt-other': '2026-05-01', 'openai-gpt-test': '2026-06-01' },
-			models: { 'gpt-other': '2026-05-01', 'gpt.other': '2026-05-01' }
-		});
-		// The public catalog lists a model without deployments; the runtime omits it.
-		expect(Object.keys(publicCatalog.graph.models).sort()).toEqual(['gpt-listed', 'gpt-test']);
-		expect(Object.keys(runtime.graph.models)).toEqual(['gpt-test']);
-		for (const catalog of [publicCatalog, runtime]) {
-			expect(Object.keys(catalog.graph.deployments)).toEqual(['openai-gpt-later']);
-			// The only period belonged to an archived deployment.
-			expect(catalog.schedule).toEqual([]);
-		}
-		expect(publicCatalog.periods).toEqual([]);
-		expect(publicCatalog.graph.routes).toEqual(whole.public.graph.routes);
+		const catalog = buildCatalog(source);
+		expect(Object.keys(catalog.graph.deployments).sort()).toEqual([
+			'openai-gpt-later',
+			'openai-gpt-other',
+			'openai-gpt-test'
+		]);
+		expect(catalog.schedule[0].graph.deployments['openai-gpt-test']).toBeDefined();
+		const root = JSON.parse(catalogFiles(catalog).rootJson);
+		// A model retires with its last deployment, and a model without one never does.
+		expect(root.summaries.models['gpt-other'].retirementDate).toBe('2026-05-01');
+		expect(root.summaries.models['gpt-test'].retirementDate).toBe('2026-09-01');
+		expect(root.summaries.models['gpt-listed'].retirementDate).toBeNull();
+		expect(root.summaries.authors.openai.retirementDate).toBeNull();
+		expect(root.summaries.providers.openai.retirementDate).toBe('2026-09-01');
+		// Readers leave out the part of the dated records once the last of them has retired.
+		expect(root.parts.map(({ through }: { through: string | null }) => through)).toEqual([
+			null,
+			'2026-09-01'
+		]);
+		expect(partsInEffect(root, Date.parse('2026-09-02T11:59:59Z'))).toEqual([0, 1]);
+		expect(partsInEffect(root, Date.parse('2026-09-02T12:00:00Z'))).toEqual([0]);
 	});
 
 	testRejections([
@@ -809,19 +783,15 @@ describe('catalog source compiler invariants', () => {
 	describe('permits only deployment narrowing and real overrides', () => {
 		test('keeps independent input and combined context limits', () => {
 			const source = sourceFixture();
-			const base = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+			const base = buildCatalog(source).graph.deployments['openai-gpt-test'];
 			expect(base.maxInputTokens).toBe(1000);
 			source.graph.models['gpt-test'].maxInputTokens = 900;
 			source.graph.deployments['openai-gpt-test'].overrides = { contextWindowTokens: 800 };
-			expect(
-				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].maxInputTokens
-			).toBe(800);
+			expect(buildCatalog(source).graph.deployments['openai-gpt-test'].maxInputTokens).toBe(800);
 			delete source.graph.deployments['openai-gpt-test'].overrides;
-			expect(
-				buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].maxInputTokens
-			).toBe(900);
+			expect(buildCatalog(source).graph.deployments['openai-gpt-test'].maxInputTokens).toBe(900);
 			source.graph.models['gpt-test'].maxInputTokens = 1001;
-			expect(() => buildCatalogs(source)).toThrow('input limit must fit inside');
+			expect(() => buildCatalog(source)).toThrow('input limit must fit inside');
 		});
 
 		test('materializes valid narrowing', () => {
@@ -833,7 +803,7 @@ describe('catalog source compiler invariants', () => {
 					reasoningEfforts: ['high']
 				};
 			});
-			expect(buildCatalogs(valid).runtime.graph.deployments['openai-gpt-test']).toMatchObject({
+			expect(buildCatalog(valid).graph.deployments['openai-gpt-test']).toMatchObject({
 				contextWindowTokens: 800,
 				maxOutputTokens: 100,
 				routes: {
@@ -932,9 +902,9 @@ describe('catalog source compiler invariants', () => {
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
 			const efforts = () =>
 				Object.fromEntries(
-					Object.entries(
-						buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'].routes
-					).map(([routeId, route]) => [routeId, route.reasoningEfforts])
+					Object.entries(buildCatalog(source).graph.deployments['openai-gpt-test'].routes).map(
+						([routeId, route]) => [routeId, route.reasoningEfforts]
+					)
 				);
 			expect(efforts()).toEqual({
 				'openai-chat-completions': ['low', 'high'],
@@ -962,7 +932,7 @@ describe('catalog source compiler invariants', () => {
 				openai_responses_web_search_calls: { per_1k_calls: '10' }
 			};
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-			const { routes } = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+			const { routes } = buildCatalog(source).graph.deployments['openai-gpt-test'];
 			expect(routes['openai-chat-completions'].capabilities.streaming).toBe(false);
 			expect(routes['openai-responses'].capabilities.streaming).toBe(true);
 			expect(routes['openai-chat-completions'].inputModalities).toEqual(['text']);
@@ -979,14 +949,14 @@ describe('catalog source compiler invariants', () => {
 
 	test('rejects contradictory data handling while allowing valid TEE and zero retention', () => {
 		expect(() =>
-			buildCatalogs(
+			buildCatalog(
 				changed((source) => {
 					source.graph.providers.openai.dataHandling.teeVerified = true;
 				})
 			)
 		).toThrow('verified TEE handling requires TEE processing');
 		expect(() =>
-			buildCatalogs(
+			buildCatalog(
 				changed((source) => {
 					source.graph.deployments['openai-gpt-test'].overrides = {
 						dataHandling: { teeVerified: true }
@@ -1006,7 +976,7 @@ describe('catalog source compiler invariants', () => {
 			}
 		]) {
 			expect(() =>
-				buildCatalogs(
+				buildCatalog(
 					changed((source) => {
 						source.graph.deployments['openai-gpt-test'].overrides = {
 							dataHandling: override
@@ -1030,7 +1000,7 @@ describe('catalog source compiler invariants', () => {
 			};
 		});
 		const handling =
-			buildCatalogs(valid).runtime.graph.deployments['openai-gpt-test'].routes['openai-responses']
+			buildCatalog(valid).graph.deployments['openai-gpt-test'].routes['openai-responses']
 				.dataHandling;
 		expect(handling).toMatchObject({
 			storageLocation: 'none',
@@ -1043,7 +1013,7 @@ describe('catalog source compiler invariants', () => {
 
 	test('validates provider-owned data handling even when a route masks the contradiction', () => {
 		expect(() =>
-			buildCatalogs(
+			buildCatalog(
 				changed((source) => {
 					source.graph.providers.openai.dataHandling.zeroDataRetention = true;
 					Object.assign(source.graph.routes['openai-responses'].dataHandling, {
@@ -1061,9 +1031,7 @@ describe('catalog source compiler invariants', () => {
 				delete candidate.graph.routes['openai-responses'].endpoint;
 				candidate.graph.providers.openai.credentialModes = ['managed', 'byok'];
 			});
-			expect(
-				buildCatalogs(source).runtime.graph.routes['openai-responses'].endpoint
-			).toBeUndefined();
+			expect(buildCatalog(source).graph.routes['openai-responses'].endpoint).toBeUndefined();
 		});
 
 		testRejections([
@@ -1209,9 +1177,9 @@ describe('catalog source compiler invariants', () => {
 		for (const modelFormat of ['OpenAI', 'OpenAI-OSS', 'DeepSeek']) {
 			const source = changed(asAzure);
 			source.graph.deployments['azure-gpt-test'].upstream.modelFormat = modelFormat;
-			expect(
-				buildCatalogs(source).runtime.graph.deployments['azure-gpt-test'].upstream.modelFormat
-			).toBe(modelFormat);
+			expect(buildCatalog(source).graph.deployments['azure-gpt-test'].upstream.modelFormat).toBe(
+				modelFormat
+			);
 		}
 		const fast = changed((source) => {
 			asAzure(source);
@@ -1220,7 +1188,7 @@ describe('catalog source compiler invariants', () => {
 			);
 			source.graph.deployments['azure-gpt-test-fast'].upstream.serviceTier = 'fast';
 		});
-		expect(buildCatalogs(fast).runtime.graph.deployments['azure-gpt-test-fast']).toBeDefined();
+		expect(buildCatalog(fast).graph.deployments['azure-gpt-test-fast']).toBeDefined();
 
 		const instant = changed((source) => {
 			asAzure(source);
@@ -1228,7 +1196,7 @@ describe('catalog source compiler invariants', () => {
 			deployment.upstream.deploymentType = 'instant';
 			deployment.overrides = { dataHandling: { storageLocation: 'world', retentionDays: null } };
 		});
-		expect(buildCatalogs(instant).runtime.graph.deployments['azure-gpt-test']).toBeDefined();
+		expect(buildCatalog(instant).graph.deployments['azure-gpt-test']).toBeDefined();
 	});
 
 	describe('rejects contradictory Azure target structures', () => {
@@ -1360,20 +1328,18 @@ describe('catalog source compiler invariants', () => {
 	});
 
 	test('records an omitted service tier as standard', () => {
-		const built = buildCatalogs(sourceFixture());
-		expect(built.runtime.graph.deployments['openai-gpt-test'].upstream.serviceTier).toBe(
-			'standard'
-		);
-		expect(built.public.graph.deployments['openai-gpt-test'].upstream.serviceTier).toBe('standard');
+		const built = buildCatalog(sourceFixture());
+		expect(built.graph.deployments['openai-gpt-test'].upstream.serviceTier).toBe('standard');
+		expect(built.graph.deployments['openai-gpt-test'].upstream.serviceTier).toBe('standard');
 	});
 
 	test('allows fixed reasoning mode only on Responses-only routes', () => {
 		const source = sourceFixture();
 		source.graph.deployments['openai-gpt-test'].upstream.reasoningMode = 'pro';
-		expect(buildCatalogs(source).runtime.graph.deployments['openai-gpt-test']).toBeDefined();
+		expect(buildCatalog(source).graph.deployments['openai-gpt-test']).toBeDefined();
 
 		expect(() =>
-			buildCatalogs(
+			buildCatalog(
 				changed((candidate) => {
 					candidate.graph.routes['openai-responses'].interfaces = ['chat_completions', 'responses'];
 					candidate.graph.deployments['openai-gpt-test'].upstream.reasoningMode = 'pro';
@@ -1386,7 +1352,7 @@ describe('catalog source compiler invariants', () => {
 		const source = sourceFixture();
 		asAzure(source);
 		source.graph.deployments['azure-gpt-test'].upstream.reasoningMode = 'pro';
-		expect(buildCatalogs(source).runtime.graph.deployments['azure-gpt-test']).toBeDefined();
+		expect(buildCatalog(source).graph.deployments['azure-gpt-test']).toBeDefined();
 	});
 
 	test('rejects unsafe CLI flag combinations before touching output', async () => {
@@ -1410,17 +1376,15 @@ describe('route document formats', () => {
 		addSecondOpenAIRoute(source);
 		source.graph.routes['openai-chat-completions'].documentFormats = pdf;
 		source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-		const original = buildCatalogs(source);
-		for (const artifact of [original.runtime, original.public]) {
-			expect(artifact.graph.routes['openai-responses'].documentFormats).toEqual(documents);
-			expect(artifact.graph.routes['openai-chat-completions'].documentFormats).toEqual(pdf);
-		}
-		const deployment = original.runtime.graph.deployments['openai-gpt-test'];
+		const original = buildCatalog(source);
+		expect(original.graph.routes['openai-responses'].documentFormats).toEqual(documents);
+		expect(original.graph.routes['openai-chat-completions'].documentFormats).toEqual(pdf);
+		const deployment = original.graph.deployments['openai-gpt-test'];
 		expect(Object.keys(deployment.routes)).toEqual(['openai-chat-completions', 'openai-responses']);
 		expect(deployment.routes['openai-responses']).not.toHaveProperty('documentFormats');
 
 		source.graph.routes['openai-responses'].documentFormats = pdf;
-		const changedRoute = buildCatalogs(source).runtime.graph.deployments['openai-gpt-test'];
+		const changedRoute = buildCatalog(source).graph.deployments['openai-gpt-test'];
 		expect(chainHash(changedRoute)).not.toBe(chainHash(deployment));
 		expect(changedRoute.routes['openai-chat-completions'].chainHash).toBe(
 			deployment.routes['openai-chat-completions'].chainHash
@@ -1431,11 +1395,11 @@ describe('route document formats', () => {
 		const source = sourceFixture();
 		source.graph.routes['openai-responses'].documentFormats = documents;
 		source.graph.models['gpt-test'].inputModalities = ['text'];
-		const { runtime } = buildCatalogs(source);
-		expect(runtime.graph.routes['openai-responses'].documentFormats).toEqual(documents);
-		expect(
-			runtime.graph.deployments['openai-gpt-test'].routes['openai-responses'].inputModalities
-		).toEqual(['text']);
+		const { graph } = buildCatalog(source);
+		expect(graph.routes['openai-responses'].documentFormats).toEqual(documents);
+		expect(graph.deployments['openai-gpt-test'].routes['openai-responses'].inputModalities).toEqual(
+			['text']
+		);
 	});
 
 	test.each([
@@ -1449,6 +1413,6 @@ describe('route document formats', () => {
 	])('rejects ambiguous format facts %j', (formats) => {
 		const source = sourceFixture();
 		source.graph.routes['openai-responses'].documentFormats = formats;
-		expect(() => buildCatalogs(source)).toThrow(/documentFormats/);
+		expect(() => buildCatalog(source)).toThrow(/documentFormats/);
 	});
 });

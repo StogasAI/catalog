@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/svelte';
 import { orderModelGroups, type ModelGroup } from '../../source/scripts/model-groups.mjs';
-import { PUBLIC_CATALOG_SCHEMA } from '../../source/scripts/public-catalog.mjs';
+import { CATALOG_SCHEMA } from '../../source/scripts/catalog-files.mjs';
 
 export type NodeType = 'author' | 'group' | 'model' | 'provider' | 'route' | 'deployment';
 
@@ -13,20 +13,28 @@ export type CatalogGraph = {
 	deployments: Record<string, Record<string, unknown>>;
 };
 
-// The editor shows the base graph of the catalog with each archived record as it was on its last
-// day; each node's dated periods appear in its source.
+// The editor shows the base graph of the whole catalog, retired records too; each node's dated
+// periods appear in its source.
 export type Catalog = {
-	schema: typeof PUBLIC_CATALOG_SCHEMA;
+	schema: typeof CATALOG_SCHEMA;
 	graph: CatalogGraph;
+	/** Each record's retirement date by kind and ID, or null, as the root summarizes it. */
+	retirementDates: Record<keyof CatalogGraph, Record<string, string | null>>;
 };
 
 export function parseCatalog(value: unknown): Catalog {
-	if (!isObject(value) || value.schema !== PUBLIC_CATALOG_SCHEMA || !isObject(value.graph)) {
-		throw new TypeError('The generated public catalog is invalid.');
+	if (
+		!isObject(value) ||
+		value.schema !== CATALOG_SCHEMA ||
+		!isObject(value.graph) ||
+		!isObject(value.summaries)
+	) {
+		throw new TypeError('The generated catalog is invalid.');
 	}
-	const graph = value.graph;
+	const { graph, summaries } = value;
 	const groups = parseGroupEntries(graph.groups);
 	orderModelGroups(groups);
+	const kinds = ['authors', 'groups', 'models', 'providers', 'routes', 'deployments'] as const;
 	return {
 		schema: value.schema,
 		graph: {
@@ -36,7 +44,18 @@ export function parseCatalog(value: unknown): Catalog {
 			models: parseCatalogCollection(graph.models, 'models'),
 			providers: parseCatalogCollection(graph.providers, 'providers'),
 			routes: parseCatalogCollection(graph.routes, 'routes')
-		}
+		},
+		retirementDates: Object.fromEntries(
+			kinds.map((kind) => [
+				kind,
+				Object.fromEntries(
+					Object.entries(parseCatalogCollection(summaries[kind], kind)).map(([id, summary]) => [
+						id,
+						typeof summary.retirementDate === 'string' ? summary.retirementDate : null
+					])
+				)
+			])
+		) as Catalog['retirementDates']
 	};
 }
 

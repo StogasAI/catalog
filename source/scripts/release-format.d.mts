@@ -1,13 +1,21 @@
+import type { CatalogPartFile } from './catalog-files.mjs';
+
 type ReleaseArtifact = { sha256: string; size_bytes: number };
 
-/** The largest size of each artifact that a release names, in bytes. */
-export const CATALOG_ARTIFACT_LIMITS: Readonly<
-	Record<'catalog.public.json' | 'catalog.runtime.json', number>
->;
+/** The release's one artifact, the catalog's root, which names every part. */
+export const CATALOG_ROOT: 'catalog.json';
+/** Where the build writes each part that the root names, by its SHA-256. */
+export const CATALOG_PARTS_DIRECTORY: 'catalog.parts';
 
-/** The staging build proof for a catalog release manifest and its two artifacts. */
+/**
+ * Every part that a root names, after checking the root, each part and the root with every part.
+ * Warns as the root or the whole nears its limit.
+ */
+export function catalogFileList(rootBytes: Uint8Array | string): CatalogPartFile[];
+
+/** The staging build proof for a catalog release manifest and its root. */
 export function stagingDevelopmentProvenance(manifest: {
-	artifacts: Record<'catalog.public.json' | 'catalog.runtime.json', ReleaseArtifact>;
+	artifacts: Record<typeof CATALOG_ROOT, ReleaseArtifact>;
 }): {
 	_type: 'https://in-toto.io/Statement/v1';
 	predicate: { environment: 'staging' };

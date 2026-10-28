@@ -1,16 +1,15 @@
 import { expect, test } from 'bun:test';
-import { publicCatalog } from './generated-catalog';
-import runtimeCatalog from '../generated/catalog.runtime.json';
+import { catalog } from './generated-catalog';
 import { resolvedCatalogChains } from '../source/scripts/resolved-chains.mjs';
 
-function chains(graph = publicCatalog.graph) {
+function chains(graph = catalog.graph) {
 	return [...resolvedCatalogChains(graph)];
 }
 
 test('compiled chain hashes identify individual executable paths and resolved facts', () => {
 	const resolved = chains();
 	expect(resolved).toHaveLength(
-		Object.values(runtimeCatalog.graph.deployments).reduce(
+		Object.values(catalog.graph.deployments).reduce(
 			(sum, deployment) => sum + Object.keys(deployment.routes).length,
 			0
 		)
@@ -18,7 +17,7 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 	expect(new Set(resolved.map((entry) => entry.hash)).size).toBe(resolved.length);
 	for (const entry of resolved) {
 		const { chainHash, ...facts } =
-			runtimeCatalog.graph.deployments[entry.deploymentId].routes[entry.routeId];
+			catalog.graph.deployments[entry.deploymentId].routes[entry.routeId];
 		const chain = JSON.parse(entry.json);
 		expect(chainHash).toBe(entry.hash);
 		// A chain holds what the deployment serves on its own route and nothing of other routes.
@@ -30,7 +29,7 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 });
 
 test('node order does not change chain identities', () => {
-	const graph = structuredClone(publicCatalog.graph);
+	const graph = structuredClone(catalog.graph);
 	graph.models = Object.fromEntries(Object.entries(graph.models).reverse());
 	graph.deployments = Object.fromEntries(Object.entries(graph.deployments).reverse());
 	expect(chains(graph)).toEqual(chains());
@@ -38,7 +37,7 @@ test('node order does not change chain identities', () => {
 
 test('changes affect only paths containing the changed node and preserve old content', () => {
 	const original = chains();
-	const graph = structuredClone(publicCatalog.graph);
+	const graph = structuredClone(catalog.graph);
 	const routeId = 'openai-responses';
 	graph.routes[routeId].endpoint = 'https://api.openai.com/v2/responses';
 	const updated = chains(graph);
@@ -53,7 +52,7 @@ test('changes affect only paths containing the changed node and preserve old con
 });
 
 test('missing path facts fail instead of producing incomplete historical records', () => {
-	const graph = structuredClone(publicCatalog.graph);
+	const graph = structuredClone(catalog.graph);
 	delete (graph.routes as Record<string, unknown>)['openai-responses'];
 	expect(() => chains(graph)).toThrow('missing node openai-responses');
 });

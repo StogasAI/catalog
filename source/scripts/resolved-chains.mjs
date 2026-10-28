@@ -30,20 +30,15 @@ export function* resolvedCatalogChains(graph) {
 }
 
 // A request logs the chain in effect when it ran, so request history needs the chains of
-// the base graph and of every dated state. Each chain is yielded once.
-export function* everyStateCatalogChains(publicCatalog, runtimeCatalog) {
-	const instants = new Set(
-		[...publicCatalog.schedule, ...runtimeCatalog.schedule].map(({ start }) => Date.parse(start))
-	);
+// the base graph and of every dated state. Each chain is yielded once, after checking that the
+// deployment names it.
+export function* everyStateCatalogChains(catalog) {
 	const seen = new Set();
-	for (const at of [-Infinity, ...[...instants].sort((left, right) => left - right)]) {
-		const runtime = catalogAt(runtimeCatalog, at);
-		for (const entry of resolvedCatalogChains(catalogAt(publicCatalog, at))) {
-			if (
-				runtime.deployments[entry.deploymentId]?.routes[entry.routeId]?.chainHash !== entry.hash
-			) {
+	for (const at of [-Infinity, ...catalog.schedule.map(({ start }) => Date.parse(start))]) {
+		const graph = catalogAt(catalog, at);
+		for (const entry of resolvedCatalogChains(graph)) {
+			if (graph.deployments[entry.deploymentId].routes[entry.routeId].chainHash !== entry.hash)
 				throw new Error('Compiled catalog chain differs from its history.');
-			}
 			if (seen.has(entry.hash)) continue;
 			seen.add(entry.hash);
 			yield entry;

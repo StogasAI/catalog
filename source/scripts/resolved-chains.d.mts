@@ -15,11 +15,11 @@ type Chain = {
 	json: string;
 };
 
-/** The input is a validated public graph. */
+/** The input is a validated catalog graph. */
 export function resolvedCatalogChains(graph: Graph): Generator<Chain>;
 
-/** Chains of the base graph and of every dated state, each once. */
-export function everyStateCatalogChains(
-	publicCatalog: Catalog,
-	runtimeCatalog: Catalog
-): Generator<Chain>;
+/**
+ * Chains of the base graph and of every dated state, each once, after checking that each
+ * deployment names the hash of its chain.
+ */
+export function everyStateCatalogChains(catalog: Catalog): Generator<Chain>;

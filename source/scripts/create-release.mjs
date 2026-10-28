@@ -40,13 +40,12 @@ const envelope = parseCatalogReleaseEvidence({
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const blobs = [
-	addBlob(catalogArtifact(repositoryRoot, 'catalog.runtime.json')),
-	addBlob(catalogArtifact(repositoryRoot, 'catalog.public.json')),
+	addBlob(catalogArtifact(repositoryRoot)),
 	...catalogPartArtifacts(repositoryRoot).map(addBlob)
 ];
 
-// Control lists this approval in signed evidence; only its artifacts and the files that the
-// public root names are published.
+// Control lists this approval in signed evidence; only its root and the parts that the root names
+// are published.
 writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),

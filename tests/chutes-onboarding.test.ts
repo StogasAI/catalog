@@ -1,6 +1,5 @@
 import { describe, test } from 'bun:test';
-import { publicCatalog } from './generated-catalog';
-import runtimeCatalog from '../generated/catalog.runtime.json';
+import { catalog } from './generated-catalog';
 import {
 	assertProviderOnboardingContract,
 	type ProviderDeploymentContract
@@ -298,7 +297,7 @@ const deployments: ProviderDeploymentContract[] = [
 
 describe('Chutes provider onboarding contract', () => {
 	test('pins the complete model, price, route, and TEE surface', () => {
-		assertProviderOnboardingContract(runtimeCatalog, publicCatalog, {
+		assertProviderOnboardingContract(catalog, {
 			deployments,
 			provider: {
 				aliases: [],

@@ -8,7 +8,7 @@
 		"./schedule": "./source/scripts/schedule.mjs",
 		"./viewer": "./editor/src/catalog.ts",
 		"./viewer/types": "./editor/src/types.ts",
-		"./public": "./source/scripts/public-catalog.mjs",
+		"./files": "./source/scripts/catalog-files.mjs",
 		"./generated": "./source/scripts/generated-catalog.mjs"
 	},
 	"packageManager": "bun@1.4.4",

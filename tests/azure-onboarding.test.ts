@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { publicCatalog } from './generated-catalog';
-import runtimeCatalog from '../generated/catalog.runtime.json';
+import { catalog } from './generated-catalog';
 
 type AzureTarget = {
 	id: string;
@@ -13,7 +12,7 @@ const allReasoningEfforts = ['low', 'medium', 'high', 'xhigh', 'max'];
 const chatReasoningEfforts = ['low', 'medium', 'high', 'xhigh'];
 
 function azureDeployments() {
-	return Object.entries(runtimeCatalog.graph.deployments).filter(([, deployment]) =>
+	return Object.entries(catalog.graph.deployments).filter(([, deployment]) =>
 		Object.keys(deployment.routes).some((routeId) => routeId.startsWith('azure-'))
 	);
 }
@@ -345,19 +344,19 @@ describe('Azure provider onboarding contract', () => {
 	});
 
 	test('keeps Azure BYOK-only and uses only the three verified wire routes', () => {
-		expect(runtimeCatalog.graph.providers.azure).toEqual({
+		expect(catalog.graph.providers.azure).toEqual({
 			aliases: ['azure-ai-foundry', 'azure-openai'],
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
 			name: 'Azure'
 		});
 		expect(
-			Object.entries(runtimeCatalog.graph.routes)
+			Object.entries(catalog.graph.routes)
 				.filter(([, route]) => route.providerId === 'azure')
 				.map(([id]) => id)
 				.sort()
 		).toEqual(['azure-anthropic-messages', 'azure-chat-completions', 'azure-responses']);
-		expect(publicCatalog.graph.providers.azure.credentialModes).toEqual(['byok']);
+		expect(catalog.graph.providers.azure.credentialModes).toEqual(['byok']);
 	});
 
 	test('pins GPT prices and retirement for every Azure location, tier, and reasoning mode', () => {
@@ -473,8 +472,7 @@ describe('Azure provider onboarding contract', () => {
 			expect(handling.retentionDays).toBe(fableOrMythos ? 30 : 0);
 			// Foundry offers no max effort for Claude Fable and Mythos.
 			expect(route.reasoningEfforts.includes('max')).toBe(
-				!fableOrMythos &&
-					runtimeCatalog.graph.models[deployment.modelId].reasoningEfforts.includes('max')
+				!fableOrMythos && catalog.graph.models[deployment.modelId].reasoningEfforts.includes('max')
 			);
 			if (fableOrMythos) {
 				expect(handling.storageLocation).toBe('unknown');
@@ -495,7 +493,7 @@ describe('Azure provider onboarding contract', () => {
 			'azure-glm-5.2': ['1.54', '0.15', '4.84'],
 			'azure-minimax-m3': ['0.33', '0.066', '1.32']
 		} as const;
-		const deployments = runtimeCatalog.graph.deployments;
+		const deployments = catalog.graph.deployments;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
 			expectRoutePricing(deployments[id as keyof typeof deployments], {
 				cached_input_tokens: { per_mill_tokens: cached },
@@ -547,7 +545,7 @@ describe('Azure provider onboarding contract', () => {
 			'nemotron-3-super',
 			'nemotron-3-ultra'
 		]) {
-			expect(publicCatalog.graph.models[modelId]).toBeDefined();
+			expect(catalog.graph.models[modelId]).toBeDefined();
 			expect(azureModelIds.has(modelId)).toBe(false);
 		}
 	});

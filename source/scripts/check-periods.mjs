@@ -11,7 +11,7 @@ try {
 		);
 	} else {
 		const catalog = JSON.parse(
-			await readFile(new URL('../../generated/catalog.public.json', import.meta.url), 'utf8')
+			await readFile(new URL('../../generated/catalog.json', import.meta.url), 'utf8')
 		);
 		const now = Date.now();
 		const stale = catalog.periods.filter(({ start, end }) => Date.parse(end ?? start) <= now);

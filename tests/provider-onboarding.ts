@@ -75,14 +75,12 @@ export type ProviderOnboardingContract = {
 };
 
 export function assertProviderOnboardingContract(
-	runtimeCatalog: Catalog,
-	publicCatalog: Catalog,
+	catalog: Catalog,
 	contract: ProviderOnboardingContract
 ) {
-	const runtime = runtimeCatalog.graph;
-	const published = publicCatalog.graph;
+	const { graph } = catalog;
 	const providerId = contract.provider.id;
-	const providerRoutes = Object.entries(runtime.routes)
+	const providerRoutes = Object.entries(graph.routes)
 		.filter(([, route]) => route.providerId === providerId)
 		.map(([id]) => id)
 		.sort();
@@ -95,8 +93,7 @@ export function assertProviderOnboardingContract(
 			? { headquarteredCountry: contract.provider.headquarteredCountry }
 			: {})
 	};
-	expect(runtime.providers[providerId]).toEqual(provider);
-	expect(published.providers[providerId]).toEqual(provider);
+	expect(graph.providers[providerId]).toEqual(provider);
 
 	const routes = new Map(contract.routes.map((route) => [route.id, route]));
 	const routeHandling = (route: ProviderRouteContract) => ({
@@ -104,12 +101,7 @@ export function assertProviderOnboardingContract(
 		...route.dataHandling
 	});
 	for (const route of contract.routes) {
-		expect(runtime.routes[route.id]).toEqual({
-			documentFormats: route.documentFormats,
-			interfaces: route.interfaces,
-			providerId
-		});
-		expect(published.routes[route.id]).toEqual({
+		expect(graph.routes[route.id]).toEqual({
 			capabilities: { ...contract.provider.capabilities, ...route.capabilities },
 			dataHandling: routeHandling(route),
 			documentFormats: route.documentFormats,
@@ -121,7 +113,7 @@ export function assertProviderOnboardingContract(
 		});
 	}
 
-	const deploymentIds = Object.entries(runtime.deployments)
+	const deploymentIds = Object.entries(graph.deployments)
 		.filter(([, deployment]) =>
 			Object.keys(deployment.routes).some((routeId) => providerRoutes.includes(routeId))
 		)
@@ -169,8 +161,7 @@ export function assertProviderOnboardingContract(
 			upstream: expected.upstream,
 			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};
-		expect(published.deployments[expected.id]).toEqual(deployment);
-		expect(runtime.deployments[expected.id]).toEqual({
+		expect(graph.deployments[expected.id]).toEqual({
 			...deployment,
 			routes: Object.fromEntries(
 				Object.entries(servedRoutes).map(([routeId, route]) => [
@@ -180,7 +171,7 @@ export function assertProviderOnboardingContract(
 			)
 		});
 
-		expect(published.models[expected.modelId]).toMatchObject({
+		expect(graph.models[expected.modelId]).toMatchObject({
 			authorId: expected.authorId,
 			contextWindowTokens: expected.modelContextWindowTokens ?? expected.contextWindowTokens,
 			inputModalities: expected.inputModalities,
@@ -190,6 +181,6 @@ export function assertProviderOnboardingContract(
 			reasoning: expected.modelReasoning ?? 'unsupported',
 			reasoningMaxTokens: expected.modelReasoningMaxTokens ?? null
 		});
-		expect(published.authors[expected.authorId]).toBeDefined();
+		expect(graph.authors[expected.authorId]).toBeDefined();
 	}
 }

@@ -11,23 +11,18 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CATALOG_ROOT_LIMIT } from './catalog-files.mjs';
 import {
-	CATALOG_ARCHIVE_INDEX_LIMIT,
-	CATALOG_ARCHIVE_LIMIT,
-	PUBLIC_CATALOG_LIMIT
-} from './public-catalog.mjs';
-import {
-	CATALOG_ARTIFACT_LIMITS,
 	CATALOG_PARTS_DIRECTORY,
-	catalogPublicFiles,
-	checkCatalogArtifactSize,
+	CATALOG_ROOT,
+	catalogFileList,
 	sha256
 } from './release-format.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
-// The source and the tracked generated artifacts, which take at most 160 MiB.
+// The source and the tracked generated files, which take at most 128 MiB.
 const maxSnapshotBytes = 256 * 1024 * 1024;
 
 // Only this reviewed driver and the publisher run on the host. Package scripts
@@ -93,23 +88,12 @@ export function buildCatalogRelease(root = repositoryRoot) {
 		}
 		// Docker has stopped every process before any output crosses the boundary.
 		// Read individual files through bounded tar streams; never extract a tree.
-		const runtime = readArtifact(container, 'catalog.runtime.json');
-		const publicCatalog = readArtifact(container, 'catalog.public.json');
-		if (JSON.parse(runtime).publicDigest !== `sha256:${sha256(publicCatalog)}`) {
-			throw new Error('Isolated runtime does not commit to the public catalog.');
-		}
-		const parts = readParts(container, publicCatalog);
+		const catalog = readRoot(container);
+		const parts = readParts(container, work, catalog);
 		if (captureSource(root).digest !== source.digest) {
 			throw new Error('Catalog source changed during the isolated release build.');
 		}
-		installArtifacts(
-			root,
-			new Map([
-				['catalog.runtime.json', runtime],
-				['catalog.public.json', publicCatalog]
-			]),
-			parts
-		);
+		installArtifacts(root, catalog, parts);
 		console.log('Catalog release build and checks passed in an isolated container.');
 	} finally {
 		try {
@@ -165,45 +149,65 @@ function captureSource(root) {
 	return { files, digest: hash.digest('hex') };
 }
 
-function readArtifact(container, path) {
-	const limit = CATALOG_ARTIFACT_LIMITS[path];
-	const archive = run('docker', ['cp', `${container}:/workspace/generated/${path}`, '-'], {
-		maxBuffer: limit + 1024 * 1024
+function readRoot(container) {
+	const archive = run('docker', ['cp', `${container}:/workspace/generated/${CATALOG_ROOT}`, '-'], {
+		maxBuffer: CATALOG_ROOT_LIMIT + 1024 * 1024
 	});
-	const bytes = run('tar', ['-xOf', '-', '--', basename(path)], {
+	const bytes = run('tar', ['-xOf', '-', '--', CATALOG_ROOT], {
 		input: archive,
-		maxBuffer: limit
+		maxBuffer: CATALOG_ROOT_LIMIT
 	});
-	if (!bytes.length) throw new Error(`${path} must be a nonempty regular catalog artifact.`);
-	// The container's own warning stays inside it.
-	checkCatalogArtifactSize(path, bytes.length);
+	if (!bytes.length) throw new Error(`${CATALOG_ROOT} must be a nonempty regular file.`);
 	return bytes;
 }
 
-/** The files that the root names, each read from one bounded tar stream of the parts directory. */
-function readParts(container, publicCatalog) {
-	const listed = catalogPublicFiles(publicCatalog);
-	if (!listed.length) return new Map();
-	const archive = run(
-		'docker',
-		['cp', `${container}:/workspace/generated/${CATALOG_PARTS_DIRECTORY}`, '-'],
-		{ maxBuffer: PUBLIC_CATALOG_LIMIT + CATALOG_ARCHIVE_LIMIT + 4 * 1024 * 1024 }
+/**
+ * The parts that the root names, read from one bounded tar stream of the parts directory with one
+ * more tar run, which writes them one after another in the archive's order.
+ */
+function readParts(container, work, catalog) {
+	// The container's own warnings stay inside it.
+	const listed = new Map(
+		catalogFileList(catalog).map(({ sha256: digest, size }) => [
+			`${CATALOG_PARTS_DIRECTORY}/${digest}.json`,
+			{ digest, size }
+		])
 	);
-	return new Map(
-		listed.map(({ sha256: digest, size }) => {
-			const bytes = run('tar', ['-xOf', '-', '--', `${CATALOG_PARTS_DIRECTORY}/${digest}.json`], {
-				input: archive,
-				maxBuffer: CATALOG_ARCHIVE_INDEX_LIMIT
-			});
-			if (bytes.length !== size || sha256(bytes) !== digest)
-				throw new Error(`Isolated public catalog part ${digest} differs from the root.`);
-			return [`${digest}.json`, bytes];
+	if (!listed.size) return new Map();
+	const total = [...listed.values()].reduce((sum, { size }) => sum + size, 0);
+	const archive = join(work, 'parts.tar');
+	writeFileSync(
+		archive,
+		run('docker', ['cp', `${container}:/workspace/generated/${CATALOG_PARTS_DIRECTORY}`, '-'], {
+			// Each member takes a header block and pads its last block.
+			maxBuffer: total + (listed.size + 2) * 1024 + 10240
 		})
 	);
+	const names = run('tar', ['-tf', archive], { maxBuffer: (listed.size + 2) * 1024 })
+		.toString()
+		.split('\n')
+		.filter((name) => listed.has(name));
+	if (names.length !== listed.size || new Set(names).size !== names.length)
+		throw new Error('The isolated catalog parts differ from the root.');
+	const bytes = run('tar', ['-xOf', archive, '--', ...names], { maxBuffer: total });
+	if (bytes.length !== total) throw new Error('The isolated catalog parts differ from the root.');
+	const parts = new Map();
+	let offset = 0;
+	for (const name of names) {
+		const { digest, size } = listed.get(name);
+		const part = bytes.subarray(offset, (offset += size));
+		if (sha256(part) !== digest)
+			throw new Error(`Isolated catalog part ${digest} differs from the root.`);
+		parts.set(`${digest}.json`, part);
+	}
+	return parts;
 }
 
-/** Writes each artifact and part in place, and removes parts that the root no longer names. */
-function installArtifacts(root, artifacts, parts) {
+/**
+ * Writes the root and each part in place, and removes every other generated file, such as parts
+ * that the root no longer names.
+ */
+function installArtifacts(root, catalog, parts) {
 	const generated = join(root, 'generated');
 	const partsDirectory = join(generated, CATALOG_PARTS_DIRECTORY);
 	mkdirSync(partsDirectory, { recursive: true });
@@ -215,7 +219,7 @@ function installArtifacts(root, artifacts, parts) {
 	// Parts first, so the root never names a part that is not there yet.
 	const entries = [
 		...[...parts].map(([name, bytes]) => [join(partsDirectory, name), bytes]),
-		...[...artifacts].map(([path, bytes]) => [join(generated, path), bytes])
+		[join(generated, CATALOG_ROOT), catalog]
 	];
 	for (const [target, bytes] of entries) {
 		const temporary = `${target}.${randomUUID()}.tmp`;
@@ -228,6 +232,9 @@ function installArtifacts(root, artifacts, parts) {
 	}
 	for (const name of readdirSync(partsDirectory))
 		if (!parts.has(name)) rmSync(join(partsDirectory, name), { force: true });
+	for (const name of readdirSync(generated))
+		if (name !== CATALOG_ROOT && name !== CATALOG_PARTS_DIRECTORY)
+			rmSync(join(generated, name), { force: true, recursive: true });
 }
 
 function run(command, args, options = {}) {

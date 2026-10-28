@@ -15,7 +15,7 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readPublicCatalog } from './generated-catalog';
+import { readCatalog } from './generated-catalog';
 
 // These cases launch real compilers; use the same bound as each build process.
 setDefaultTimeout(60_000);
@@ -149,21 +149,18 @@ describe('catalog build process boundaries', () => {
 
 	test('validates and checks without changing artifacts, then cleans only its copied outputs', () => {
 		const root = catalogCopy();
-		const runtime = readFileSync(join(root, 'generated/catalog.runtime.json'), 'utf8');
-		const publicCatalog = readFileSync(join(root, 'generated/catalog.public.json'), 'utf8');
+		const catalog = readFileSync(join(root, 'generated/catalog.json'), 'utf8');
 
 		expectBuildSuccess(runBuild(root, ['--validate-only']));
-		expect(readFileSync(join(root, 'generated/catalog.runtime.json'), 'utf8')).toBe(runtime);
-		expect(readFileSync(join(root, 'generated/catalog.public.json'), 'utf8')).toBe(publicCatalog);
+		expect(readFileSync(join(root, 'generated/catalog.json'), 'utf8')).toBe(catalog);
 		expect(existsSync(join(root, 'source/.tmp-catalog-build'))).toBe(false);
 
 		expectBuildSuccess(runBuild(root, ['--check']));
 		rmSync(join(root, 'generated'), { recursive: true });
 		expectBuildSuccess(runBuild(root));
-		expect(readFileSync(join(root, 'generated/catalog.runtime.json'), 'utf8')).toBe(runtime);
-		expect(readFileSync(join(root, 'generated/catalog.public.json'), 'utf8')).toBe(publicCatalog);
-		expect(readPublicCatalog(join(root, 'generated')).catalog).toEqual(
-			readPublicCatalog(join(catalogRoot, 'generated')).catalog
+		expect(readFileSync(join(root, 'generated/catalog.json'), 'utf8')).toBe(catalog);
+		expect(readCatalog(join(root, 'generated')).catalog).toEqual(
+			readCatalog(join(catalogRoot, 'generated')).catalog
 		);
 		mkdirSync(join(root, 'source/.tmp-catalog-build'));
 		expectBuildSuccess(runBuild(root, ['--clean']));
@@ -173,7 +170,7 @@ describe('catalog build process boundaries', () => {
 
 	test('rejects a stale artifact and removes temporary compiler input', () => {
 		const root = catalogCopy();
-		writeFileSync(join(root, 'generated/catalog.runtime.json'), '{}\n');
+		writeFileSync(join(root, 'generated/catalog.json'), '{}\n');
 		const result = runBuild(root, ['--check']);
 		expect(result.exitCode).not.toBe(0);
 		expect(result.output).toContain('Generated catalog artifacts are stale');
@@ -448,71 +445,68 @@ exit 1
 			'  pricing:\n'
 		].join('\n');
 
-	test('writes, checks and removes the archive and parts as the archive date moves', () => {
+	test('rewrites only the part of a changed record and removes every file of no part', () => {
 		const root = catalogCopy();
-		const policyPath = join(root, 'source/release-policy.json');
-		const policy = readFileSync(policyPath, 'utf8');
-		const partsPath = join(root, 'generated/catalog.public.parts');
+		const generated = join(root, 'generated');
+		const partsPath = join(generated, 'catalog.parts');
 		const partNames = () => readdirSync(partsPath).sort();
-		const active = readPublicCatalog(join(root, 'generated')).catalog;
-		const activeParts = partNames();
-		const retiring = Object.entries(active.graph.deployments)
-			.filter(([, { retirementDate }]) => retirementDate === '2027-09-01')
-			.map(([id]) => id);
-		expect(retiring.length).toBeGreaterThan(0);
-
-		writeFileSync(
-			policyPath,
-			policy.replace(/"archive_through": "[^"]+"/, '"archive_through": "2027-09-01"')
+		const before = partNames();
+		expect(before).toEqual(
+			readCatalog(generated)
+				.root.parts.map(({ sha256 }) => `${sha256}.json`)
+				.sort()
 		);
+		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
+		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
 		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
 		expectBuildSuccess(runBuild(root));
-		const { root: publicRoot, catalog, archive } = readPublicCatalog(join(root, 'generated'));
-		const named = [...publicRoot.parts, publicRoot.archive!.index, ...publicRoot.archive!.parts];
-		expect(partNames()).toEqual(named.map(({ sha256 }) => `${sha256}.json`).sort());
-		for (const { sha256, size } of named) {
+		const after = partNames();
+		expect(after.filter((name) => !before.includes(name))).toHaveLength(1);
+		expect(before.filter((name) => !after.includes(name))).toHaveLength(1);
+		for (const { sha256, size } of readCatalog(generated).root.parts) {
 			const bytes = readFileSync(join(partsPath, `${sha256}.json`));
 			expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha256);
 			expect(bytes.byteLength).toBe(size);
 		}
-		expect(catalog.archive).toEqual(publicRoot.archive);
-		expect(Object.keys(archive!.deployments).sort()).toEqual(retiring.sort());
-		for (const id of retiring) expect(catalog.graph.deployments[id]).toBeUndefined();
 		expectBuildSuccess(runBuild(root, ['--check']));
-		const indexPath = join(partsPath, `${publicRoot.archive!.index.sha256}.json`);
-		const index = readFileSync(indexPath, 'utf8');
-		writeFileSync(indexPath, index.replace('"modelId"', '"modelId" '));
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		writeFileSync(indexPath, index);
-		writeFileSync(join(partsPath, `${'0'.repeat(64)}.json`), '{}');
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
 
-		writeFileSync(policyPath, policy);
+		const partPath = join(partsPath, after[0]!);
+		const part = readFileSync(partPath, 'utf8');
+		writeFileSync(partPath, part.replace('"schema"', '"schema" '));
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+		writeFileSync(partPath, part);
+		expectBuildSuccess(runBuild(root, ['--check']));
+		// Files of no part, and those of an older format, fail the check, and a build removes them.
+		for (const stray of [
+			join(partsPath, `${'0'.repeat(64)}.json`),
+			join(generated, 'catalog.runtime.json'),
+			join(generated, 'catalog.public.parts/part.json')
+		]) {
+			mkdirSync(dirname(stray), { recursive: true });
+			writeFileSync(stray, '{}');
+			expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+		}
 		expectBuildSuccess(runBuild(root));
-		expect(partNames()).toEqual(activeParts);
-		expect(readPublicCatalog(join(root, 'generated')).catalog).toEqual(active);
+		expect(readdirSync(generated).sort()).toEqual(['catalog.json', 'catalog.parts']);
+		expect(partNames()).toEqual(after);
 		expectBuildSuccess(runBuild(root, ['--check']));
 	});
 
-	test('compiles a dated period from source into both schedules', () => {
+	test('compiles a dated period from source into the schedule', () => {
 		const root = catalogCopy();
 		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
 		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
 		expectBuildSuccess(runBuild(root));
-		const generated = join(root, 'generated');
-		const publicCatalog = readPublicCatalog(generated);
+		const { root: catalogFile, catalog } = readCatalog(join(root, 'generated'));
 		const starts = ['2026-11-01T00:00:00Z', '2026-12-01T00:00:00Z'];
-		for (const catalog of [
-			JSON.parse(readFileSync(join(generated, 'catalog.runtime.json'), 'utf8')),
-			publicCatalog.catalog
-		]) {
-			expect(catalog.schedule.map(({ start }: { start: string }) => start)).toEqual(starts);
-			expect(
-				catalog.schedule[0].graph.deployments['openai-gpt-5.6-sol'].routes['openai-responses']
-					.pricing.input_tokens.per_mill_tokens
-			).toBe('2');
-		}
-		expect(publicCatalog.catalog.periods).toEqual([
+		expect(catalog.schedule.map(({ start }) => start)).toEqual(starts);
+		expect(
+			catalog.schedule[0]!.graph.deployments!['openai-gpt-5.6-sol']!.routes['openai-responses']
+				.pricing.input_tokens.per_mill_tokens
+		).toBe('2');
+		// A price is no part of a summary, so the root keeps only the starts.
+		expect(catalogFile.schedule).toEqual(starts.map((start) => ({ start, summaries: {} })));
+		expect(catalog.periods).toEqual([
 			{
 				kind: 'deployments',
 				id: 'openai-gpt-5.6-sol',

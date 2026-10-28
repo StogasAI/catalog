@@ -51,9 +51,11 @@ package catalog
 	// The provider serves this deployment only to accounts it has approved.
 	approvalRequired?: true
 	weightPrecision?: #WeightPrecision
-	// The UTC date of the earliest moment at which the provider may stop serving
-	// the deployment, which is retired from 00:00 UTC that day; omitted when no
-	// date is announced.
+	// The date that the provider names for the deployment's shutdown or
+	// retirement, as it names it. Readers keep routing to the deployment until
+	// that date has ended everywhere on Earth, at 12:00 UTC on the next day, so
+	// it never retires before its provider stops it; omitted when no date is
+	// announced.
 	retirementDate?: #Date
 	// Narrower facts than the deployment inherits from its model and routes.
 	overrides?: close({

@@ -14,11 +14,13 @@ import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { getS3Object, putS3Object } from './aws-s3.mjs';
+import { CATALOG_ROOT_LIMIT } from './catalog-files.mjs';
 import { readBoundedResponseBuffer, readBoundedResponseText } from './http.mjs';
 import {
+	CATALOG_ROOT,
 	catalogArtifact,
+	catalogFileList,
 	catalogManifest,
-	catalogPublicFiles,
 	parseCatalogReleaseEvidence,
 	canonicalJsonValue,
 	parseSequence,
@@ -41,15 +43,16 @@ if (publicationEnvironment !== 'staging' && publicationEnvironment !== 'prod') {
 }
 const immutableCacheControl = 'public, max-age=31536000, immutable';
 const requestTimeoutMs = 30_000;
-const maxObjectBytes = 128 * 1024 * 1024;
+// The root is the largest object.
+const maxObjectBytes = CATALOG_ROOT_LIMIT;
 const maxErrorBytes = 64 * 1024;
 const retryableObjectStoreStatus = new Set([409, 429, 500, 502, 503, 504]);
 // Uploads and readbacks at once; a large catalog has hundreds of parts.
 const objectConcurrency = 8;
 let r2CredentialsPromise;
 // A catalog becomes current only when Control lists its approval in signed evidence, so
-// publication uploads just its two content-addressed artifacts and the files that the public root
-// names to both evidence origins. Each object that an origin already holds stays as it is.
+// publication uploads just its content-addressed root and the parts that the root names to both
+// evidence origins. Each object that an origin already holds stays as it is.
 const destinations = [
 	{ get: getR2Object, name: 'R2', put: putR2Object },
 	{ get: getS3Object, name: 'S3', put: putS3Object }
@@ -242,8 +245,7 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 	mkdirSync(proposalRoot, { recursive: true });
 	run('gh', ['release', 'download', tag, '--repo', 'StogasAI/catalog', '--dir', proposalRoot]);
 	for (const name of [
-		'catalog.runtime.json',
-		'catalog.public.json',
+		CATALOG_ROOT,
 		'catalog-release.json',
 		'github-attestation.jsonl',
 		'SHA256SUMS'
@@ -253,7 +255,7 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 		}
 	}
 	verifyChecksums(proposalRoot);
-	for (const artifact of ['catalog-release.json', 'catalog.runtime.json', 'catalog.public.json']) {
+	for (const artifact of ['catalog-release.json', CATALOG_ROOT]) {
 		run('gh', [
 			'attestation',
 			'verify',
@@ -279,19 +281,18 @@ function verifyIndependentBuild(proposalRoot) {
 	if (canonicalJsonValue(proposedManifest) !== canonicalJsonValue(expectedManifest)) {
 		throw new Error('GitHub Actions and Stogas produced different catalog manifests.');
 	}
-	for (const filename of ['catalog.runtime.json', 'catalog.public.json']) {
-		const local = catalogArtifact(repositoryRoot, filename).bytes;
-		const github = readBoundedRegularFile(join(proposalRoot, filename));
-		if (!local.equals(github)) {
-			throw new Error(`GitHub Actions and Stogas produced different ${filename} bytes.`);
-		}
+	// The root names each part by SHA-256, so equal roots mean equal parts.
+	const local = catalogArtifact(repositoryRoot).bytes;
+	const github = readBoundedRegularFile(join(proposalRoot, CATALOG_ROOT));
+	if (!local.equals(github)) {
+		throw new Error(`GitHub Actions and Stogas produced different ${CATALOG_ROOT} bytes.`);
 	}
 }
 
 function parseEnvelope(path) {
 	const envelope = parseCatalogReleaseEvidence(parseJsonFile(path));
 	if (
-		envelope.document?.schema !== 'stogas.catalog.release.v1' ||
+		envelope.document?.schema !== 'stogas.catalog.release.v2' ||
 		envelope.document.sequence !== sequence
 	) {
 		throw new Error('Generated catalog release is invalid.');
@@ -341,22 +342,18 @@ function artifactPaths(root) {
 			throw new Error('Catalog blob differs from its approved digest');
 		return bytes;
 	};
-	const artifacts = Object.values(envelope.document.artifacts).map((artifact) => ({
-		sha256: artifact.sha256,
-		size: artifact.size_bytes
-	}));
-	const publicRoot = blob({
-		sha256: envelope.document.artifacts['catalog.public.json'].sha256,
-		size: envelope.document.artifacts['catalog.public.json'].size_bytes
-	});
-	const blobs = [...artifacts, ...catalogPublicFiles(publicRoot)];
+	const catalog = {
+		sha256: envelope.document.artifacts[CATALOG_ROOT].sha256,
+		size: envelope.document.artifacts[CATALOG_ROOT].size_bytes
+	};
+	const blobs = [catalog, ...catalogFileList(blob(catalog))];
 	const expected = new Set(blobs.map((artifact) => `${artifact.sha256}.json`));
 	if (
 		entries.length !== expected.size ||
 		entries.some((entry) => !entry.isFile() || !expected.has(entry.name))
 	) {
 		throw new Error(
-			'Catalog release must contain exactly the blobs that its manifest and public root name.'
+			"Catalog release must contain exactly the root that its manifest names and the root's parts."
 		);
 	}
 	for (const artifact of blobs) blob(artifact);
@@ -429,10 +426,9 @@ function publishGitHubRelease(envelope) {
 		`Catalog ${sequence}`,
 		'--notes',
 		[
-			`Runtime: ${envelope.document.artifacts['catalog.runtime.json'].sha256}`,
-			`Public: ${envelope.document.artifacts['catalog.public.json'].sha256}`,
+			`Catalog: ${envelope.document.artifacts[CATALOG_ROOT].sha256}`,
 			'',
-			'Stogas rebuilt these artifacts from its own copy of the source and got the same SHA-256 values before approving them.'
+			'Stogas rebuilt the catalog from its own copy of the source and got the same SHA-256 value before approving it.'
 		].join('\n')
 	]);
 }

@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/svelte';
+import { isRetired } from '../../source/scripts/catalog-files.mjs';
 import { ancestorGroupIds, orderModelGroups } from '../../source/scripts/model-groups.mjs';
 import type {
 	Catalog,
@@ -34,12 +35,25 @@ function isNodeType(value: string): value is NodeType {
 	return graphChainNodeOrder.some((type) => type === value);
 }
 
-export function buildFlow(graph: CatalogGraph): CatalogFlow {
+/**
+ * The graph's nodes and edges, with each record that `retired` names marked. A page names the
+ * catalog's records, so a record is retired whatever records the page shows.
+ */
+export function buildFlow(
+	graph: CatalogGraph,
+	retired: (type: NodeType, id: string) => boolean = () => false
+): CatalogFlow {
 	const positions = groupedLayoutPositions(graph);
-	const retired = retiredNodeIds(graph);
+	const subtitle = (type: NodeType, id: string) => (retired(type, id) ? 'Retired' : undefined);
 	const nodes: Node<GraphNodeData>[] = [
 		...Object.keys(graph.authors).map((id) =>
-			makeNode('author', id, positionFor(positions, 'author', id), { rightOut: true })
+			makeNode(
+				'author',
+				id,
+				positionFor(positions, 'author', id),
+				{ rightOut: true },
+				{ subtitle: subtitle('author', id) }
+			)
 		),
 		...Object.entries(graph.groups).map(([id, group]) =>
 			makeNode(
@@ -47,7 +61,7 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 				id,
 				positionFor(positions, 'group', id),
 				{ leftIn: true, rightOut: true },
-				{ label: group.name }
+				{ label: group.name, subtitle: subtitle('group', id) }
 			)
 		),
 		...Object.keys(graph.models).map((id) =>
@@ -56,10 +70,7 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 				id,
 				positionFor(positions, 'model', id),
 				{ leftIn: true, rightOut: true },
-				{
-					label: String(graph.models[id].name ?? id),
-					subtitle: retired.models.has(id) ? 'Retired' : undefined
-				}
+				{ label: String(graph.models[id].name ?? id), subtitle: subtitle('model', id) }
 			)
 		),
 		...Object.keys(graph.deployments).map((id) =>
@@ -71,14 +82,17 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 					leftIn: true,
 					rightIn: true
 				},
-				{ subtitle: retired.deployments.has(id) ? 'Retired' : undefined }
+				{ subtitle: subtitle('deployment', id) }
 			)
 		),
 		...Object.keys(graph.routes).map((id) =>
-			makeNode('route', id, positionFor(positions, 'route', id), {
-				leftOut: true,
-				rightIn: true
-			})
+			makeNode(
+				'route',
+				id,
+				positionFor(positions, 'route', id),
+				{ leftOut: true, rightIn: true },
+				{ subtitle: subtitle('route', id) }
+			)
 		),
 		...Object.keys(graph.providers).map((id) =>
 			makeNode(
@@ -86,7 +100,7 @@ export function buildFlow(graph: CatalogGraph): CatalogFlow {
 				id,
 				positionFor(positions, 'provider', id),
 				{ leftOut: true },
-				{ label: String(graph.providers[id].name ?? id) }
+				{ label: String(graph.providers[id].name ?? id), subtitle: subtitle('provider', id) }
 			)
 		)
 	];
@@ -303,21 +317,10 @@ function lanePosition(type: NodeType, y: number) {
 	return { x: 80 + graphChainNodeOrder.indexOf(type) * 280, y };
 }
 
-// Source keeps a record until someone removes it. A deployment retires on its retirement date,
-// and a model retires with its last deployment.
-function retiredNodeIds(graph: CatalogGraph, today = new Date().toISOString().slice(0, 10)) {
-	const deployments = new Set<string>();
-	const deployed = new Set<string>();
-	const served = new Set<string>();
-	for (const [id, deployment] of Object.entries(graph.deployments)) {
-		const modelId = String(deployment.modelId);
-		const retirement = deployment.retirementDate;
-		deployed.add(modelId);
-		if (typeof retirement === 'string' && retirement <= today) deployments.add(id);
-		else served.add(modelId);
-	}
-	const models = new Set([...deployed].filter((id) => !served.has(id)));
-	return { deployments, models };
+/** Whether a record of the catalog has retired at `at`, by the date that the root gives it. */
+export function retiredIn(catalog: Catalog, at = Date.now()) {
+	return (type: NodeType, id: string) =>
+		isRetired(catalog.retirementDates[`${type}s` as keyof CatalogGraph][id], at);
 }
 
 function makeNode(
@@ -479,7 +482,7 @@ export function pageGraph(
 			)
 		};
 	}
-	const flow = buildFlow(graph);
+	const flow = buildFlow(graph, retiredIn(catalog));
 	flow.edges = flow.edges.filter((edge) => edgeIds.has(edge.id));
 	return { flow, total: paths.length, page, pageCount };
 }

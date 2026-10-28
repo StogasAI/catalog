@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { publicCatalog } from './generated-catalog';
+import { catalog as generated } from './generated-catalog';
 import {
 	buildFlow,
 	completeUnambiguousGraphSelection,
@@ -11,17 +11,24 @@ import {
 	indexGraphPaths,
 	lineageForSelection,
 	pageGraph,
-	parseNodeKey
+	parseNodeKey,
+	retiredIn
 } from '../editor/src/catalog';
 import { readBoundedResponseText } from '../editor/src/http';
 import { parseCatalog } from '../editor/src/types';
 
-const catalog = parseCatalog(publicCatalog);
+const catalog = parseCatalog(generated);
+
+// Summaries that give no record a retirement date.
+const summaries = Object.fromEntries(
+	['authors', 'groups', 'models', 'providers', 'routes', 'deployments'].map((kind) => [kind, {}])
+);
 
 describe('catalog editor graph', () => {
 	test('keeps a nested group diamond as real edges and one execution choice', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.public.v8',
+			schema: 'stogas.catalog.v9',
+			summaries,
 			graph: {
 				authors: { author: { name: 'Author' } },
 				groups: {
@@ -66,16 +73,49 @@ describe('catalog editor graph', () => {
 			'model'
 		]);
 	});
+	test('marks each record that has retired by the date that the root gives it', () => {
+		const fixture = parseCatalog({
+			schema: 'stogas.catalog.v9',
+			summaries: {
+				...summaries,
+				models: { model: { retirementDate: '2027-01-01' } },
+				deployments: { deployment: { retirementDate: '2027-01-01' } }
+			},
+			graph: {
+				authors: { author: { name: 'Author' } },
+				groups: {},
+				models: { model: { authorId: 'author', name: 'Model', groupIds: [] } },
+				providers: { provider: { name: 'Provider' } },
+				routes: { route: { providerId: 'provider' } },
+				deployments: { deployment: { modelId: 'model', routes: { route: {} } } }
+			}
+		});
+		const marked = (at: string) =>
+			buildFlow(fixture.graph, retiredIn(fixture, Date.parse(at)))
+				.nodes.filter((node) => node.data.subtitle === 'Retired')
+				.map((node) => node.id)
+				.sort();
+		// A record serves until its date has ended everywhere on Earth.
+		expect(marked('2027-01-02T11:59:59Z')).toEqual([]);
+		expect(marked('2027-01-02T12:00:00Z')).toEqual(['deployment:deployment', 'model:model']);
+	});
+
 	test('rejects malformed generated catalog collections', () => {
-		expect(() => parseCatalog(null)).toThrow('public catalog is invalid');
-		expect(() => parseCatalog({ graph: {}, schema: 'wrong' })).toThrow('public catalog is invalid');
+		expect(() => parseCatalog(null)).toThrow('generated catalog is invalid');
+		expect(() => parseCatalog({ graph: {}, summaries, schema: 'wrong' })).toThrow(
+			'generated catalog is invalid'
+		);
+		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.v9' })).toThrow(
+			'generated catalog is invalid'
+		);
 		expect(() =>
-			parseCatalog({ graph: { groups: {} }, schema: 'stogas.catalog.public.v8' })
+			parseCatalog({ graph: { groups: {} }, summaries, schema: 'stogas.catalog.v9' })
 		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
 				graph: { authors: [], groups: {}, deployments: {}, models: {}, providers: {}, routes: {} },
-				schema: 'stogas.catalog.public.v8'
+				summaries,
+				schema: 'stogas.catalog.v9'
 			})
 		).toThrow('authors collection');
 		expect(() =>
@@ -88,7 +128,8 @@ describe('catalog editor graph', () => {
 					providers: {},
 					routes: {}
 				},
-				schema: 'stogas.catalog.public.v8'
+				summaries,
+				schema: 'stogas.catalog.v9'
 			})
 		).toThrow('authors.bad entry');
 	});

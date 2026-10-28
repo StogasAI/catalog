@@ -16,22 +16,16 @@ import { availableParallelism, homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
-import { partitionCatalogArchive, partitionPublicCatalog } from './public-parts.mjs';
-import {
-	CATALOG_PARTS_DIRECTORY,
-	catalogPublicFiles,
-	catalogReleasePolicy,
-	checkCatalogArtifactSize
-} from './release-format.mjs';
-import { ancestorGroupIds, orderModelGroups } from './model-groups.mjs';
+import { partitionCatalog } from './catalog-parts.mjs';
+import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
+import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
 const generatedRoot = join(repositoryRoot, 'generated');
-const runtimePath = join(generatedRoot, 'catalog.runtime.json');
-const publicPath = join(generatedRoot, 'catalog.public.json');
+const rootPath = join(generatedRoot, CATALOG_ROOT);
 const partsRoot = join(generatedRoot, CATALOG_PARTS_DIRECTORY);
 const tempBuildRoot = join(sourceRoot, '.tmp-catalog-build');
 const cueVersion = 'v0.16.1';
@@ -704,154 +698,29 @@ function validateDocumentFormats(value, owner) {
 	}
 }
 
-export function buildCatalogs(source, archiveThrough) {
+/**
+ * The catalog: the base graph, a schedule entry for each instant at which a period starts or
+ * ends, and the period index.
+ */
+export function buildCatalog(source) {
 	for (const [kind, nodes] of Object.entries(source.graph)) {
 		for (const id of Object.keys(nodes)) validateNodeId(id, kind);
 	}
 	const { base, states, periods } = periodStates(source.graph);
-	const compiled = compileGraph(base);
-	const runtimeSchedule = [];
-	const publicSchedule = [];
-	for (const state of states) {
-		const stateCompiled = compileGraph(state.graph);
-		addScheduleEntry(runtimeSchedule, state.start, compiled.runtime, stateCompiled.runtime);
-		addScheduleEntry(publicSchedule, state.start, compiled.public, stateCompiled.public);
-	}
-	const archived = archivedNodes(
-		{ graph: compiled.public, schedule: publicSchedule },
-		archiveThrough
-	);
-	const isArchived = (kind, id) => Object.hasOwn(archived[kind] ?? {}, id);
+	const graph = compileGraph(base);
+	const schedule = [];
+	for (const state of states)
+		addScheduleEntry(schedule, state.start, graph, compileGraph(state.graph));
+	return { graph, schedule, periods };
+}
+
+/** The files that a build writes: the root, and each part that it names by its SHA-256. */
+export function catalogFiles(catalog) {
+	const { root, parts } = partitionCatalog(catalog);
 	return {
-		runtime: {
-			schema: 'stogas.catalog.runtime.v6',
-			graph: withoutArchived(compiled.runtime, archived),
-			schedule: activeSchedule(runtimeSchedule, archived),
-			// Requests that name an archived deployment, or an archived model by ID or alias, learn
-			// when it retired.
-			retired: {
-				deployments: Object.fromEntries(
-					Object.entries(archived.deployments).map(([id, { retirementDate }]) => [
-						id,
-						retirementDate
-					])
-				),
-				models: Object.fromEntries(
-					Object.entries(archived.models).flatMap(([id, { aliases }]) => {
-						const date = lastRetirement(compiled.public, id);
-						return [id, ...aliases].map((selector) => [selector, date]);
-					})
-				)
-			}
-		},
-		// The whole public catalog, which the build splits into its root and parts.
-		public: {
-			graph: withoutArchived(compiled.public, archived),
-			schedule: activeSchedule(publicSchedule, archived),
-			periods: periods.filter(({ kind, id }) => !isArchived(kind, id))
-		},
-		archive: Object.keys(archived.deployments).length ? archived : null
+		rootJson: canonicalJson(root),
+		parts: new Map(parts.map(({ json, sha256 }) => [`${sha256}.json`, json]))
 	};
-}
-
-/**
- * The files that a build writes: the runtime catalog, the public root, and each file that the
- * root names, by its SHA-256. The runtime catalog commits to the root, which commits to the rest.
- */
-export function catalogFiles(catalogs) {
-	const { root, parts } = partitionPublicCatalog(catalogs.public);
-	const archive = catalogs.archive && partitionCatalogArchive(catalogs.archive);
-	const reference = ({ sha256, size }) => ({ sha256, size });
-	root.archive = archive && {
-		index: reference(archive.index),
-		parts: archive.parts.map(reference)
-	};
-	const publicJson = canonicalJson(root);
-	const runtimeJson = canonicalJson({
-		...catalogs.runtime,
-		publicDigest: `sha256:${createHash('sha256').update(publicJson).digest('hex')}`
-	});
-	return {
-		runtimeJson,
-		publicJson,
-		parts: new Map(
-			[...parts, ...(archive ? [archive.index, ...archive.parts] : [])].map(({ json, sha256 }) => [
-				`${sha256}.json`,
-				json
-			])
-		)
-	};
-}
-
-/**
- * The deployments that retired on or before `archiveThrough`, and the models whose deployments
- * all did, each as it stood the day before it retired. A model without deployments stays, because
- * it is listed on purpose.
- */
-function archivedNodes(catalog, archiveThrough) {
-	const { deployments } = catalog.graph;
-	const before = (date) => Date.parse(`${date}T00:00:00Z`) - 1;
-	const archived = { deployments: {}, models: {} };
-	for (const [id, { retirementDate }] of Object.entries(deployments))
-		if (retirementDate !== null && retirementDate <= archiveThrough)
-			archived.deployments[id] = nodeAt(catalog, 'deployments', id, before(retirementDate));
-	const modelDeployments = Map.groupBy(Object.entries(deployments), ([, { modelId }]) => modelId);
-	for (const [modelId, entries] of modelDeployments)
-		if (entries.every(([id]) => Object.hasOwn(archived.deployments, id)))
-			archived.models[modelId] = nodeAt(
-				catalog,
-				'models',
-				modelId,
-				before(lastRetirement(catalog.graph, modelId))
-			);
-	return archived;
-}
-
-/** The day that a model retired: the retirement of its last deployment. */
-function lastRetirement(graph, modelId) {
-	return Object.values(graph.deployments)
-		.filter((deployment) => deployment.modelId === modelId)
-		.map(({ retirementDate }) => retirementDate)
-		.sort()
-		.at(-1);
-}
-
-/** A node as the latest schedule entry that started by an instant has it. */
-function nodeAt({ graph, schedule }, kind, id, at) {
-	let node = graph[kind][id];
-	for (const entry of schedule) {
-		if (Date.parse(entry.start) > at) break;
-		node = entry.graph[kind]?.[id] ?? graph[kind][id];
-	}
-	return node;
-}
-
-function withoutArchived(graph, archived) {
-	return Object.fromEntries(
-		Object.entries(graph).map(([kind, nodes]) => [
-			kind,
-			archived[kind]
-				? Object.fromEntries(
-						Object.entries(nodes).filter(([id]) => !Object.hasOwn(archived[kind], id))
-					)
-				: nodes
-		])
-	);
-}
-
-// Without the archived nodes, an entry can describe the same state as the one before it, or the
-// base graph; neither is kept.
-function activeSchedule(schedule, archived) {
-	const active = [];
-	for (const { start, graph } of schedule) {
-		const kept = Object.fromEntries(
-			Object.entries(withoutArchived(graph, archived)).filter(
-				([, nodes]) => Object.keys(nodes).length
-			)
-		);
-		if (!same(kept, active.at(-1)?.graph ?? {})) active.push({ start, graph: kept });
-	}
-	return active;
 }
 
 // An entry lists every node that differs from the base graph, so a reader needs only the
@@ -938,8 +807,7 @@ function compileGraph(source) {
 		)
 	};
 	const selectors = new Map();
-	const runtimeDeployments = {};
-	const publicDeployments = {};
+	const deployments = {};
 	const baseByModelRoute = new Map();
 	const deploymentsByModelRoute = new Map();
 	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
@@ -1243,7 +1111,7 @@ function compileGraph(source) {
 
 		addSelector(deploymentId, 'deployment', deploymentId);
 
-		runtimeDeployments[deploymentId] = {
+		deployments[deploymentId] = {
 			modelId: deployment.modelId,
 			upstream,
 			approvalRequired: deployment.approvalRequired ?? false,
@@ -1252,7 +1120,6 @@ function compileGraph(source) {
 			retirementDate,
 			...served
 		};
-		publicDeployments[deploymentId] = structuredClone(runtimeDeployments[deploymentId]);
 	}
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
@@ -1266,10 +1133,10 @@ function compileGraph(source) {
 		'deploymentType',
 		'inferenceGeo'
 	];
-	for (const [deploymentId, fast] of Object.entries(runtimeDeployments)) {
+	for (const [deploymentId, fast] of Object.entries(deployments)) {
 		if (fast.upstream.serviceTier !== 'fast') continue;
 		for (const routeId of Object.keys(fast.routes)) {
-			const standards = Object.values(runtimeDeployments).filter(
+			const standards = Object.values(deployments).filter(
 				(candidate) =>
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
@@ -1290,85 +1157,21 @@ function compileGraph(source) {
 		}
 	}
 
-	const runtimeRoutes = Object.fromEntries(
-		Object.entries(graph.routes).map(([id, route]) => [
-			id,
-			{
-				providerId: route.providerId,
-				interfaces: route.interfaces,
-				documentFormats: route.documentFormats
-			}
-		])
-	);
-	const runtimeModelIds = new Set(
-		Object.values(runtimeDeployments).map((deployment) => deployment.modelId)
-	);
-	const runtimeModels = Object.fromEntries(
-		Object.entries(graph.models)
-			.filter(([id]) => runtimeModelIds.has(id))
-			.map(([id, model]) => [
-				id,
-				{
-					authorId: model.authorId,
-					aliases: model.aliases,
-					// Every group that contains the model, so a group selects its descendants' models.
-					groupIds: ancestorGroupIds(graph.groups, model.groupIds).sort(),
-					maxOutputTokens: model.maxOutputTokens,
-					name: model.name,
-					reasoning: model.reasoning,
-					reasoningEfforts: model.reasoningEfforts,
-					reasoningMaxTokens: model.reasoningMaxTokens,
-					releaseDate: model.releaseDate
-				}
-			])
-	);
-	const runtimeAuthors = Object.fromEntries(
-		Object.entries(graph.authors).map(([id, author]) => [
-			id,
-			{
-				aliases: author.aliases,
-				...(author.headquarteredCountry && { headquarteredCountry: author.headquarteredCountry }),
-				name: author.name
-			}
-		])
-	);
-	const runtimeProviders = Object.fromEntries(
-		Object.entries(graph.providers).map(([id, provider]) => [
-			id,
-			{
-				aliases: provider.aliases,
-				credentialModes: provider.credentialModes,
-				...(provider.headquarteredCountry && {
-					headquarteredCountry: provider.headquarteredCountry
-				}),
-				name: provider.name
-			}
-		])
-	);
-
+	// Routes and deployments carry resolved facts, so readers never combine records, and each
+	// route record names the hash of its chain.
 	const compiled = {
-		runtime: {
-			authors: runtimeAuthors,
-			models: runtimeModels,
-			providers: runtimeProviders,
-			routes: runtimeRoutes,
-			deployments: runtimeDeployments
-		},
-		// Routes and deployments carry resolved facts, so readers never combine nodes.
-		public: {
-			...sourceGraph,
-			providers: Object.fromEntries(
-				Object.entries(graph.providers).map(([id, provider]) => {
-					const { capabilities: _routeDefaults, dataHandling: _dataDefaults, ...facts } = provider;
-					return [id, facts];
-				})
-			),
-			routes: graph.routes,
-			deployments: publicDeployments
-		}
+		...sourceGraph,
+		providers: Object.fromEntries(
+			Object.entries(graph.providers).map(([id, provider]) => {
+				const { capabilities: _routeDefaults, dataHandling: _dataDefaults, ...facts } = provider;
+				return [id, facts];
+			})
+		),
+		routes: graph.routes,
+		deployments
 	};
-	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(compiled.public)) {
-		runtimeDeployments[deploymentId].routes[routeId].chainHash = hash;
+	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(compiled)) {
+		deployments[deploymentId].routes[routeId].chainHash = hash;
 	}
 	return compiled;
 }
@@ -1473,20 +1276,21 @@ export async function main(argv = process.argv.slice(2)) {
 			}),
 			cueRuns
 		);
-		const { archive_through: archiveThrough } = catalogReleasePolicy(repositoryRoot);
-		const { runtimeJson, publicJson, parts } = catalogFiles(buildCatalogs(source, archiveThrough));
-		checkCatalogArtifactSize('catalog.runtime.json', Buffer.byteLength(runtimeJson));
-		checkCatalogArtifactSize('catalog.public.json', Buffer.byteLength(publicJson));
-		// Checks every file that the root names, alone and together.
-		catalogPublicFiles(publicJson);
+		const { rootJson, parts } = catalogFiles(buildCatalog(source));
+		// Checks the root and every part that it names, alone and together.
+		catalogFileList(rootJson);
 
 		if (!args.has('--validate-only')) {
 			const currentParts = existsSync(partsRoot) ? readdirSync(partsRoot).sort() : [];
+			// Files that no longer belong to the build, such as those of an older format.
+			const strays = (existsSync(generatedRoot) ? readdirSync(generatedRoot) : []).filter(
+				(name) => name !== CATALOG_ROOT && name !== CATALOG_PARTS_DIRECTORY
+			);
 			if (args.has('--check')) {
 				const current = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
 				if (
-					current(runtimePath) !== runtimeJson ||
-					current(publicPath) !== publicJson ||
+					strays.length ||
+					current(rootPath) !== rootJson ||
 					currentParts.join('\n') !== [...parts.keys()].sort().join('\n') ||
 					currentParts.some((name) => current(join(partsRoot, name)) !== parts.get(name))
 				) {
@@ -1496,10 +1300,11 @@ export async function main(argv = process.argv.slice(2)) {
 				// Parts first, so a root never names a part that is not there yet.
 				mkdirSync(partsRoot, { recursive: true });
 				for (const [name, json] of parts) writeIfChanged(join(partsRoot, name), json);
-				writeIfChanged(runtimePath, runtimeJson);
-				writeIfChanged(publicPath, publicJson);
+				writeIfChanged(rootPath, rootJson);
 				for (const name of currentParts)
 					if (!parts.has(name)) rmSync(join(partsRoot, name), { force: true });
+				for (const name of strays)
+					rmSync(join(generatedRoot, name), { force: true, recursive: true });
 			}
 		}
 	} finally {

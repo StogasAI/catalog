@@ -1,32 +1,24 @@
-import catalogRoot from '../../generated/catalog.public.json';
+import catalogRoot from '../../generated/catalog.json';
 import {
-	assembleCatalogArchive,
-	assemblePublicCatalog,
-	withArchive,
-	type CatalogArchiveIndex,
-	type CatalogArchivePart,
-	type PublicCatalog,
-	type PublicCatalogPart,
-	type PublicCatalogRoot
-} from '../../source/scripts/public-catalog.mjs';
+	assembleCatalog,
+	type CatalogPart,
+	type CatalogRoot
+} from '../../source/scripts/catalog-files.mjs';
 
-// Every file that the root names, deployment parts and the archive's alike.
+// Every part that the root names.
 const partFiles: Record<string, unknown> = import.meta.glob(
-	'../../generated/catalog.public.parts/*.json',
-	{ eager: true, import: 'default' }
+	'../../generated/catalog.parts/*.json',
+	{
+		eager: true,
+		import: 'default'
+	}
 );
-const part = <Part>({ sha256 }: { sha256: string }) =>
-	partFiles[`../../generated/catalog.public.parts/${sha256}.json`] as Part;
-const root = catalogRoot as PublicCatalogRoot;
-const catalog = assemblePublicCatalog<PublicCatalog>(root, root.parts.map(part<PublicCatalogPart>));
+const root = catalogRoot as CatalogRoot;
 
-/** The build's whole public catalog, with each archived record beside the others. */
-export const generatedCatalog: unknown = root.archive
-	? withArchive(
-			catalog,
-			assembleCatalogArchive(
-				part<CatalogArchiveIndex>(root.archive.index),
-				root.archive.parts.map(part<CatalogArchivePart>)
-			)
-		)
-	: catalog;
+/** The build's whole catalog, current and retired records alike. */
+export const generatedCatalog: unknown = assembleCatalog(
+	root,
+	root.parts.map(
+		({ sha256 }) => partFiles[`../../generated/catalog.parts/${sha256}.json`] as CatalogPart
+	)
+);

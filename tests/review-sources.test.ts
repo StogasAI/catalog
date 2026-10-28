@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { publicCatalog } from './generated-catalog';
+import { catalog } from './generated-catalog';
 import reviewSources from '../source/review-sources.json';
 
 const allowedDomains = new Set([
@@ -28,10 +28,10 @@ function validDate(value: string) {
 describe('catalog review sources', () => {
 	test('covers every factual owner with primary sources', () => {
 		expect(Object.keys(reviewSources.authors).sort()).toEqual(
-			Object.keys(publicCatalog.graph.authors).sort()
+			Object.keys(catalog.graph.authors).sort()
 		);
 		expect(Object.keys(reviewSources.providers).sort()).toEqual(
-			Object.keys(publicCatalog.graph.providers).sort()
+			Object.keys(catalog.graph.providers).sort()
 		);
 		expect(validDate(reviewSources.reviewedAt)).toBe(true);
 	});
