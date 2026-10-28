@@ -4,23 +4,31 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { canonicalJson } from './canonical-json.mjs';
-import { CATALOG_ARCHIVE_LIMIT, PUBLIC_CATALOG_LIMIT } from './public-catalog.mjs';
+import {
+	CATALOG_ARCHIVE_LIMIT,
+	PUBLIC_CATALOG_LIMIT,
+	PUBLIC_CATALOG_ROOT_LIMIT,
+	checkedPublicCatalogFiles
+} from './public-catalog.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
 /** Gateways and Web reject larger artifacts, so the build and every release step do too. */
 export const CATALOG_ARTIFACT_LIMITS = Object.freeze({
-	'catalog.public.json': PUBLIC_CATALOG_LIMIT,
+	'catalog.public.json': PUBLIC_CATALOG_ROOT_LIMIT,
 	'catalog.runtime.json': 32 * 1024 * 1024
 });
-/** The archive, which the public catalog names by digest instead of the release manifest. */
-export const CATALOG_ARCHIVE_FILE = 'catalog.archive.json';
+/** Where the build writes each file that the public root names, by its SHA-256. */
+export const CATALOG_PARTS_DIRECTORY = 'catalog.public.parts';
 
 /** Rejects an artifact over its limit and warns once it passes three quarters of it. */
 export function checkCatalogArtifactSize(name, bytes) {
-	const limit =
-		name === CATALOG_ARCHIVE_FILE ? CATALOG_ARCHIVE_LIMIT : CATALOG_ARTIFACT_LIMITS[name];
+	const limit = CATALOG_ARTIFACT_LIMITS[name];
 	if (!limit) throw new Error(`${name} is not a catalog artifact.`);
+	checkSize(name, bytes, limit);
+}
+
+function checkSize(name, bytes, limit) {
 	if (bytes > limit) throw new Error(`${name} is ${bytes} bytes; the limit is ${limit}.`);
 	if (bytes > limit * 0.75) {
 		const message = `${name} is ${bytes} bytes, ${Math.floor((bytes / limit) * 100)}% of its ${limit / 1024 / 1024} MiB limit. Releases fail above the limit.`;
@@ -32,34 +40,42 @@ export function checkCatalogArtifactSize(name, bytes) {
 	}
 }
 
-/** The archive that a public catalog names by SHA-256 and size, or null when it names none. */
-export function catalogArchiveReference(publicBytes) {
-	const { archive } = JSON.parse(Buffer.from(publicBytes).toString('utf8')) ?? {};
-	if (archive === null) return null;
-	if (
-		!hasKeys(archive, ['sha256', 'size']) ||
-		!/^[0-9a-f]{64}$/.test(archive.sha256) ||
-		!Number.isSafeInteger(archive.size) ||
-		archive.size < 1 ||
-		archive.size > CATALOG_ARCHIVE_LIMIT
-	)
-		throw new Error('The public catalog names an invalid archive.');
-	return archive;
+/**
+ * Every file that a public root names, each by SHA-256 and size, after checking each name, each
+ * size, and the size of the catalog and of the archive with all their files. Warns as either
+ * total nears its limit.
+ */
+export function catalogPublicFiles(rootBytes) {
+	const root = JSON.parse(Buffer.from(rootBytes).toString('utf8'));
+	const files = checkedPublicCatalogFiles(root, Buffer.byteLength(rootBytes));
+	const total = (listed) => listed.reduce((sum, { size }) => sum + size, 0);
+	checkSize(
+		'The public catalog with its parts',
+		Buffer.byteLength(rootBytes) + total(root.parts),
+		PUBLIC_CATALOG_LIMIT
+	);
+	if (root.archive)
+		checkSize(
+			'The catalog archive with its parts',
+			total([root.archive.index, ...root.archive.parts]),
+			CATALOG_ARCHIVE_LIMIT
+		);
+	return files;
 }
 
-/** The build's archive, checked against the public catalog that names it, or null. */
-export function catalogArchiveArtifact(repositoryRoot) {
-	const reference = catalogArchiveReference(
-		catalogArtifact(repositoryRoot, 'catalog.public.json').bytes
+/** The build's files that its public root names, each checked against the root. */
+export function catalogPartArtifacts(repositoryRoot) {
+	return catalogPublicFiles(catalogArtifact(repositoryRoot, 'catalog.public.json').bytes).map(
+		({ sha256: digest, size }) => {
+			const path = join(repositoryRoot, 'generated', CATALOG_PARTS_DIRECTORY, `${digest}.json`);
+			const stats = lstatSync(path);
+			if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== size)
+				throw new Error(`Public catalog part ${digest} is not a regular file of its size.`);
+			const bytes = readFileSync(path);
+			if (sha256(bytes) !== digest) throw new Error(`Public catalog part ${digest} differs.`);
+			return { bytes, digest: `sha256:${digest}` };
+		}
 	);
-	if (!reference) return null;
-	const path = join(repositoryRoot, 'generated', CATALOG_ARCHIVE_FILE);
-	const stats = lstatSync(path);
-	if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== reference.size)
-		throw new Error('The catalog archive is not a regular file of its size.');
-	const bytes = readFileSync(path);
-	if (sha256(bytes) !== reference.sha256) throw new Error('The catalog archive differs.');
-	return { bytes, digest: `sha256:${reference.sha256}` };
 }
 
 export function catalogManifest(repositoryRoot, sequenceInput) {
@@ -286,8 +302,8 @@ function gitBytes(repositoryRoot, args, input) {
 		cwd: repositoryRoot,
 		env: minimalProcessEnvironment(),
 		input,
-		// The tracked generated artifacts take at most 96 MiB, and the source is far smaller.
-		maxBuffer: 160 * 1024 * 1024,
+		// The tracked generated artifacts take at most 160 MiB, and the source is far smaller.
+		maxBuffer: 256 * 1024 * 1024,
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 }

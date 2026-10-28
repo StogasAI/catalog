@@ -16,9 +16,10 @@ import { availableParallelism, homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
-import { CATALOG_ARCHIVE_SCHEMA, PUBLIC_CATALOG_SCHEMA } from './public-catalog.mjs';
+import { partitionCatalogArchive, partitionPublicCatalog } from './public-parts.mjs';
 import {
-	CATALOG_ARCHIVE_FILE,
+	CATALOG_PARTS_DIRECTORY,
+	catalogPublicFiles,
 	catalogReleasePolicy,
 	checkCatalogArtifactSize
 } from './release-format.mjs';
@@ -31,7 +32,7 @@ const repositoryRoot = join(sourceRoot, '..');
 const generatedRoot = join(repositoryRoot, 'generated');
 const runtimePath = join(generatedRoot, 'catalog.runtime.json');
 const publicPath = join(generatedRoot, 'catalog.public.json');
-const archivePath = join(generatedRoot, CATALOG_ARCHIVE_FILE);
+const partsRoot = join(generatedRoot, CATALOG_PARTS_DIRECTORY);
 const tempBuildRoot = join(sourceRoot, '.tmp-catalog-build');
 const cueVersion = 'v0.16.1';
 const toolCacheDir = join(resolveToolCacheRoot(), 'cue', cueVersion);
@@ -721,35 +722,64 @@ export function buildCatalogs(source, archiveThrough) {
 		archiveThrough
 	);
 	const isArchived = (kind, id) => Object.hasOwn(archived[kind] ?? {}, id);
-	const deploymentDates = Object.fromEntries(
-		Object.keys(archived.deployments).map((id) => [
-			id,
-			compiled.public.deployments[id].retirementDate
-		])
-	);
 	return {
 		runtime: {
 			schema: 'stogas.catalog.runtime.v6',
 			graph: withoutArchived(compiled.runtime, archived),
 			schedule: activeSchedule(runtimeSchedule, archived),
-			// Requests that name an archived deployment or model learn when it retired.
+			// Requests that name an archived deployment, or an archived model by ID or alias, learn
+			// when it retired.
 			retired: {
-				deployments: deploymentDates,
+				deployments: Object.fromEntries(
+					Object.entries(archived.deployments).map(([id, { retirementDate }]) => [
+						id,
+						retirementDate
+					])
+				),
 				models: Object.fromEntries(
-					Object.keys(archived.models).map((id) => [id, lastRetirement(compiled.public, id)])
+					Object.entries(archived.models).flatMap(([id, { aliases }]) => {
+						const date = lastRetirement(compiled.public, id);
+						return [id, ...aliases].map((selector) => [selector, date]);
+					})
 				)
 			}
 		},
-		// The build adds the archive's digest, or null while no record has moved there.
+		// The whole public catalog, which the build splits into its root and parts.
 		public: {
-			schema: PUBLIC_CATALOG_SCHEMA,
 			graph: withoutArchived(compiled.public, archived),
 			schedule: activeSchedule(publicSchedule, archived),
 			periods: periods.filter(({ kind, id }) => !isArchived(kind, id))
 		},
-		archive: Object.keys(archived.deployments).length
-			? { schema: CATALOG_ARCHIVE_SCHEMA, graph: archived }
-			: null
+		archive: Object.keys(archived.deployments).length ? archived : null
+	};
+}
+
+/**
+ * The files that a build writes: the runtime catalog, the public root, and each file that the
+ * root names, by its SHA-256. The runtime catalog commits to the root, which commits to the rest.
+ */
+export function catalogFiles(catalogs) {
+	const { root, parts } = partitionPublicCatalog(catalogs.public);
+	const archive = catalogs.archive && partitionCatalogArchive(catalogs.archive);
+	const reference = ({ sha256, size }) => ({ sha256, size });
+	root.archive = archive && {
+		index: reference(archive.index),
+		parts: archive.parts.map(reference)
+	};
+	const publicJson = canonicalJson(root);
+	const runtimeJson = canonicalJson({
+		...catalogs.runtime,
+		publicDigest: `sha256:${createHash('sha256').update(publicJson).digest('hex')}`
+	});
+	return {
+		runtimeJson,
+		publicJson,
+		parts: new Map(
+			[...parts, ...(archive ? [archive.index, ...archive.parts] : [])].map(({ json, sha256 }) => [
+				`${sha256}.json`,
+				json
+			])
+		)
 	};
 }
 
@@ -1444,36 +1474,32 @@ export async function main(argv = process.argv.slice(2)) {
 			cueRuns
 		);
 		const { archive_through: archiveThrough } = catalogReleasePolicy(repositoryRoot);
-		const catalogs = buildCatalogs(source, archiveThrough);
-		const archiveJson = catalogs.archive && canonicalJson(catalogs.archive);
-		const sha256 = (json) => createHash('sha256').update(json).digest('hex');
-		catalogs.public.archive = archiveJson && {
-			sha256: sha256(archiveJson),
-			size: Buffer.byteLength(archiveJson)
-		};
-		const publicJson = canonicalJson(catalogs.public);
-		catalogs.runtime.publicDigest = `sha256:${sha256(publicJson)}`;
-		const runtimeJson = canonicalJson(catalogs.runtime);
+		const { runtimeJson, publicJson, parts } = catalogFiles(buildCatalogs(source, archiveThrough));
 		checkCatalogArtifactSize('catalog.runtime.json', Buffer.byteLength(runtimeJson));
 		checkCatalogArtifactSize('catalog.public.json', Buffer.byteLength(publicJson));
-		if (archiveJson) checkCatalogArtifactSize(CATALOG_ARCHIVE_FILE, Buffer.byteLength(archiveJson));
+		// Checks every file that the root names, alone and together.
+		catalogPublicFiles(publicJson);
 
 		if (!args.has('--validate-only')) {
+			const currentParts = existsSync(partsRoot) ? readdirSync(partsRoot).sort() : [];
 			if (args.has('--check')) {
 				const current = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
 				if (
 					current(runtimePath) !== runtimeJson ||
 					current(publicPath) !== publicJson ||
-					current(archivePath) !== archiveJson
+					currentParts.join('\n') !== [...parts.keys()].sort().join('\n') ||
+					currentParts.some((name) => current(join(partsRoot, name)) !== parts.get(name))
 				) {
 					throw new Error('Generated catalog artifacts are stale. Run `bun run build`.');
 				}
 			} else {
-				mkdirSync(generatedRoot, { recursive: true });
-				if (archiveJson) writeIfChanged(archivePath, archiveJson);
-				else rmSync(archivePath, { force: true });
+				// Parts first, so a root never names a part that is not there yet.
+				mkdirSync(partsRoot, { recursive: true });
+				for (const [name, json] of parts) writeIfChanged(join(partsRoot, name), json);
 				writeIfChanged(runtimePath, runtimeJson);
 				writeIfChanged(publicPath, publicJson);
+				for (const name of currentParts)
+					if (!parts.has(name)) rmSync(join(partsRoot, name), { force: true });
 			}
 		}
 	} finally {

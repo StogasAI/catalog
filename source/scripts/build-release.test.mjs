@@ -10,15 +10,16 @@ const driverUrl = new URL('./build-release.mjs', import.meta.url).href;
 const json = (value) => `${JSON.stringify(value)}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
-function fixture(t, probe = '', archive = null) {
+function fixture(t, probe = '', part = null) {
 	const parent = mkdtempSync(join(tmpdir(), 'stogas-catalog-isolation-'));
 	t.after(() => rmSync(parent, { recursive: true, force: true }));
 	const root = join(parent, 'catalog');
 	mkdirSync(root);
 	const publicBytes = json({
-		schema: 'stogas.catalog.public.v7',
-		archive: archive && { sha256: digest(archive), size: Buffer.byteLength(archive) },
-		graph: {}
+		schema: 'stogas.catalog.public.v8',
+		archive: null,
+		graph: {},
+		parts: part ? [{ sha256: digest(part), size: Buffer.byteLength(part) }] : []
 	});
 	const canary = `test-publication-canary-${randomUUID()}`;
 	const secretFile = join(parent, 'publisher-secret');
@@ -42,8 +43,12 @@ const runtime = { schema: 'stogas.catalog.runtime.v3', graph: {}, publicDigest: 
 mkdirSync('generated', { recursive: true });
 writeFileSync('generated/catalog.runtime.json', JSON.stringify(runtime));
 writeFileSync('generated/catalog.public.json', ${JSON.stringify(publicBytes)});
-const archive = ${JSON.stringify(archive)};
-if (archive) writeFileSync('generated/catalog.archive.json', archive);
+const part = ${JSON.stringify(part)};
+const partPath = ${JSON.stringify(part && `generated/catalog.public.parts/${digest(part)}.json`)};
+if (part) {
+	mkdirSync('generated/catalog.public.parts');
+	writeFileSync(partPath, part);
+}
 const secretFile = ${JSON.stringify(secretFile)};
 const canary = ${JSON.stringify(canary)};
 ${probe}
@@ -147,25 +152,25 @@ helper.unref();
 );
 
 test(
-	'installs the archive that the public catalog names, and removes one it no longer names',
+	'installs the parts that the public root names, and removes those it no longer names',
 	{ timeout: 900_000 },
 	(t) => {
-		const archive = '{"archived":true}\n';
-		const installed = (source) => join(source.root, 'generated/catalog.archive.json');
-		const named = fixture(t, '', archive);
+		const part = '{"part":true}\n';
+		const parts = (source) => join(source.root, 'generated/catalog.public.parts');
+		const named = fixture(t, '', part);
 		assert.equal(build(named).status, 0);
-		assert.equal(readFileSync(installed(named), 'utf8'), archive);
+		assert.equal(readFileSync(join(parts(named), `${digest(part)}.json`), 'utf8'), part);
 
 		const unnamed = fixture(t);
-		mkdirSync(join(unnamed.root, 'generated'));
-		writeFileSync(installed(unnamed), '{"stale":true}\n');
+		mkdirSync(parts(unnamed), { recursive: true });
+		writeFileSync(join(parts(unnamed), `${digest('{}')}.json`), '{}');
 		const result = build(unnamed);
 		assert.equal(result.status, 0, result.stderr);
-		assert.equal(existsSync(installed(unnamed)), false);
+		assert.equal(existsSync(join(parts(unnamed), `${digest('{}')}.json`)), false);
 	}
 );
 
-for (const [name, probe, message, archive = null] of [
+for (const [name, probe, message, part = null] of [
 	[
 		'symlink',
 		"rmSync('generated/catalog.runtime.json'); symlinkSync('/etc/hostname', 'generated/catalog.runtime.json');",
@@ -182,20 +187,15 @@ for (const [name, probe, message, archive = null] of [
 		/does not commit to the public catalog/
 	],
 	[
-		'changed archive',
-		"writeFileSync('generated/catalog.archive.json', '{}');",
-		/archive differs from the public catalog/,
-		'{"archived":true}\n'
+		'changed part',
+		"writeFileSync(partPath, '{}');",
+		/part [0-9a-f]{64} differs from the root/,
+		'{"part":true}\n'
 	],
-	[
-		'missing archive',
-		"rmSync('generated/catalog.archive.json');",
-		/docker failed/,
-		'{"archived":true}\n'
-	]
+	['missing part', 'rmSync(partPath);', /tar failed/, '{"part":true}\n']
 ]) {
 	test(`rejects ${name} before installing any build output`, { timeout: 900_000 }, (t) => {
-		const source = fixture(t, probe, archive);
+		const source = fixture(t, probe, part);
 		mkdirSync(join(source.root, 'generated'));
 		const previous = '{"previous":true}\n';
 		writeFileSync(join(source.root, 'generated/catalog.runtime.json'), previous);

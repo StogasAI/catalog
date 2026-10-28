@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { publicArchive, publicCatalog } from './generated-catalog';
 import runtimeCatalog from '../generated/catalog.runtime.json';
 
@@ -30,9 +31,9 @@ describe('compiled catalog', () => {
 		);
 	});
 
-	test('binds runtime policy to the public ownership artifact', () => {
+	test('binds runtime policy to the public root, which names every part', () => {
 		const expected = `sha256:${createHash('sha256')
-			.update(`${JSON.stringify(publicCatalog)}\n`)
+			.update(readFileSync('generated/catalog.public.json'))
 			.digest('hex')}`;
 		expect(runtimeCatalog.publicDigest).toBe(expected);
 	});
@@ -847,10 +848,10 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps deterministic runtime and public artifacts within their limits', () => {
-		for (const name of ['catalog.runtime.json', 'catalog.public.json'])
-			expect(Bun.file(`generated/${name}`).size).toBeLessThanOrEqual(32 * 1024 * 1024);
+		expect(Bun.file('generated/catalog.runtime.json').size).toBeLessThanOrEqual(32 * 1024 * 1024);
+		expect(Bun.file('generated/catalog.public.json').size).toBeLessThanOrEqual(16 * 1024 * 1024);
 		expect(runtimeCatalog.schema).toBe('stogas.catalog.runtime.v6');
-		expect(publicCatalog.schema).toBe('stogas.catalog.public.v7');
+		expect(publicCatalog.schema).toBe('stogas.catalog.public.v8');
 		expect(runtimeCatalog.schedule).toEqual([]);
 		expect(publicCatalog.schedule).toEqual([]);
 	});

@@ -619,7 +619,7 @@ describe('catalog source compiler invariants', () => {
 		const source = sourceFixture();
 		const deployment = source.graph.deployments['openai-gpt-test'];
 		const { models, deployments } = source.graph;
-		models['gpt-other'] = { ...models['gpt-test'], name: 'GPT Other' };
+		models['gpt-other'] = { ...models['gpt-test'], name: 'GPT Other', aliases: ['gpt.other'] };
 		models['gpt-listed'] = { ...models['gpt-test'], name: 'GPT Listed' };
 		deployments['openai-gpt-later'] = {
 			...structuredClone(deployment),
@@ -651,18 +651,16 @@ describe('catalog source compiler invariants', () => {
 			per_mill_tokens: '0.5'
 		});
 		expect(archive).toEqual({
-			schema: 'stogas.catalog.archive.v1',
-			graph: {
-				deployments: {
-					'openai-gpt-other': whole.public.graph.deployments['openai-gpt-other'],
-					'openai-gpt-test': lastState
-				},
-				models: { 'gpt-other': whole.public.graph.models['gpt-other'] }
-			}
+			deployments: {
+				'openai-gpt-other': whole.public.graph.deployments['openai-gpt-other'],
+				'openai-gpt-test': lastState
+			},
+			models: { 'gpt-other': whole.public.graph.models['gpt-other'] }
 		});
+		// A request can name an archived model by its alias too.
 		expect(runtime.retired).toEqual({
 			deployments: { 'openai-gpt-other': '2026-05-01', 'openai-gpt-test': '2026-06-01' },
-			models: { 'gpt-other': '2026-05-01' }
+			models: { 'gpt-other': '2026-05-01', 'gpt.other': '2026-05-01' }
 		});
 		// The public catalog lists a model without deployments; the runtime omits it.
 		expect(Object.keys(publicCatalog.graph.models).sort()).toEqual(['gpt-listed', 'gpt-test']);

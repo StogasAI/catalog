@@ -6,6 +6,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	symlinkSync,
@@ -447,12 +448,14 @@ exit 1
 			'  pricing:\n'
 		].join('\n');
 
-	test('writes, checks and removes the archive as its date moves', () => {
+	test('writes, checks and removes the archive and parts as the archive date moves', () => {
 		const root = catalogCopy();
 		const policyPath = join(root, 'source/release-policy.json');
 		const policy = readFileSync(policyPath, 'utf8');
-		const archivePath = join(root, 'generated/catalog.archive.json');
+		const partsPath = join(root, 'generated/catalog.public.parts');
+		const partNames = () => readdirSync(partsPath).sort();
 		const active = readPublicCatalog(join(root, 'generated')).catalog;
+		const activeParts = partNames();
 		const retiring = Object.entries(active.graph.deployments)
 			.filter(([, { retirementDate }]) => retirementDate === '2027-09-01')
 			.map(([id]) => id);
@@ -464,21 +467,29 @@ exit 1
 		);
 		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
 		expectBuildSuccess(runBuild(root));
-		const { catalog, archive } = readPublicCatalog(join(root, 'generated'));
-		const bytes = readFileSync(archivePath);
-		expect(catalog.archive).toEqual({
-			sha256: createHash('sha256').update(bytes).digest('hex'),
-			size: bytes.byteLength
-		});
-		expect(Object.keys(archive!.graph.deployments).sort()).toEqual(retiring.sort());
+		const { root: publicRoot, catalog, archive } = readPublicCatalog(join(root, 'generated'));
+		const named = [...publicRoot.parts, publicRoot.archive!.index, ...publicRoot.archive!.parts];
+		expect(partNames()).toEqual(named.map(({ sha256 }) => `${sha256}.json`).sort());
+		for (const { sha256, size } of named) {
+			const bytes = readFileSync(join(partsPath, `${sha256}.json`));
+			expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha256);
+			expect(bytes.byteLength).toBe(size);
+		}
+		expect(catalog.archive).toEqual(publicRoot.archive);
+		expect(Object.keys(archive!.deployments).sort()).toEqual(retiring.sort());
 		for (const id of retiring) expect(catalog.graph.deployments[id]).toBeUndefined();
 		expectBuildSuccess(runBuild(root, ['--check']));
-		writeFileSync(archivePath, bytes.toString('utf8').replace('"modelId"', '"modelId" '));
+		const indexPath = join(partsPath, `${publicRoot.archive!.index.sha256}.json`);
+		const index = readFileSync(indexPath, 'utf8');
+		writeFileSync(indexPath, index.replace('"modelId"', '"modelId" '));
+		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+		writeFileSync(indexPath, index);
+		writeFileSync(join(partsPath, `${'0'.repeat(64)}.json`), '{}');
 		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
 
 		writeFileSync(policyPath, policy);
 		expectBuildSuccess(runBuild(root));
-		expect(existsSync(archivePath)).toBe(false);
+		expect(partNames()).toEqual(activeParts);
 		expect(readPublicCatalog(join(root, 'generated')).catalog).toEqual(active);
 		expectBuildSuccess(runBuild(root, ['--check']));
 	});

@@ -2,9 +2,9 @@ import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-	catalogArchiveArtifact,
 	catalogArtifact,
 	catalogManifest,
+	catalogPartArtifacts,
 	parseCatalogReleaseEvidence,
 	parseSequence,
 	resolveDestructiveOutput,
@@ -42,11 +42,11 @@ mkdirSync(join(outputRoot, 'blobs', 'sha256'), { recursive: true });
 const blobs = [
 	addBlob(catalogArtifact(repositoryRoot, 'catalog.runtime.json')),
 	addBlob(catalogArtifact(repositoryRoot, 'catalog.public.json')),
-	...[catalogArchiveArtifact(repositoryRoot)].filter(Boolean).map(addBlob)
+	...catalogPartArtifacts(repositoryRoot).map(addBlob)
 ];
 
-// Control lists this approval in signed evidence; only its artifacts and the archive that the
-// public catalog names are published.
+// Control lists this approval in signed evidence; only its artifacts and the files that the
+// public root names are published.
 writeFileSync(join(outputRoot, 'catalog-approval.json'), canonicalJson(envelope));
 writeFileSync(
 	join(outputRoot, 'SHA256SUMS'),

@@ -1,13 +1,23 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CATALOG_ARCHIVE_FILE } from './release-format.mjs';
+import { assembleCatalogArchive, assemblePublicCatalog } from './public-catalog.mjs';
+import { CATALOG_PARTS_DIRECTORY } from './release-format.mjs';
 
 const generated = fileURLToPath(new URL('../../generated', import.meta.url));
 
-/** A build's public catalog and the archive that it names, or null while it names none. */
+/**
+ * A build's public root, the whole catalog that it makes with its parts, and the archived records,
+ * or null while the root names no archive.
+ */
 export function readGeneratedPublicCatalog(directory = generated) {
-	const read = (name) => JSON.parse(readFileSync(join(directory, name), 'utf8'));
-	const catalog = read('catalog.public.json');
-	return { catalog, archive: catalog.archive && read(CATALOG_ARCHIVE_FILE) };
+	const read = (path) => JSON.parse(readFileSync(join(directory, path), 'utf8'));
+	const part = ({ sha256 }) => read(join(CATALOG_PARTS_DIRECTORY, `${sha256}.json`));
+	const root = read('catalog.public.json');
+	return {
+		root,
+		catalog: assemblePublicCatalog(root, root.parts.map(part)),
+		archive:
+			root.archive && assembleCatalogArchive(part(root.archive.index), root.archive.parts.map(part))
+	};
 }
