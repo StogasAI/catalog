@@ -349,6 +349,20 @@ exit 1
 			error: 'documentFormats'
 		},
 		{
+			name: 'Azure upstream fields on an OpenAI deployment',
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: '    model: gpt-5.6-sol\n',
+			to: '    model: gpt-5.6-sol\n    modelFormat: OpenAI\n',
+			error: 'modelFormat'
+		},
+		{
+			name: "a route of another provider than the deployment's directory",
+			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
+			from: 'routeIds: [openai-chat-completions, openai-responses]',
+			to: 'routeIds: [openai-chat-completions, anthropic-messages]',
+			error: 'route anthropic-messages belongs to anthropic, not openai'
+		},
+		{
 			name: 'document formats below deployment overrides',
 			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
 			from: '  pricing:\n',

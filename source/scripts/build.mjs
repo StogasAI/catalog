@@ -12,7 +12,7 @@ import {
 	rmdirSync,
 	writeFileSync
 } from 'node:fs';
-import { homedir } from 'node:os';
+import { availableParallelism, homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
@@ -120,7 +120,12 @@ function fileOwnedNodeSource(path) {
 	if (!match) return null;
 	const id = basename(path).replace(/\.ya?ml$/, '');
 	validateNodeId(id, rel(path));
-	return { type: match[1], id };
+	if (match[1] !== 'deployments') return { type: match[1], id };
+	// The provider directory names the deployment's provider, which CUE checks its upstream
+	// against.
+	const provider = /(?:^|\/)providers\/([^/]+)\/deployments\/[^/]+$/.exec(rel(path))?.[1];
+	if (!provider) throw new Error(`${rel(path)}: deployments live in providers/<id>/deployments`);
+	return { type: match[1], id, provider };
 }
 
 function validateNodeId(id, owner) {
@@ -151,8 +156,15 @@ function fileOwnedNodeBody(path, source) {
 	return nodeBody;
 }
 
-function writeFileOwnedNodeSource(sources) {
-	if (!sources.length) return null;
+// CUE's memory grows with the records that one run reads, about 330 KB for each deployment, so
+// it reads deployments in batches of this many.
+const CUE_DEPLOYMENT_BATCH = 1000;
+
+/**
+ * The file-owned records as YAML for CUE: the first file holds every record but deployments, and
+ * each further file holds a batch of deployments under their providers.
+ */
+function writeFileOwnedNodeSources(sources) {
 	const grouped = new Map();
 	for (const source of sources) {
 		const entries = grouped.get(source.type) ?? [];
@@ -162,23 +174,81 @@ function writeFileOwnedNodeSource(sources) {
 		entries.push(source);
 		grouped.set(source.type, entries);
 	}
-	const content = [...grouped.entries()]
-		.sort(([left], [right]) => left.localeCompare(right))
-		.flatMap(([type, entries]) => [
-			`${type}:`,
-			...entries
-				.sort((left, right) => left.id.localeCompare(right.id))
-				.flatMap((source) => [
-					`  ${JSON.stringify(source.id)}:`,
-					...fileOwnedNodeBody(source.path, source)
-						.split(/\r?\n/)
-						.map((line) => (line.trim() ? `    ${line}` : line))
-				])
-		])
-		.join('\n');
-	const generatedPath = join(ensureTempBuildDir(), 'file-owned-nodes.yaml');
-	writeFileSync(generatedPath, `${content.trimEnd()}\n`);
-	return generatedPath;
+	const nodes = (entries, indent) =>
+		entries
+			.sort((left, right) => left.id.localeCompare(right.id))
+			.flatMap((source) => [
+				`${indent}${JSON.stringify(source.id)}:`,
+				...fileOwnedNodeBody(source.path, source)
+					.split(/\r?\n/)
+					.map((line) => (line.trim() ? `${indent}  ${line}` : line))
+			]);
+	const files = [];
+	const write = (lines) => {
+		const path = join(ensureTempBuildDir(), `file-owned-nodes-${files.length}.yaml`);
+		writeFileSync(path, `${lines.join('\n').trimEnd()}\n`);
+		files.push(path);
+	};
+	write(
+		[...grouped.entries()]
+			.filter(([type]) => type !== 'deployments')
+			.sort(([left], [right]) => left.localeCompare(right))
+			.flatMap(([type, entries]) => [`${type}:`, ...nodes(entries, '  ')])
+	);
+	// Batches split providers, since no CUE constraint relates two deployments.
+	const deployments = (grouped.get('deployments') ?? []).sort(
+		(left, right) => left.provider.localeCompare(right.provider) || left.id.localeCompare(right.id)
+	);
+	for (let start = 0; start < deployments.length; start += CUE_DEPLOYMENT_BATCH)
+		write([
+			'deploymentsByProvider:',
+			...[
+				...Map.groupBy(
+					deployments.slice(start, start + CUE_DEPLOYMENT_BATCH),
+					(source) => source.provider
+				)
+			].flatMap(([provider, owned]) => [`  ${JSON.stringify(provider)}:`, ...nodes(owned, '    ')])
+		]);
+	return files;
+}
+
+/** Runs the tasks, at most `limit` at a time, and returns their results in order. */
+async function runLimited(tasks, limit) {
+	const results = [];
+	let next = 0;
+	const worker = async () => {
+		while (next < tasks.length) {
+			const index = next++;
+			results[index] = await tasks[index]();
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+	return results;
+}
+
+/**
+ * The exported source with its deployments in one map, and the provider whose directory holds
+ * each deployment. Each deployment's routes must belong to that provider.
+ */
+function withDeployments(exported) {
+	const { deploymentsByProvider = {}, ...graph } = exported.graph;
+	const deploymentProviders = new Map();
+	const deployments = [];
+	for (const [providerId, owned] of Object.entries(deploymentsByProvider))
+		for (const [id, deployment] of Object.entries(owned)) {
+			for (const routeId of deployment.routeIds) {
+				const owner = graph.routes[routeId]?.providerId;
+				if (owner && owner !== providerId)
+					throw new Error(`${id}: route ${routeId} belongs to ${owner}, not ${providerId}`);
+			}
+			deployments.push([id, deployment]);
+			deploymentProviders.set(id, providerId);
+		}
+	// In the order that one map of them had.
+	graph.deployments = Object.fromEntries(
+		deployments.sort(([left], [right]) => left.localeCompare(right))
+	);
+	return { source: { ...exported, graph }, deploymentProviders };
 }
 
 function ensureTempBuildDir() {
@@ -1328,25 +1398,50 @@ export async function main(argv = process.argv.slice(2)) {
 	const dataFiles = allDataFiles.filter((path) => !fileOwnedPaths.has(path)).map(rel);
 
 	try {
-		const generatedFileOwnedSource = writeFileOwnedNodeSource(fileOwnedSources);
+		const [records, ...deploymentBatches] = writeFileOwnedNodeSources(fileOwnedSources);
 		const cue = await resolveCueCommand();
-		const sourceFiles = [
-			...cueFiles,
-			...dataFiles,
-			...(generatedFileOwnedSource ? [rel(generatedFileOwnedSource)] : [])
-		];
 		const exportSource = (files) =>
 			run([...cue, 'export', ...files, '-e', 'compiledSource', '--out', 'json']);
-		const source = JSON.parse(await exportSource(sourceFiles));
-		// Each dated state must satisfy the same schema and invariants as the source.
-		await Promise.all(
-			periodStates(source.graph).states.map((state, index) => {
+		const cueRuns = Math.min(4, availableParallelism());
+		const [exported, ...batches] = await runLimited(
+			[[...dataFiles, rel(records)], ...deploymentBatches.map((batch) => [rel(batch)])].map(
+				(files) => async () => JSON.parse(await exportSource([...cueFiles, ...files]))
+			),
+			cueRuns
+		);
+		const { source, deploymentProviders } = withDeployments({
+			...exported,
+			graph: {
+				...exported.graph,
+				deploymentsByProvider: batches.reduce((merged, { graph }) => {
+					for (const [provider, deployments] of Object.entries(graph.deploymentsByProvider))
+						Object.assign((merged[provider] ??= {}), deployments);
+					return merged;
+				}, {})
+			}
+		});
+		// Each dated state must satisfy the same schema as the source. A state differs from the
+		// source only in the records that its periods change, so CUE reads those alone.
+		const { base, states } = periodStates(source.graph);
+		await runLimited(
+			states.map((state, index) => () => {
+				const changed = {};
+				for (const [kind, nodes] of Object.entries(state.graph))
+					for (const [id, node] of Object.entries(nodes)) {
+						if (node === base[kind][id]) continue;
+						const records =
+							kind === 'deployments'
+								? ((changed.deploymentsByProvider ??= {})[deploymentProviders.get(id)] ??= {})
+								: (changed[kind] ??= {});
+						records[id] = node;
+					}
 				const statePath = join(ensureTempBuildDir(), `state-${index}.json`);
-				writeFileSync(statePath, JSON.stringify(state.graph));
+				writeFileSync(statePath, JSON.stringify(changed));
 				return exportSource([...cueFiles, rel(statePath)]).catch((error) => {
 					throw new Error(`The catalog state from ${state.start} is invalid\n${error.message}`);
 				});
-			})
+			}),
+			cueRuns
 		);
 		const { archive_through: archiveThrough } = catalogReleasePolicy(repositoryRoot);
 		const catalogs = buildCatalogs(source, archiveThrough);

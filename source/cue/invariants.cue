@@ -5,25 +5,13 @@ groups: close({[#Id]: #Group})
 models: close({[#Id]: #Model})
 providers: close({[#Id]: #Provider})
 routes: close({[#Id]: #Route})
-deployments: close({[#Id]: #Deployment})
 
-#Catalog: {
-	_providerUpstreams: {
-		for id, deployment in deployments {
-			for routeId in deployment.routeIds {
-				if routes[routeId].providerId == "openai" {
-					"\(id):openaiUpstream:\(routeId)": deployment.upstream & #OpenAIUpstream
-				}
-				if routes[routeId].providerId == "anthropic" {
-					"\(id):anthropicUpstream:\(routeId)": deployment.upstream & #AnthropicUpstream
-				}
-				if routes[routeId].providerId == "chutes" {
-					"\(id):chutesUpstream:\(routeId)": deployment.upstream & #ChutesUpstream
-				}
-				if routes[routeId].providerId == "azure" {
-					"\(id):azureUpstream:\(routeId)": deployment.upstream & #AzureUpstream
-				}
-			}
-		}
-	}
-}
+// Each deployment has its own file in its provider's directory, and the build files it under
+// that provider, so each one meets its provider's upstream fields without a lookup across the
+// catalog, and validation time grows with the number of deployments rather than its square.
+deployments: close({})
+deploymentsByProvider: close({[#Id]: close({[#Id]: #Deployment})})
+deploymentsByProvider: openai?: [#Id]: upstream:    #OpenAIUpstream
+deploymentsByProvider: anthropic?: [#Id]: upstream: #AnthropicUpstream
+deploymentsByProvider: chutes?: [#Id]: upstream:    #ChutesUpstream
+deploymentsByProvider: azure?: [#Id]: upstream:     #AzureUpstream
