@@ -16,6 +16,7 @@ import { PART_BYTES, partitionCatalog, retirementDates } from '../source/scripts
 import { catalogFileList } from '../source/scripts/release-format.mjs';
 import { catalog as built } from './generated-catalog';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Catalog JSON of any shape, which these tests read and change in place.
 type Nodes = Record<string, Record<string, any>>;
 type Source = {
 	graph: Record<string, Nodes>;
