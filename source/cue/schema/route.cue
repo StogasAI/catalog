@@ -54,5 +54,9 @@ package catalog
 	overrides?: close({
 		capabilities?: #CapabilityOverrides
 	})
+	// The date that the provider names for shutting this route down, such as an
+	// API that it retires. Its deployments stop serving through it then, and a
+	// deployment that no other route serves retires.
+	retirementDate?: #Date
 	periods?: [#Period, ...#Period]
 })

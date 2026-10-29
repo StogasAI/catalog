@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { canonicalJson } from '../source/scripts/canonical-json.mjs';
 import { buildCatalog, catalogFiles, main } from '../source/scripts/build.mjs';
-import { partsInEffect } from '../source/scripts/catalog-files.mjs';
+import { assembleCatalog, partsInEffect } from '../source/scripts/catalog-files.mjs';
 import { everyStateCatalogChains } from '../source/scripts/resolved-chains.mjs';
 import { catalogAt } from '../source/scripts/schedule.mjs';
 
@@ -445,8 +445,70 @@ describe('catalog source compiler invariants', () => {
 				});
 			},
 			'retirementDate is invalid'
+		],
+		[
+			'rejects an impossible route retirement date',
+			(source) => {
+				Object.assign(source.graph.routes['openai-responses'], { retirementDate: '2026-02-30' });
+			},
+			'openai-responses: retirementDate is invalid'
+		],
+		[
+			'rejects an impossible provider retirement date',
+			(source) => {
+				Object.assign(source.graph.providers.openai, { retirementDate: '2026-02-30' });
+			},
+			'openai: retirementDate is invalid'
+		],
+		[
+			'rejects a provider retirement that ends a deployment before its model is released',
+			(source) => {
+				Object.assign(source.graph.providers.openai, { retirementDate: '2026-01-01' });
+			},
+			'retirementDate precedes model releaseDate'
 		]
 	]);
+
+	test('a route or a provider retires on its own date, and so does each deployment it ends', () => {
+		const source = sourceFixture();
+		addSecondOpenAIRoute(source);
+		const { deployments, models, providers, routes } = source.graph;
+		models['gpt-only'] = { ...models['gpt-test'], name: 'GPT Only', aliases: ['gpt.only'] };
+		deployments['openai-gpt-test'].routeIds = ['openai-chat-completions', 'openai-responses'];
+		deployments['openai-gpt-only'] = {
+			...structuredClone(deployments['openai-gpt-test']),
+			modelId: 'gpt-only',
+			routeIds: ['openai-chat-completions'],
+			upstream: { model: 'gpt-only' }
+		};
+		Object.assign(routes['openai-chat-completions'], { retirementDate: '2026-08-01' });
+		let catalog = buildCatalog(source);
+		expect(catalog.graph.routes['openai-chat-completions'].retirementDate).toBe('2026-08-01');
+		expect(catalog.graph.routes['openai-responses']).not.toHaveProperty('retirementDate');
+		// The other route still serves the first deployment.
+		expect(catalog.graph.deployments['openai-gpt-test'].retirementDate).toBeNull();
+		expect(catalog.graph.deployments['openai-gpt-only'].retirementDate).toBe('2026-08-01');
+		let root = JSON.parse(catalogFiles(catalog).rootJson);
+		expect(root.summaries.models['gpt-only'].retirementDate).toBe('2026-08-01');
+		expect(root.summaries.routes['openai-chat-completions'].retirementDate).toBe('2026-08-01');
+		expect(root.summaries.providers.openai.retirementDate).toBeNull();
+
+		Object.assign(providers.openai, { retirementDate: '2026-07-01' });
+		catalog = buildCatalog(source);
+		expect(catalog.graph.routes['openai-chat-completions'].retirementDate).toBe('2026-07-01');
+		expect(catalog.graph.routes['openai-responses'].retirementDate).toBe('2026-07-01');
+		expect(catalog.graph.deployments['openai-gpt-test'].retirementDate).toBe('2026-07-01');
+		// The provider's routes carry its date, so its record, which the root holds, does not.
+		expect(catalog.graph.providers.openai).not.toHaveProperty('retirementDate');
+		const files = catalogFiles(catalog);
+		root = JSON.parse(files.rootJson);
+		expect(root.summaries.providers.openai.retirementDate).toBe('2026-07-01');
+		expect(root.summaries.models['gpt-test'].retirementDate).toBe('2026-07-01');
+		const parts = root.parts.map(({ sha256 }: { sha256: string }) =>
+			JSON.parse(files.parts.get(`${sha256}.json`)!)
+		);
+		expect(canonicalJson(assembleCatalog(root, parts).graph)).toBe(canonicalJson(catalog.graph));
+	});
 
 	test('compiles dated periods into a schedule of whole changed nodes', () => {
 		const source = sourceFixture();

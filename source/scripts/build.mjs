@@ -15,7 +15,7 @@ import { availableParallelism, homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
-import { partitionCatalog } from './catalog-parts.mjs';
+import { earliest, partitionCatalog } from './catalog-parts.mjs';
 import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
 import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
@@ -354,6 +354,11 @@ function validDate(value) {
 	if (typeof value !== 'string') return false;
 	const parsed = new Date(`${value}T00:00:00.000Z`);
 	return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validateRetirementDate(owner, date) {
+	if (date !== undefined && !validDate(date))
+		throw new Error(`${owner}: retirementDate is invalid`);
 }
 
 function isPlainObject(value) {
@@ -771,6 +776,12 @@ function compileGraph(source) {
 				);
 				validateRouteEndpoint(routeId, route.endpoint);
 				validateDocumentFormats(route.documentFormats, routeId);
+				validateRetirementDate(routeId, route.retirementDate);
+				// A route retires on the date that its provider names for it or for itself.
+				const retirementDate = earliest(
+					route.retirementDate ?? null,
+					provider.retirementDate ?? null
+				);
 				const overrides = route.overrides ?? {};
 				rejectRedundantOverride(
 					provider.capabilities,
@@ -799,7 +810,8 @@ function compileGraph(source) {
 						dataHandling: Object.fromEntries(
 							dataHandlingFields.map((field) => [field, dataHandling[field]])
 						),
-						pricing: route.pricing ?? {}
+						pricing: route.pricing ?? {},
+						...(retirementDate !== null && { retirementDate })
 					}
 				];
 			})
@@ -874,6 +886,7 @@ function compileGraph(source) {
 			`${providerId}: credentialModes`
 		);
 		validateDataHandling(providerId, provider.dataHandling);
+		validateRetirementDate(providerId, provider.retirementDate);
 	}
 
 	for (const [modelId, model] of Object.entries(graph.models)) {
@@ -973,10 +986,17 @@ function compileGraph(source) {
 		if (!deployment.upstream?.model) {
 			throw new Error(`${deploymentId}: upstream model is required`);
 		}
-		const retirementDate = deployment.retirementDate ?? null;
-		if (retirementDate !== null && !validDate(retirementDate)) {
-			throw new Error(`${deploymentId}: retirementDate is invalid`);
-		}
+		validateRetirementDate(deploymentId, deployment.retirementDate);
+		// A deployment retires on its own date, or once every route that serves it has retired.
+		const routeDates = deployment.routeIds.map(
+			(routeId) => graph.routes[routeId].retirementDate ?? null
+		);
+		const retirementDate = earliest(
+			deployment.retirementDate ?? null,
+			routeDates.includes(null)
+				? null
+				: routeDates.reduce((later, date) => (date > later ? date : later))
+		);
 		if (retirementDate !== null && retirementDate < model.releaseDate) {
 			throw new Error(`${deploymentId}: retirementDate precedes model releaseDate`);
 		}
@@ -1157,12 +1177,17 @@ function compileGraph(source) {
 	}
 
 	// Routes and deployments carry resolved facts, so readers never combine records, and each
-	// route record names the hash of its chain.
+	// route record names the hash of its chain. A provider's date is its routes' already.
 	const compiled = {
 		...sourceGraph,
 		providers: Object.fromEntries(
 			Object.entries(graph.providers).map(([id, provider]) => {
-				const { capabilities: _routeDefaults, dataHandling: _dataDefaults, ...facts } = provider;
+				const {
+					capabilities: _routeDefaults,
+					dataHandling: _dataDefaults,
+					retirementDate: _routesDate,
+					...facts
+				} = provider;
 				return [id, facts];
 			})
 		),

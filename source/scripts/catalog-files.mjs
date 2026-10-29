@@ -5,13 +5,14 @@
  * providers are few and small, so their summaries are their whole records; a model, route or
  * deployment summary names the part that holds its record, with the record's scheduled versions.
  *
- * Each summary also gives the record's retirement date. A deployment retires on the date that its
- * provider names, and any other record with the last of the records it exists for, once all of
- * them have dates: a model or a route with its deployments, a provider with its routes, an author
- * with its models, and a group with the models in it and in its child groups. Parts hold the
- * records without a date first and then those with one, by date, and the root gives each part the
- * latest date in it. A reader skips each part whose records have all retired, so a record leaves
- * what readers load as it retires, without a release.
+ * Each summary also gives the record's retirement date. The provider can name one for a
+ * deployment, a route or itself; a provider's date ends each of its routes, and a deployment also
+ * retires once its routes have all retired. Any record retires with the last of the records it
+ * exists for, once all of them have dates: a model or a route with its deployments, a provider
+ * with its routes, an author with its models, and a group with the models in it and in its child
+ * groups. Parts hold the records without a date first and then those with one, by date, and the
+ * root gives each part the latest date in it. A reader skips each part whose records have all
+ * retired, so a record leaves what readers load as it retires, without a release.
  */
 export const CATALOG_SCHEMA = 'stogas.catalog.v9';
 export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v9';

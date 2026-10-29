@@ -128,13 +128,20 @@ export function partitionCatalog(catalog) {
 	return { root, parts };
 }
 
+/** The earlier of two dates, either of which can be null. */
+export function earliest(left, right) {
+	return left === null || (right !== null && right < left) ? right : left;
+}
+
 /**
- * Each record's retirement date, by kind and ID, or null. A deployment retires on the date that
- * its provider names. Any other record retires with the last of the records it exists for, once
- * all of them have dates: a model or a route with its deployments, a provider with its routes, an
- * author with its models, and a group with the models in it and in its child groups. A record
- * without such records is listed on purpose, so it has no date. Periods change neither dates nor
- * edges, so every state has the base graph's dates.
+ * Each record's retirement date, by kind and ID, or null. A record retires with the last of the
+ * records it exists for, once all of them have dates: a model or a route with its deployments, a
+ * provider with its routes, an author with its models, and a group with the models in it and in
+ * its child groups. A record without such records is listed on purpose, so it has no date of that
+ * kind. A deployment retires on its own date, and a route on its own date if that comes first; the
+ * build has applied the dates that a provider names for a route or for itself to the route and to
+ * each deployment that it ends. Periods change neither dates nor edges, so every state has the
+ * base graph's dates.
  */
 export function retirementDates(graph) {
 	const latest = (dates = []) =>
@@ -160,6 +167,8 @@ export function retirementDates(graph) {
 			Object.keys(deployment.routes).map((routeId) => [routeId, deployments[id]])
 		)
 	);
+	for (const [id, route] of Object.entries(graph.routes))
+		routes[id] = earliest(route.retirementDate ?? null, routes[id]);
 	const providers = dated(
 		'providers',
 		Object.entries(graph.routes).map(([id, { providerId }]) => [providerId, routes[id]])

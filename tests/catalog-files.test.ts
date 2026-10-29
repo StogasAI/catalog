@@ -476,6 +476,34 @@ describe('retirement', () => {
 		});
 	});
 
+	test('a route retires on its own date before the records it exists for', () => {
+		// The build has applied the dates that a provider names for a route or for itself to the
+		// route and to the deployments that it ends.
+		const graph = {
+			authors: { author: {} },
+			groups: {},
+			models: { model: { authorId: 'author', groupIds: [] } },
+			providers: { closing: {}, lasting: {} },
+			routes: {
+				old: { providerId: 'lasting', retirementDate: '2027-03-01' },
+				next: { providerId: 'lasting' },
+				closing: { providerId: 'closing', retirementDate: '2027-05-01' }
+			},
+			deployments: {
+				both: { modelId: 'model', retirementDate: null, routes: { old: {}, next: {} } },
+				closed: { modelId: 'model', retirementDate: '2027-05-01', routes: { closing: {} } }
+			}
+		};
+		expect(retirementDates(graph)).toEqual({
+			authors: { author: null },
+			groups: {},
+			models: { model: null },
+			providers: { closing: '2027-05-01', lasting: null },
+			routes: { old: '2027-03-01', next: null, closing: '2027-05-01' },
+			deployments: { both: null, closed: '2027-05-01' }
+		});
+	});
+
 	test('leaves each part out once all its records have retired', () => {
 		const { root } = files(
 			partitionCatalog(synthetic(6000, 1500, (index) => (index % 2 ? day(index % 300) : null)))
