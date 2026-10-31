@@ -23,9 +23,6 @@ const chuteIds: Record<string, string> = {
 	'chutes-glm-5.2': '08901219-159f-55a7-87cf-9d0d02744668',
 	'chutes-kimi-k2.6': 'aac09863-35b4-5d9b-9b67-6e6a9d54273a',
 	'chutes-kimi-k3': '0bb5d4c2-b5da-587d-b88e-62b4839028ec',
-	'chutes-mistral-nemo-instruct-2407': '7725a31d-28df-5bb7-9d29-c23b49df5472',
-	'chutes-nemotron-3-nano-omni-30b': '761ccdab-2e3d-5268-ab03-55f8ba94a80c',
-	'chutes-qwen3-32b': 'ac059e33-eb27-541c-b9a9-24b214036475',
 	'chutes-qwen3.5-397b-a17b': '51a4284a-a5a0-5e44-a9cc-6af5a2abfbcf',
 	'chutes-qwen3.6-27b': '7aa5e899-c0ba-5482-af48-d3f31d635c9f',
 	'chutes-qwen3.8-27b': '9ecb73cc-909b-5334-9cd8-74985945cff5'
@@ -38,9 +35,6 @@ const gpuCounts: Record<string, number> = {
 	'chutes-glm-5.2': 8,
 	'chutes-kimi-k2.6': 8,
 	'chutes-kimi-k3': 8,
-	'chutes-mistral-nemo-instruct-2407': 1,
-	'chutes-nemotron-3-nano-omni-30b': 1,
-	'chutes-qwen3-32b': 1,
 	'chutes-qwen3.5-397b-a17b': 8,
 	'chutes-qwen3.6-27b': 1,
 	'chutes-qwen3.8-27b': 1
@@ -56,24 +50,6 @@ const dataHandling = {
 	teeVerified: false
 };
 const deployments: ProviderDeploymentContract[] = [
-	deployment(
-		'chutes-qwen3-32b',
-		'qwen3-32b',
-		'qwen',
-		'Qwen/Qwen3-32B-TEE',
-		40960,
-		40960,
-		'fp8',
-		'0.104',
-		'0.0104',
-		'0.416',
-		true,
-		['text'],
-		'optional',
-		[],
-		null,
-		{ contextWindowTokens: 131072, maxOutputTokens: 131072 }
-	),
 	deployment(
 		'chutes-qwen3.5-397b-a17b',
 		'qwen3.5-397b-a17b',
@@ -118,9 +94,9 @@ const deployments: ProviderDeploymentContract[] = [
 		202752,
 		65535,
 		'fp8',
-		'0.98',
-		'0.098',
-		'3.08',
+		'0.9',
+		'0.09',
+		'2.9',
 		true,
 		['text'],
 		'optional',
@@ -208,9 +184,9 @@ const deployments: ProviderDeploymentContract[] = [
 		262144,
 		65535,
 		'int4',
-		'0.45',
-		'0.045',
-		'1.95',
+		'0.39',
+		'0.039',
+		'1.8',
 		true,
 		['text', 'image', 'video'],
 		'optional',
@@ -218,21 +194,6 @@ const deployments: ProviderDeploymentContract[] = [
 		null,
 		{ maxOutputTokens: 262144 }
 	),
-	{
-		...deployment(
-			'chutes-mistral-nemo-instruct-2407',
-			'mistral-nemo-instruct-2407',
-			'mistral-ai',
-			'unsloth/Mistral-Nemo-Instruct-2407-TEE',
-			131072,
-			131072,
-			'bf16',
-			'0.0245',
-			'0.00245',
-			'0.0978'
-		),
-		capabilities: { ...capabilities, functionCalling: false, toolChoice: false }
-	},
 	deployment(
 		'chutes-kimi-k3',
 		'kimi-k3',
@@ -251,27 +212,6 @@ const deployments: ProviderDeploymentContract[] = [
 		null,
 		{ maxOutputTokens: 1048576 }
 	),
-	{
-		...deployment(
-			'chutes-nemotron-3-nano-omni-30b',
-			'nemotron-3-nano-omni-30b',
-			'nvidia',
-			'Nemotron-3-Nano-Omni-30B-TEE',
-			131072,
-			131072,
-			'bf16',
-			'0.0245',
-			'0.00245',
-			'0.0978',
-			true,
-			['text', 'image', 'audio', 'video'],
-			'optional',
-			[],
-			{ maximum: 262143, minimum: 1 },
-			{ contextWindowTokens: 262144, maxOutputTokens: 262144 }
-		),
-		reasoningMaxTokens: null
-	},
 	{
 		...deployment(
 			'chutes-deepseek-v4-flash-0731',

@@ -8,7 +8,7 @@ deployments:
     hosting: azure
     deploymentType: data_zone_standard_us
     serviceTier: fast
-  retirementDate: 2027-09-18
+  retirementDate: 2027-01-15
   overrides:
     dataHandling:
       processingLocation: US

@@ -32,7 +32,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 45, providers: 4, routes: 7, deployments: 212 });
+		).toEqual({ authors: 10, models: 45, providers: 4, routes: 7, deployments: 207 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -252,11 +252,6 @@ describe('compiled catalog', () => {
 			reasoningEfforts: [],
 			reasoningMaxTokens: { maximum: 262143, minimum: 1 }
 		});
-		expect(catalog.graph.deployments['chutes-nemotron-3-nano-omni-30b']).toMatchObject({
-			reasoning: 'optional',
-			reasoningMaxTokens: null,
-			routes: { 'chutes-chat-completions': { reasoningEfforts: [] } }
-		});
 	});
 
 	test('keeps author capabilities separate from reviewed Chutes serving limits', () => {
@@ -282,15 +277,6 @@ describe('compiled catalog', () => {
 		expect(catalog.graph.deployments['chutes-deepseek-v4-flash-0731']).toMatchObject({
 			routes: { 'chutes-chat-completions': { reasoningEfforts: ['high', 'max'] } }
 		});
-		for (const deploymentId of [
-			'chutes-mistral-nemo-instruct-2407',
-			'chutes-nemotron-3-nano-omni-30b'
-		]) {
-			expect(
-				catalog.graph.deployments[deploymentId].routes['chutes-chat-completions'].capabilities
-					.structuredOutputs
-			).toBe(true);
-		}
 		expect(catalog.graph.models['mistral-nemo-instruct-2407']).toMatchObject({
 			groupIds: ['mistral-nemo'],
 			knowledgeCutoff: '2024-04-01',
@@ -307,10 +293,6 @@ describe('compiled catalog', () => {
 				maxOutputTokens: contextWindowTokens
 			});
 		}
-		expect(catalog.graph.deployments['chutes-qwen3-32b']).toMatchObject({
-			contextWindowTokens: 40960,
-			maxOutputTokens: 40960
-		});
 		for (const deploymentId of [
 			'chutes-qwen3.5-397b-a17b',
 			'chutes-qwen3.6-27b',
@@ -356,8 +338,8 @@ describe('compiled catalog', () => {
 			expect(Object.keys(dataHandling).sort()).toEqual(dataHandlingFields);
 			expect(dataHandling.teeVerified && !dataHandling.tee).toBe(false);
 		}
-		expect(catalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('dataHandling');
-		expect(catalog.graph.deployments['chutes-qwen3-32b']).not.toHaveProperty('overrides');
+		expect(catalog.graph.deployments['chutes-qwen3.6-27b']).not.toHaveProperty('dataHandling');
+		expect(catalog.graph.deployments['chutes-qwen3.6-27b']).not.toHaveProperty('overrides');
 		expect(catalog).not.toHaveProperty('evidence');
 	});
 
@@ -396,15 +378,15 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps Anthropic selection literal and its guarantee normalized', () => {
-		const deployment = catalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'];
+		const deployment = catalog.graph.deployments['anthropic-claude-opus-5-5-fast-us'];
 		expect(Object.keys(deployment.routes)).toEqual(['anthropic-messages']);
 		expect(deployment.upstream).toEqual({
 			inferenceGeo: 'us',
-			model: 'claude-opus-4-8',
+			model: 'claude-opus-5-5',
 			serviceTier: 'fast'
 		});
 		expect(
-			catalog.graph.deployments['anthropic-claude-opus-4-8-fast-us'].routes['anthropic-messages']
+			catalog.graph.deployments['anthropic-claude-opus-5-5-fast-us'].routes['anthropic-messages']
 				.dataHandling.processingLocation
 		).toBe('US');
 	});
@@ -513,7 +495,7 @@ describe('compiled catalog', () => {
 				)
 				.map((deployment) => deployment.modelId)
 		);
-		expect(fastModels).toEqual(new Set(['claude-opus-4-8', 'claude-opus-5', 'claude-opus-5-5']));
+		expect(fastModels).toEqual(new Set(['claude-opus-5', 'claude-opus-5-5']));
 		expect(catalog.graph.routes['anthropic-messages'].dataHandling).toMatchObject({
 			endToEndEncrypted: false,
 			storageLocation: 'none',
@@ -560,8 +542,6 @@ describe('compiled catalog', () => {
 			'anthropic-claude-mythos-5-1',
 			'anthropic-claude-mythos-5-1-us',
 			'anthropic-claude-mythos-5-us',
-			'anthropic-claude-opus-4-8-fast',
-			'anthropic-claude-opus-4-8-fast-us',
 			'anthropic-claude-opus-5-fast',
 			'anthropic-claude-opus-5-fast-us',
 			'azure-claude-mythos-5-1-anthropic-hosted',

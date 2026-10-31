@@ -8,7 +8,7 @@ deployments:
     hosting: azure
     deploymentType: global_standard
     serviceTier: fast
-  retirementDate: 2027-09-18
+  retirementDate: 2027-01-15
   pricing:
     input_tokens:
       per_mill_tokens: '8'
