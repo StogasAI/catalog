@@ -1,9 +1,10 @@
 /**
  * A catalog is a root and the parts that it names by SHA-256 and size; the gateway, the website and
- * every other reader read the same files. The root summarizes every record of every kind, current
- * or retired: what readers need to list, link, search and resolve selectors. Authors, groups and
- * providers are few and small, so their summaries are their whole records; a model, route or
- * deployment summary names the part that holds its record, with the record's scheduled versions.
+ * every other reader read the same files. The root holds the locations, the places that data
+ * handling names, and summarizes every record of every kind, current or retired: what readers need
+ * to list, link, search and resolve selectors. Authors, groups and providers are few and small, so
+ * their summaries are their whole records; a model, route or deployment summary names the part that
+ * holds its record, with the record's scheduled versions.
  *
  * Each summary also gives the record's retirement date. The provider can name one for a
  * deployment, a route or itself; a provider's date ends each of its routes, and a deployment also
@@ -14,7 +15,7 @@
  * root gives each part the latest date in it. A reader skips each part whose records have all
  * retired, so a record leaves what readers load as it retires, without a release.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v9';
+export const CATALOG_SCHEMA = 'stogas.catalog.v10';
 export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v9';
 
 export const CATALOG_KINDS = Object.freeze([
@@ -80,7 +81,12 @@ function wholeRecord(summary) {
  * it. Throws when one fails.
  */
 export function checkedCatalogFiles(root, rootSize) {
-	if (root?.schema !== CATALOG_SCHEMA || !Array.isArray(root.parts) || !isObject(root.summaries))
+	if (
+		root?.schema !== CATALOG_SCHEMA ||
+		!Array.isArray(root.parts) ||
+		!isObject(root.locations) ||
+		!isObject(root.summaries)
+	)
 		throw new Error('The catalog root is invalid.');
 	if (!(Number.isSafeInteger(rootSize) && rootSize > 0 && rootSize <= CATALOG_ROOT_LIMIT))
 		throw new Error(`The catalog root is ${rootSize} bytes; the limit is ${CATALOG_ROOT_LIMIT}.`);
@@ -126,16 +132,18 @@ export function partsOfRecords(root, records) {
 
 /**
  * The catalog from a root and the parts that a reader read: `parts` has one entry for each part
- * that the root names, null for one not read. The graph holds every whole record and each record
- * of the parts read, in the root's order, and each schedule entry keeps the root's summaries that
- * differ then, with every such record that differs from the base graph. `summaries` is the root's,
- * so a reader also knows the records that it did not read, and `read` lists the parts read. Work
- * grows with the parts read, not the root. Throws when a part does not match the root.
+ * that the root names, null for one not read. It keeps the root's locations. The graph holds every
+ * whole record and each record of the parts read, in the root's order, and each schedule entry
+ * keeps the root's summaries that differ then, with every such record that differs from the base
+ * graph. `summaries` is the root's, so a reader also knows the records that it did not read, and
+ * `read` lists the parts read. Work grows with the parts read, not the root. Throws when a part
+ * does not match the root.
  */
 export function assembleCatalog(root, parts) {
 	if (
 		root?.schema !== CATALOG_SCHEMA ||
 		!Array.isArray(root.parts) ||
+		!isObject(root.locations) ||
 		!isObject(root.summaries) ||
 		!Array.isArray(root.schedule)
 	)
@@ -218,6 +226,7 @@ export function assembleCatalog(root, parts) {
 			: inOrder(kind, records(0, kind));
 	return {
 		schema: root.schema,
+		locations: root.locations,
 		parts: root.parts,
 		read,
 		periods: root.periods,

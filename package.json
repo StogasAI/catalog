@@ -5,6 +5,7 @@
 	"type": "module",
 	"exports": {
 		"./groups": "./source/scripts/model-groups.mjs",
+		"./locations": "./source/scripts/locations.mjs",
 		"./schedule": "./source/scripts/schedule.mjs",
 		"./viewer": "./editor/src/catalog.ts",
 		"./viewer/types": "./editor/src/types.ts",

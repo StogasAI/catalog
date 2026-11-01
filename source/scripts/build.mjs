@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
 import { earliest, partitionCatalog } from './catalog-parts.mjs';
 import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
+import { isLocation, placeIndex } from './locations.mjs';
 import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
@@ -458,7 +459,13 @@ function validateCanonicalList(values, ranks, owner) {
 	}
 }
 
-function validateDataHandling(owner, value) {
+function validateDataHandling(owner, value, places) {
+	if (
+		!isLocation(places, value.processingLocation) ||
+		(value.storageLocation !== 'none' && !isLocation(places, value.storageLocation))
+	) {
+		throw new Error(`${owner}: dataHandling names a place that locations does not list`);
+	}
 	if (value.teeVerified && !value.tee) {
 		throw new Error(`${owner}: verified TEE handling requires TEE processing`);
 	}
@@ -583,7 +590,15 @@ function servedFacts(graph, model, deployment) {
 }
 
 // Overrides may only narrow what the model and routes offer.
-function validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire) {
+function validateServedFacts(
+	graph,
+	deploymentId,
+	model,
+	deployment,
+	served,
+	anthropicWire,
+	places
+) {
 	const overrides = deployment.overrides ?? {};
 	if (served.contextWindowTokens > model.contextWindowTokens) {
 		throw new Error(`${deploymentId}: context limit may only narrow the model limit`);
@@ -639,7 +654,7 @@ function validateServedFacts(graph, deploymentId, model, deployment, served, ant
 		throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
 	}
 	for (const [routeId, route] of Object.entries(served.routes)) {
-		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling);
+		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling, places);
 		for (const meter of Object.keys(deployment.pricing)) {
 			if (graph.routes[routeId].pricing[meter]) {
 				throw new Error(`${deploymentId}.pricing.${meter} repeats a price of route ${routeId}`);
@@ -703,19 +718,48 @@ function validateDocumentFormats(value, owner) {
 }
 
 /**
- * The catalog: the base graph, a schedule entry for each instant at which a period starts or
- * ends, and the period index.
+ * The catalog: the locations, the base graph, a schedule entry for each instant at which a period
+ * starts or ends, and the period index.
  */
 export function buildCatalog(source) {
 	for (const [kind, nodes] of Object.entries(source.graph)) {
 		for (const id of Object.keys(nodes)) validateNodeId(id, kind);
 	}
+	const locations = compileLocations(source.locations);
+	const places = placeIndex(locations);
 	const { base, states, periods } = periodStates(source.graph);
-	const graph = compileGraph(base);
+	const graph = compileGraph(base, places);
 	const schedule = [];
 	for (const state of states)
-		addScheduleEntry(schedule, state.start, graph, compileGraph(state.graph));
-	return { graph, schedule, periods };
+		addScheduleEntry(schedule, state.start, graph, compileGraph(state.graph, places));
+	return { locations, graph, schedule, periods };
+}
+
+/**
+ * The locations with their parents in order. Each parent is the smallest place that contains the
+ * location there, so none contains another, and a subdivision lies in its country.
+ */
+function compileLocations(source) {
+	const locations = Object.fromEntries(
+		Object.entries(source ?? {})
+			.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+			.map(([id, location]) => [
+				id,
+				{ ...location, parentIds: [...(location.parentIds ?? [])].sort() }
+			])
+	);
+	const places = placeIndex(locations);
+	for (const [id, { parentIds }] of Object.entries(locations)) {
+		for (const parentId of parentIds)
+			if (
+				parentIds.some((other) => other !== parentId && places.within.get(other).includes(parentId))
+			)
+				throw new Error(`Location ${id}: parent ${parentId} contains another of its parents`);
+		const country = /^([A-Z]{2})-/.exec(id)?.[1];
+		if (country && !places.within.get(id).includes(country))
+			throw new Error(`Location ${id} must lie in its country ${country}`);
+	}
+	return locations;
 }
 
 /** The files that a build writes: the root, and each part that it names by its SHA-256. */
@@ -742,7 +786,7 @@ function addScheduleEntry(schedule, start, base, state) {
 	if (!same(graph, schedule.at(-1)?.graph ?? {})) schedule.push({ start, graph });
 }
 
-function compileGraph(source) {
+function compileGraph(source, places) {
 	const sourceGraph = normalizeSourceGraph(source);
 	orderModelGroups(sourceGraph.groups);
 	for (const [id, group] of Object.entries(sourceGraph.groups)) {
@@ -795,7 +839,7 @@ function compileGraph(source) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
 				}
-				validateDataHandling(routeId, dataHandling);
+				validateDataHandling(routeId, dataHandling, places);
 				return [
 					routeId,
 					{
@@ -879,13 +923,22 @@ function compileGraph(source) {
 
 	validateQualifierAliases(graph.authors, 'author');
 	validateQualifierAliases(graph.providers, 'provider');
+	for (const [kind, nodes] of [
+		['author', graph.authors],
+		['provider', graph.providers]
+	])
+		for (const [id, { headquarteredCountry: country }] of Object.entries(nodes))
+			if (country !== undefined && !(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
+				throw new Error(
+					`${kind} ${id}: headquarteredCountry names a country that locations does not list`
+				);
 	for (const [providerId, provider] of Object.entries(graph.providers)) {
 		validateCanonicalList(
 			provider.credentialModes,
 			canonicalCredentialModeRanks,
 			`${providerId}: credentialModes`
 		);
-		validateDataHandling(providerId, provider.dataHandling);
+		validateDataHandling(providerId, provider.dataHandling, places);
 		validateRetirementDate(providerId, provider.retirementDate);
 	}
 
@@ -1072,7 +1125,7 @@ function compileGraph(source) {
 			throw new Error(`${deploymentId}: fixed reasoning mode requires Responses-only routes`);
 		}
 		const served = servedFacts(graph, model, deployment);
-		validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire);
+		validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire, places);
 		rejectMaskedOverrides(graph, deploymentId, model, deployment, served);
 		const dataHandlingValues = Object.values(served.routes).map((route) => route.dataHandling);
 		if (

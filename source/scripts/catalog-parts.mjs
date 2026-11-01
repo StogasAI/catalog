@@ -106,6 +106,7 @@ export function partitionCatalog(catalog) {
 	);
 	const root = {
 		schema: CATALOG_SCHEMA,
+		locations: catalog.locations,
 		summaries,
 		parts: parts.map(({ sha256, size }, index) => ({
 			sha256,

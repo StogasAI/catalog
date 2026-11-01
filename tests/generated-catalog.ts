@@ -5,6 +5,7 @@ import { readGeneratedCatalog } from '../source/scripts/generated-catalog.mjs';
 type Nodes = Record<string, Record<string, any>>;
 type Catalog = {
 	schema: string;
+	locations: Record<string, { name: string; parentIds: string[] }>;
 	parts: CatalogPartFile[];
 	summaries: Record<string, Nodes>;
 	graph: Record<string, Nodes>;

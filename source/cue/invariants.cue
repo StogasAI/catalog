@@ -2,6 +2,7 @@ package catalog
 
 authors: close({[#Id]: #Author})
 groups: close({[#Id]: #Group})
+locations: close({[#LocationId]: #Location})
 models: close({[#Id]: #Model})
 providers: close({[#Id]: #Provider})
 routes: close({[#Id]: #Route})

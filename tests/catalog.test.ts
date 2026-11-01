@@ -839,7 +839,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v9');
+		expect(catalog.schema).toBe('stogas.catalog.v10');
 		expect(catalog.schedule).toEqual([]);
 	});
 

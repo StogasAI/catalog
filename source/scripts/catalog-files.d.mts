@@ -1,4 +1,6 @@
-export const CATALOG_SCHEMA: 'stogas.catalog.v9';
+import type { Locations } from './locations.mjs';
+
+export const CATALOG_SCHEMA: 'stogas.catalog.v10';
 export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v9';
 export const CATALOG_KINDS: readonly [
 	'authors',
@@ -60,11 +62,13 @@ export type CatalogSummaries = {
 };
 
 /**
- * The root: a summary of every record, the parts that hold the records of models, routes and
- * deployments, the dated periods, and for each scheduled state the summaries that differ.
+ * The root: the locations, a summary of every record, the parts that hold the records of models,
+ * routes and deployments, the dated periods, and for each scheduled state the summaries that
+ * differ.
  */
 export type CatalogRoot = {
 	schema: typeof CATALOG_SCHEMA;
+	locations: Locations;
 	summaries: CatalogSummaries;
 	parts: CatalogPartFile[];
 	periods: object[];
@@ -84,6 +88,7 @@ export type CatalogPart = {
  */
 export type Catalog = {
 	schema: typeof CATALOG_SCHEMA;
+	locations: Locations;
 	parts: CatalogPartFile[];
 	read: number[];
 	periods: object[];

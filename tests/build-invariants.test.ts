@@ -22,6 +22,14 @@ const capabilities = {
 
 function sourceFixture() {
 	return {
+		locations: {
+			world: { name: 'World' },
+			europe: { name: 'Europe', parentIds: ['world'] },
+			eu: { name: 'European Union', parentIds: ['europe'] },
+			DE: { name: 'Germany', parentIds: ['eu'] },
+			'north-america': { name: 'North America', parentIds: ['world'] },
+			US: { name: 'United States', parentIds: ['north-america'] }
+		} as Record<string, { name: string; parentIds?: string[] }>,
 		graph: {
 			authors: {
 				openai: { name: 'OpenAI' }
@@ -274,6 +282,108 @@ describe('catalog source compiler invariants', () => {
 			) as never;
 		}
 		expect(canonicalJson(buildCatalog(reversed))).toBe(canonicalJson(buildCatalog(source)));
+	});
+
+	test('lists each place with the places that directly contain it, in order', () => {
+		const source = sourceFixture();
+		source.locations['US-CA'] = { name: 'California', parentIds: ['US'] };
+		source.locations.CY = { name: 'Cyprus', parentIds: ['eu', 'asia'] };
+		source.locations.asia = { name: 'Asia', parentIds: ['world'] };
+		Object.assign(source.graph.providers.openai.dataHandling, {
+			processingLocation: 'eu',
+			storageLocation: 'US-CA'
+		});
+		Object.assign(source.graph.authors.openai, { headquarteredCountry: 'US' });
+		const { locations } = buildCatalog(source);
+		expect(Object.keys(locations)).toEqual(Object.keys(locations).sort());
+		expect(locations.world).toEqual({ name: 'World', parentIds: [] });
+		expect(locations.CY).toEqual({ name: 'Cyprus', parentIds: ['asia', 'eu'] });
+		expect(locations['US-CA']).toEqual({ name: 'California', parentIds: ['US'] });
+	});
+
+	describe('rejects invalid locations and places that they do not list', () => {
+		testRejections([
+			[
+				'no world',
+				(source: Source) => {
+					delete source.locations.world;
+					source.locations.europe.parentIds = [];
+				},
+				'Locations must have world'
+			],
+			[
+				'world inside a place',
+				(source: Source) => (source.locations.world.parentIds = ['europe']),
+				'Locations must have world'
+			],
+			[
+				'place in no place',
+				(source: Source) => (source.locations.DE.parentIds = []),
+				'Location DE lies in no place'
+			],
+			[
+				'unknown parent',
+				(source: Source) => (source.locations.DE.parentIds = ['emea']),
+				'Location DE lies in unknown place emea'
+			],
+			['cycle', (source: Source) => (source.locations.europe.parentIds = ['eu']), 'lies in itself'],
+			[
+				'repeated parent',
+				(source: Source) => (source.locations.DE.parentIds = ['eu', 'eu']),
+				'Location DE repeats a parent'
+			],
+			[
+				'parent that another parent contains',
+				(source: Source) => (source.locations.DE.parentIds = ['eu', 'europe']),
+				'Location DE: parent europe contains another of its parents'
+			],
+			[
+				'IDs that differ only in case',
+				(source: Source) => (source.locations.EU = { name: 'EU', parentIds: ['europe'] }),
+				'Locations EU and eu differ only in case'
+			],
+			[
+				'subdivision outside its country',
+				(source: Source) => (source.locations['DE-BE'] = { name: 'Berlin', parentIds: ['eu'] }),
+				'Location DE-BE must lie in its country DE'
+			],
+			...['unknown', 'none', 'Europe', 'e_u', 'DEU'].map(
+				(id) =>
+					[
+						`invalid ID ${id}`,
+						(source: Source) => (source.locations[id] = { name: id, parentIds: ['world'] }),
+						`Location ${JSON.stringify(id)} has an invalid ID`
+					] as const
+			),
+			[
+				'unlisted processing location',
+				(source: Source) => (source.graph.providers.openai.dataHandling.processingLocation = 'FR'),
+				'dataHandling names a place that locations does not list'
+			],
+			[
+				'none as a processing location',
+				(source: Source) =>
+					(source.graph.providers.openai.dataHandling.processingLocation = 'none'),
+				'dataHandling names a place that locations does not list'
+			],
+			[
+				'unlisted storage location',
+				(source: Source) => (source.graph.providers.openai.dataHandling.storageLocation = 'FR'),
+				'dataHandling names a place that locations does not list'
+			],
+			[
+				'unlisted headquarters',
+				(source: Source) =>
+					Object.assign(source.graph.authors.openai, { headquarteredCountry: 'FR' }),
+				'headquarteredCountry names a country that locations does not list'
+			],
+			[
+				'region as headquarters',
+				(source: Source) =>
+					Object.assign(source.graph.authors.openai, { headquarteredCountry: 'eu' }),
+				'headquarteredCountry names a country that locations does not list'
+			]
+		]);
 	});
 
 	describe('rejects invalid references and derivation graphs', () => {

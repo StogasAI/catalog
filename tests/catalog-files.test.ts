@@ -19,6 +19,7 @@ import { catalog as built } from './generated-catalog';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Catalog JSON of any shape, which these tests read and change in place.
 type Nodes = Record<string, Record<string, any>>;
 type Source = {
+	locations: Record<string, { name: string; parentIds: string[] }>;
 	graph: Record<string, Nodes>;
 	schedule: { start: string; graph: Record<string, Nodes> }[];
 	periods: object[];
@@ -28,7 +29,12 @@ const day = (index: number) => new Date(Date.UTC(2027, 0, 1 + index)).toISOStrin
 
 /** The checkout's catalog, as the build partitions it. */
 function source(): Source {
-	return structuredClone({ graph: built.graph, schedule: built.schedule, periods: built.periods });
+	return structuredClone({
+		locations: built.locations,
+		graph: built.graph,
+		schedule: built.schedule,
+		periods: built.periods
+	});
 }
 
 /** The checkout's catalog with `copies` providers in place of each of its own. */
@@ -68,6 +74,7 @@ function synthetic(
 ): Source {
 	const providers = Array.from({ length: 40 }, (_, index) => index);
 	return {
+		locations: { world: { name: 'World', parentIds: [] } },
 		graph: {
 			authors: { author: { aliases: [], name: 'Author' } },
 			groups: {},
@@ -113,9 +120,13 @@ function files({ root, parts }: { root: object; parts: { json: string }[] }) {
 	};
 }
 
-/** The graph, schedule and periods of a catalog, as canonical JSON, without the root's summaries. */
-function whole({ graph, schedule, periods }: Source) {
+/**
+ * The locations, graph, schedule and periods of a catalog, as canonical JSON, without the root's
+ * summaries.
+ */
+function whole({ locations, graph, schedule, periods }: Source) {
 	return canonicalJson({
+		locations,
 		graph,
 		schedule: schedule.map(({ start, graph: changed }) => ({ start, graph: changed })),
 		periods
@@ -539,7 +550,15 @@ describe('catalog limits', () => {
 		through
 	});
 	const root = (parts: unknown, fields: object = {}) =>
-		Buffer.from(JSON.stringify({ schema: 'stogas.catalog.v9', summaries: {}, parts, ...fields }));
+		Buffer.from(
+			JSON.stringify({
+				schema: 'stogas.catalog.v10',
+				locations: {},
+				summaries: {},
+				parts,
+				...fields
+			})
+		);
 
 	test('list every part that a root names, and refuse an invalid one', () => {
 		const parts = [file(), file('b'.repeat(64), mib / 2, '2027-01-01')];
@@ -548,7 +567,8 @@ describe('catalog limits', () => {
 		for (const invalid of [
 			root(undefined),
 			root({}),
-			root([], { schema: 'stogas.catalog.v8' }),
+			root([], { schema: 'stogas.catalog.v9' }),
+			root([], { locations: undefined }),
 			root([], { summaries: [] })
 		])
 			expect(() => catalogFileList(invalid)).toThrow('root is invalid');
