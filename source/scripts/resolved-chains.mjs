@@ -1,24 +1,13 @@
 import { createHash } from 'node:crypto';
+import { catalogChain } from './chain.mjs';
 import { canonicalJsonValue } from './canonical-json.mjs';
 import { catalogAt } from './schedule.mjs';
 
-// A chain is one executable path from author to provider, with the facts that the deployment
-// serves on its route. No release number enters the hash: unchanged paths keep their identity.
+// No release number enters the hash: unchanged paths keep their identity.
 export function* resolvedCatalogChains(graph) {
 	for (const deploymentId of Object.keys(graph.deployments).sort()) {
-		const { routes, ...deployment } = requireNode(graph.deployments, deploymentId);
-		const { groupIds: _navigationGroups, ...model } = requireNode(graph.models, deployment.modelId);
-		for (const routeId of Object.keys(routes).sort()) {
-			const { chainHash: _chainHash, ...routeFacts } = routes[routeId];
-			const route = requireNode(graph.routes, routeId);
-			const chain = {
-				author: { id: model.authorId, data: requireNode(graph.authors, model.authorId) },
-				model: { id: deployment.modelId, data: model },
-				deployment: { id: deploymentId, data: { ...deployment, ...routeFacts } },
-				route: { id: routeId, data: route },
-				provider: { id: route.providerId, data: requireNode(graph.providers, route.providerId) }
-			};
-			const json = canonicalJsonValue(chain);
+		for (const routeId of Object.keys(graph.deployments[deploymentId].routes).sort()) {
+			const json = canonicalJsonValue(catalogChain(graph, deploymentId, routeId));
 			yield {
 				deploymentId,
 				routeId,
@@ -44,12 +33,4 @@ export function* everyStateCatalogChains(catalog) {
 			yield entry;
 		}
 	}
-}
-
-function requireNode(nodes, id) {
-	const value = nodes && Object.hasOwn(nodes, id) ? nodes[id] : undefined;
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error(`Resolved catalog chain references missing node ${id}`);
-	}
-	return value;
 }

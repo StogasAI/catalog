@@ -4,6 +4,7 @@
 	"private": true,
 	"type": "module",
 	"exports": {
+		"./chains": "./source/scripts/chain.mjs",
 		"./groups": "./source/scripts/model-groups.mjs",
 		"./locations": "./source/scripts/locations.mjs",
 		"./schedule": "./source/scripts/schedule.mjs",

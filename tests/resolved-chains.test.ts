@@ -25,7 +25,44 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.deployment.data.routes).toBeUndefined();
 		expect(chain.route.id).toBe(entry.routeId);
 		expect(chain.model.data.groupIds).toBeUndefined();
+		expect(chain.model.data.reasoningEffortsByInterface).toBeUndefined();
+		// Each fact appears once: what the deployment states, the model and the route leave out.
+		for (const node of [chain.model, chain.route])
+			for (const key of Object.keys(node.data))
+				expect(Object.hasOwn(chain.deployment.data, key)).toBe(false);
+		// What the deployment doesn't state, the model and the route keep.
+		const {
+			groupIds: _groups,
+			reasoningEffortsByInterface: _efforts,
+			...model
+		} = catalog.graph.models[chain.model.id];
+		for (const [key, value] of Object.entries(model))
+			if (!Object.hasOwn(chain.deployment.data, key)) expect(chain.model.data[key]).toEqual(value);
+		for (const [key, value] of Object.entries(catalog.graph.routes[entry.routeId]))
+			if (!Object.hasOwn(chain.deployment.data, key)) expect(chain.route.data[key]).toEqual(value);
 	}
+});
+
+test('a chain shows each fact once, as the path runs it', () => {
+	const chain = JSON.parse(
+		chains().find(
+			(entry) =>
+				entry.deploymentId === 'anthropic-claude-fable-5' && entry.routeId === 'anthropic-messages'
+		)!.json
+	);
+	expect(Object.keys(chain.route.data).sort()).toEqual([
+		'documentFormats',
+		'endpoint',
+		'interfaces',
+		'providerId'
+	]);
+	expect(chain.model.data).not.toHaveProperty('maxOutputTokens');
+	expect(chain.model.data).toMatchObject({ authorId: 'anthropic', name: 'Claude Fable 5' });
+	// The route's prices and the deployment's merge into one block.
+	expect(chain.deployment.data.pricing).toMatchObject({
+		anthropic_web_search_calls: { per_1k_calls: '10' },
+		input_tokens: { per_mill_tokens: '10' }
+	});
 });
 
 test('node order does not change chain identities', () => {
