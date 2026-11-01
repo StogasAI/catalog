@@ -7,6 +7,7 @@ import {
 	CATALOG_ROOT_LIMIT
 } from '../source/scripts/catalog-files.mjs';
 import { ancestorGroupIds } from '../source/scripts/model-groups.mjs';
+import { placeIndex } from '../source/scripts/locations.mjs';
 import { catalog, catalogRoot } from './generated-catalog';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
@@ -836,6 +837,27 @@ describe('compiled catalog', () => {
 			checked.push(deploymentId);
 		}
 		expect(checked).toHaveLength(26);
+	});
+
+	test('puts each place in every place that holds all the places directly inside it', () => {
+		const { locations } = catalog;
+		const { within, inside } = placeIndex(locations);
+		for (const id of Object.keys(locations)) {
+			const members = Object.keys(locations).filter((place) =>
+				locations[place]!.parentIds.includes(id)
+			);
+			if (!members.length) continue;
+			// A policy that names a place admits a deployment in a place that it holds.
+			const holders = within
+				.get(members[0]!)!
+				.filter(
+					(place) =>
+						!within.get(id)!.includes(place) &&
+						!inside.get(id)!.includes(place) &&
+						members.every((member) => within.get(member)!.includes(place))
+				);
+			expect(holders, id).toEqual([]);
+		}
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {

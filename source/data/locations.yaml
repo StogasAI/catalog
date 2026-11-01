@@ -1,6 +1,13 @@
 # The places that data handling names. Each place but world lists the places that directly
 # contain it, and lies in every place that contains those. A country lists its smallest
-# regions; a subdivision such as US-CA lists its country.
+# regions; a subdivision such as US-CA lists its country. A place lies in every place that holds
+# all the places directly inside it, as southeast-asia lies in apac.
+#
+# The continents and the regions within them follow the territory containment of Unicode CLDR 48,
+# from UN M.49, except that europe holds every eu member, Cyprus included. No standard defines
+# apac: it is CLDR Asia and Oceania without the Arab states, Israel, Iran, Cyprus and HM, plus IO.
+# CLDR data is under the Unicode License v3 (https://www.unicode.org/license.txt):
+# https://github.com/unicode-org/cldr-json/blob/48.0.0/cldr-json/cldr-core/supplemental/territoryContainment.json
 locations:
   world:
     name: World
@@ -36,7 +43,7 @@ locations:
     parentIds: [europe]
   southeast-asia:
     name: Southeast Asia
-    parentIds: [asia]
+    parentIds: [apac, asia]
   AD:
     name: Andorra
     parentIds: [europe]
@@ -120,7 +127,7 @@ locations:
     parentIds: [north-america]
   BN:
     name: Brunei
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   BO:
     name: Bolivia
     parentIds: [south-america]
@@ -339,7 +346,7 @@ locations:
     parentIds: [eu]
   ID:
     name: Indonesia
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   IE:
     name: Ireland
     parentIds: [eu]
@@ -387,7 +394,7 @@ locations:
     parentIds: [apac, asia]
   KH:
     name: Cambodia
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   KI:
     name: Kiribati
     parentIds: [apac, oceania]
@@ -414,7 +421,7 @@ locations:
     parentIds: [apac, asia]
   LA:
     name: Laos
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   LB:
     name: Lebanon
     parentIds: [asia]
@@ -474,7 +481,7 @@ locations:
     parentIds: [africa]
   MM:
     name: Myanmar (Burma)
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   MN:
     name: Mongolia
     parentIds: [apac, asia]
@@ -510,7 +517,7 @@ locations:
     parentIds: [central-america]
   MY:
     name: Malaysia
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   MZ:
     name: Mozambique
     parentIds: [africa]
@@ -567,7 +574,7 @@ locations:
     parentIds: [apac, oceania]
   PH:
     name: Philippines
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   PK:
     name: Pakistan
     parentIds: [apac, asia]
@@ -630,7 +637,7 @@ locations:
     parentIds: [eu]
   SG:
     name: Singapore
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   SH:
     name: St. Helena
     parentIds: [africa]
@@ -690,7 +697,7 @@ locations:
     parentIds: [africa]
   TH:
     name: Thailand
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   TJ:
     name: Tajikistan
     parentIds: [apac, asia]
@@ -699,7 +706,7 @@ locations:
     parentIds: [apac, oceania]
   TL:
     name: Timor-Leste
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   TM:
     name: Turkmenistan
     parentIds: [apac, asia]
@@ -759,7 +766,7 @@ locations:
     parentIds: [caribbean]
   VN:
     name: Vietnam
-    parentIds: [apac, southeast-asia]
+    parentIds: [southeast-asia]
   VU:
     name: Vanuatu
     parentIds: [apac, oceania]
