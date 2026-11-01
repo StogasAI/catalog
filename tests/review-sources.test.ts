@@ -7,12 +7,15 @@ const allowedDomains = new Set([
 	'api.chutes.ai',
 	'azure.microsoft.com',
 	'chutes.ai',
+	'cloud.google.com',
 	'developers.openai.com',
+	'docs.aws.amazon.com',
 	'docs.mistral.ai',
 	'huggingface.co',
 	'learn.microsoft.com',
 	'llm.chutes.ai',
 	'prices.azure.com',
+	'pricing.us-east-1.amazonaws.com',
 	'platform.claude.com'
 ]);
 

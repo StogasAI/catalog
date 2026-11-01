@@ -66,6 +66,11 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
+// Who runs Claude on each cloud. Both hostings share the provider's Messages route.
+const cloudClaudeHostings = {
+	aws: ['anthropic', 'aws'],
+	'google-cloud': ['anthropic', 'google']
+};
 const nodeIdPattern = /^[a-z0-9][a-z0-9._:-]*$/;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
@@ -1079,7 +1084,9 @@ function compileGraph(source, places) {
 						'reasoningMode',
 						'serviceTier'
 					].includes(key)
-				));
+				)) ||
+			((providerId === 'aws' || providerId === 'google-cloud') &&
+				JSON.stringify(selectorKeys) === JSON.stringify(['hosting', 'inferenceGeo', 'model']));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
@@ -1104,7 +1111,31 @@ function compileGraph(source, places) {
 		};
 		const anthropicWire =
 			providerId === 'anthropic' ||
+			providerId === 'aws' ||
+			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
+		// AWS and Google Cloud serve only Claude, on the provider's one Messages route.
+		const cloudClaudeRoute = `${providerId}-messages`;
+		if (
+			cloudClaudeHostings[providerId] &&
+			(model.authorId !== 'anthropic' ||
+				!cloudClaudeHostings[providerId].includes(deployment.upstream.hosting) ||
+				deployment.routeIds.some((routeId) => routeId !== cloudClaudeRoute))
+		) {
+			throw new Error(
+				`${deploymentId}: Claude on ${providerId} runs on route ${cloudClaudeRoute}, hosted by ${cloudClaudeHostings[providerId].join(' or ')}`
+			);
+		}
+		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
+		if (
+			providerId === 'aws' &&
+			deployment.upstream.hosting === 'aws' &&
+			!deployment.upstream.model.startsWith(`${deployment.upstream.inferenceGeo}.anthropic.`)
+		) {
+			throw new Error(
+				`${deploymentId}: name the ${deployment.upstream.inferenceGeo} inference profile of the model`
+			);
+		}
 		if (
 			providerId === 'azure' &&
 			deployment.routeIds.some(

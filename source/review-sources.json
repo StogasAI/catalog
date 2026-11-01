@@ -27,6 +27,13 @@
 			"https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
 			"https://platform.claude.com/docs/en/manage-claude/data-residency"
 		],
+		"aws": [
+			"https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock",
+			"https://platform.claude.com/docs/en/build-with-claude/claude-platform-on-aws",
+			"https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json",
+			"https://platform.claude.com/docs/en/about-claude/pricing",
+			"https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html"
+		],
 		"azure": [
 			"https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule",
 			"https://azure.microsoft.com/en-us/pricing/details/azure-openai/",
@@ -44,6 +51,13 @@
 			"https://chutes.ai/docs/guides/starter-guide",
 			"https://chutes.ai/pricing",
 			"https://chutes.ai/privacy"
+		],
+		"google-cloud": [
+			"https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed",
+			"https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/anthropic-managed",
+			"https://cloud.google.com/vertex-ai/generative-ai/pricing",
+			"https://platform.claude.com/docs/en/about-claude/pricing",
+			"https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention"
 		],
 		"openai": [
 			"https://developers.openai.com/api/docs/guides/your-data",

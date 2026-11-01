@@ -16,3 +16,5 @@ deploymentsByProvider: openai?: [#Id]: upstream:    #OpenAIUpstream
 deploymentsByProvider: anthropic?: [#Id]: upstream: #AnthropicUpstream
 deploymentsByProvider: chutes?: [#Id]: upstream:    #ChutesUpstream
 deploymentsByProvider: azure?: [#Id]: upstream:     #AzureUpstream
+deploymentsByProvider: aws?: [#Id]: upstream:       #AWSUpstream
+deploymentsByProvider: "google-cloud"?: [#Id]: upstream: #GoogleCloudUpstream

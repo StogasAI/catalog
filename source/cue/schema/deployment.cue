@@ -31,14 +31,38 @@ package catalog
 	serviceTier?:   "flex" | "fast"
 })
 
+// AWS serves Claude two ways: Amazon Bedrock runs it on AWS (hosting aws),
+// and Claude Platform on AWS is Anthropic's own service billed through AWS
+// (hosting anthropic). inferenceGeo is Bedrock's endpoint type or
+// Anthropic's inference geography.
+#AWSUpstream: close({
+	model:        #UpstreamId
+	hosting:      "aws" | "anthropic"
+	inferenceGeo: "global" | "us"
+})
+
+// Google Cloud serves Claude two ways: Google runs it on Agent Platform,
+// formerly Vertex AI (hosting google), and Anthropic runs it itself, billed
+// through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
+// location, global or the us or eu multi-region, or Anthropic's inference
+// geography, which has no eu.
+#GoogleCloudUpstream: close({
+	model:   #UpstreamId
+	hosting: "google" | "anthropic"
+	inferenceGeo: "global" | "us" | "eu"
+	if hosting == "anthropic" {
+		inferenceGeo: "global" | "us"
+	}
+})
+
 #Upstream: close({
 	model:           #UpstreamId
 	chuteId?:        #Uuid
 	gpuCount?:       int & >=1 & <=8
 	serviceTier?:    "flex" | "fast" | "ultrafast"
-	inferenceGeo?:   "global" | "us"
+	inferenceGeo?:   "global" | "us" | "eu"
 	reasoningMode?:  "pro"
-	hosting?:        "azure" | "anthropic" | "fireworks"
+	hosting?:        "azure" | "anthropic" | "fireworks" | "aws" | "google"
 	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
 	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"

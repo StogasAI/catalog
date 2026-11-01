@@ -36,8 +36,11 @@ package catalog
 	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
 })
 
+// A deployment prices web search itself when its route serves hostings that
+// differ, as Claude on AWS and Google Cloud does: only Anthropic's hosting runs it.
 #DeploymentPricing: close({
 	#TokenPricing
+	anthropic_web_search_calls?:                        #CallRate
 	openai_chat_completion_search_model_calls?:         #CallRate
 	openai_chat_completion_search_preview_model_calls?: #SearchContextCallRate
 })
