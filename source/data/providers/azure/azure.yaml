@@ -1,6 +1,5 @@
 providers:
   name: Azure
-  aliases: [azure-ai-foundry, azure-openai]
   credentialModes: [byok]
   headquarteredCountry: US
   capabilities:

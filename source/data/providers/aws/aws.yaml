@@ -1,6 +1,5 @@
 providers:
   name: AWS
-  aliases: [amazon-bedrock, bedrock, claude-platform-on-aws]
   credentialModes: [byok]
   headquarteredCountry: US
   capabilities:

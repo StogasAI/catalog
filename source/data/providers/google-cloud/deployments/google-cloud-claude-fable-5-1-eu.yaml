@@ -1,8 +1,11 @@
 # Agent Platform's eu multi-region endpoint, at Google's 10 percent premium over the global endpoint.
 # Google keeps prompts and responses for up to 30 days to monitor abuse, under its Advanced AI Safety
-# Addendum, which each project accepts once in Model Garden.
-# Unverified: Google's price list needs an API key. The global prices assume Google matches Anthropic's list
-# prices, as Bedrock does; check them before release.
+# Addendum, which each project accepts once in Model Garden. Under Section F of Anthropic's service
+# specific terms, the project must also share prompts and responses with Anthropic for each model
+# location it enables; Bedrock shares nothing with Anthropic. Data handling has no field for this yet.
+# Unverified: Google's billing catalog (Vertex AI, service C7E2-9256-1C43) listed no Fable prices on
+# 2026-11-01. It lists Opus 5.5 at exactly Anthropic's prices, and 10 percent more in us and eu, so the
+# global prices assume the same; check them before release.
 # Reviewed 2026-10-31: https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#global-multi-region-and-regional-endpoints
 # and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude/fable-5-1
 deployments:

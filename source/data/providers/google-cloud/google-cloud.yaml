@@ -1,6 +1,6 @@
 providers:
   name: Google Cloud
-  aliases: [vertex, vertex-ai, agent-platform, gcp]
+  aliases: [gcp]
   credentialModes: [byok]
   headquarteredCountry: US
   capabilities:

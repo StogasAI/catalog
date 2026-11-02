@@ -344,8 +344,9 @@ describe('Azure provider onboarding contract', () => {
 	});
 
 	test('keeps Azure BYOK-only and uses only the three verified wire routes', () => {
+		// Product names such as Azure OpenAI are not aliases; see the catalog alias rule.
 		expect(catalog.graph.providers.azure).toEqual({
-			aliases: ['azure-ai-foundry', 'azure-openai'],
+			aliases: [],
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
 			name: 'Azure'
