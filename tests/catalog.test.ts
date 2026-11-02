@@ -33,7 +33,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 45, providers: 6, routes: 9, deployments: 214 });
+		).toEqual({ authors: 10, models: 46, providers: 6, routes: 9, deployments: 230 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -80,7 +80,7 @@ describe('compiled catalog', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(116);
+		expect(Object.keys(selectors)).toHaveLength(126);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5-5': 'claude-opus-5-5',
 			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',
@@ -754,7 +754,8 @@ describe('compiled catalog', () => {
 			'gpt-6-astra',
 			'gpt-6-luna',
 			'gpt-6-sol',
-			'gpt-6.1-sol'
+			'gpt-6.1-sol',
+			'gpt-6.1-terra'
 		] as const) {
 			for (const [suffix, serviceTier] of [
 				['', 'standard'],
@@ -796,7 +797,8 @@ describe('compiled catalog', () => {
 			'gpt-6-astra': ['10', '1', '50'],
 			'gpt-6-luna': ['0.1', '0.01', '0.5'],
 			'gpt-6-sol': ['2', '0.2', '10'],
-			'gpt-6.1-sol': ['2', '0.1', '10']
+			'gpt-6.1-sol': ['2', '0.1', '10'],
+			'gpt-6.1-terra': ['1', '0.05', '5']
 		} as const;
 		const tierScale = {
 			standard: [1n, 1n],
@@ -836,7 +838,7 @@ describe('compiled catalog', () => {
 			if (chat) expect(chat.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh']);
 			checked.push(deploymentId);
 		}
-		expect(checked).toHaveLength(26);
+		expect(checked).toHaveLength(32);
 	});
 
 	test('puts each place in every place that holds all the places directly inside it', () => {

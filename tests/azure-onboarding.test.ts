@@ -327,6 +327,7 @@ describe('Azure provider onboarding contract', () => {
 				['standard', 'apac'],
 				['flex', 'global']
 			]),
+			...gptTargets('gpt-6.1-terra', '2026-10-26', [...standardNodes, ['standard', 'apac']]),
 			...otherTargets
 		]
 			.map((target) => ({ ...target, upstream: { serviceTier: 'standard', ...target.upstream } }))
@@ -370,7 +371,8 @@ describe('Azure provider onboarding contract', () => {
 			'gpt-6-astra': [['10', '1', '50'], 12n, '2028-01-11'],
 			'gpt-6-luna': [['0.1', '0.01', '0.5'], 12n, '2028-03-11'],
 			'gpt-6-sol': [['2', '0.2', '10'], 12n, '2028-03-11'],
-			'gpt-6.1-sol': [['2', '0.1', '10'], 12n, '2028-03-11']
+			'gpt-6.1-sol': [['2', '0.1', '10'], 12n, '2028-03-11'],
+			'gpt-6.1-terra': [['1', '0.05', '5'], 12n, '2027-10-26']
 		} as const;
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in models)) continue;
