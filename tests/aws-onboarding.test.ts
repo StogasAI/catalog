@@ -1,5 +1,6 @@
 import { describe, test } from 'bun:test';
 import { catalog } from './generated-catalog';
+import { claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
 import {
 	assertProviderOnboardingContract,
 	type DataHandlingContract,
@@ -27,40 +28,81 @@ const providerHandling: DataHandlingContract = {
 	trainingUse: false,
 	zeroDataRetention: false
 };
-const globalPrices = {
-	cache_write_1h_input_tokens: { per_mill_tokens: '20' },
-	cache_write_5m_input_tokens: { per_mill_tokens: '12.5' },
-	cached_input_tokens: { per_mill_tokens: '0.25' },
-	input_tokens: { per_mill_tokens: '10' },
-	output_tokens: { per_mill_tokens: '50' }
-};
-// The US inference profile costs 10 percent more than the global one.
-const usPrices = {
-	cache_write_1h_input_tokens: { per_mill_tokens: '22' },
-	cache_write_5m_input_tokens: { per_mill_tokens: '13.75' },
-	cached_input_tokens: { per_mill_tokens: '0.275' },
-	input_tokens: { per_mill_tokens: '11' },
-	output_tokens: { per_mill_tokens: '55' }
-};
 
-function fable(
+// Each model's Bedrock profile ID after its geography prefix, and its AWS prices: the global
+// profile's first, then the US profile's, which cost 10 percent more.
+const bedrock: Record<
+	string,
+	{ model: ClaudeModelId; profile: string; global: Prices; us: Prices }
+> = {};
+type Prices = Record<string, Record<string, string>>;
+function offer(model: ClaudeModelId, profile: string, global: Prices, us: Prices) {
+	bedrock[model] = { model, profile, global, us };
+}
+offer(
+	'claude-fable-5-1',
+	'anthropic.claude-fable-5-1',
+	tokenPrices('10', '0.25', '12.5', '20', '50'),
+	tokenPrices('11', '0.275', '13.75', '22', '55')
+);
+offer(
+	'claude-fable-5',
+	'anthropic.claude-fable-5',
+	tokenPrices('10', '1', '12.5', '20', '50'),
+	tokenPrices('11', '1.1', '13.75', '22', '55')
+);
+offer(
+	'claude-opus-5-5',
+	'anthropic.claude-opus-5-5',
+	tokenPrices('4', '0.2', '5', '8', '20'),
+	tokenPrices('4.4', '0.22', '5.5', '8.8', '22')
+);
+for (const model of ['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7'] as const)
+	offer(
+		model,
+		`anthropic.${model}`,
+		tokenPrices('5', '0.5', '6.25', '10', '25'),
+		tokenPrices('5.5', '0.55', '6.875', '11', '27.5')
+	);
+offer(
+	'claude-sonnet-5-5',
+	'anthropic.claude-sonnet-5-5',
+	tokenPrices('2', '0.1', '2.5', '4', '10'),
+	tokenPrices('2.2', '0.11', '2.75', '4.4', '11')
+);
+offer(
+	'claude-sonnet-5',
+	'anthropic.claude-sonnet-5',
+	tokenPrices('2', '0.2', '2.5', '4', '10'),
+	tokenPrices('2.2', '0.22', '2.75', '4.4', '11')
+);
+offer(
+	'claude-haiku-5-5',
+	'anthropic.claude-haiku-5-5',
+	tokenPrices('0.1', '0.01', '0.125', '0.2', '0.5', ['0.5', '0.05', '0.625', '1', '2.5']),
+	tokenPrices('0.11', '0.011', '0.1375', '0.22', '0.55', ['0.55', '0.055', '0.6875', '1.1', '2.75'])
+);
+// Haiku 4.5 keeps its dated, versioned ID on Bedrock.
+offer(
+	'claude-haiku-4-5',
+	'anthropic.claude-haiku-4-5-20251001-v1:0',
+	tokenPrices('1', '0.1', '1.25', '2', '5'),
+	tokenPrices('1.1', '0.11', '1.375', '2.2', '5.5')
+);
+
+function deployment(
 	id: string,
+	model: ClaudeModelId,
 	upstream: Record<string, string>,
 	dataHandling: Partial<DataHandlingContract>,
-	pricing: Record<string, Record<string, string>>
+	pricing: Prices
 ): ProviderDeploymentContract {
 	return {
-		authorId: 'anthropic',
+		...claudeModels[model],
 		capabilities,
-		contextWindowTokens: 1_000_000,
 		dataHandling: { ...providerHandling, ...dataHandling },
 		id,
-		inputModalities: ['text', 'image'],
-		maxOutputTokens: 128_000,
-		modelId: 'claude-fable-5-1',
-		modelReasoning: 'required',
-		modelReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-		outputModalities: ['text'],
+		modelId: model,
 		pricing,
 		retirementDate: null,
 		routeIds: ['aws-messages'],
@@ -68,28 +110,41 @@ function fable(
 	};
 }
 
-// AWS keeps Bedrock prompts and completions for 30 days to detect abuse; Anthropic keeps those of
-// Claude Platform on AWS for 30 days in a place it does not name.
-const deployments: ProviderDeploymentContract[] = [
-	fable(
-		'aws-claude-fable-5-1',
-		{ hosting: 'aws', inferenceGeo: 'global', model: 'global.anthropic.claude-fable-5-1' },
-		{ retentionDays: 30, storageLocation: 'world' },
-		globalPrices
-	),
-	fable(
-		'aws-claude-fable-5-1-us',
-		{ hosting: 'aws', inferenceGeo: 'us', model: 'us.anthropic.claude-fable-5-1' },
-		{ processingLocation: 'US', retentionDays: 30, storageLocation: 'US' },
-		usPrices
-	),
-	fable(
+const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
+	({ model, profile, global, us }) => {
+		// Fable needs AWS review, under which AWS keeps prompts and completions for 30 days.
+		const kept = model.startsWith('claude-fable');
+		return [
+			deployment(
+				`aws-${model}`,
+				model,
+				{ hosting: 'aws', inferenceGeo: 'global', model: `global.${profile}` },
+				kept ? { retentionDays: 30, storageLocation: 'world' } : {},
+				global
+			),
+			deployment(
+				`aws-${model}-us`,
+				model,
+				{ hosting: 'aws', inferenceGeo: 'us', model: `us.${profile}` },
+				{
+					processingLocation: 'US',
+					...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
+				},
+				us
+			)
+		];
+	}
+);
+// Anthropic keeps the prompts of Claude Platform on AWS for 30 days in a place it does not name.
+deployments.push(
+	deployment(
 		'aws-claude-fable-5-1-anthropic-hosted',
+		'claude-fable-5-1',
 		{ hosting: 'anthropic', inferenceGeo: 'global', model: 'claude-fable-5-1' },
 		{ retentionDays: 30, storageLocation: 'unknown' },
-		globalPrices
+		bedrock['claude-fable-5-1']!.global
 	)
-];
+);
 
 describe('AWS onboarding contract', () => {
 	test('pins the Claude route and every deployment', () => {

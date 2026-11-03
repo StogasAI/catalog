@@ -1,0 +1,24 @@
+# Agent Platform's eu multi-region endpoint, at Google's 10 percent premium over the global endpoint.
+# Prices from Vertex AI's SKUs (service C7E2-9256-1C43).
+# Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
+deployments:
+  modelId: claude-opus-5-5
+  routeIds: [google-cloud-messages]
+  upstream:
+    model: claude-opus-5-5
+    hosting: google
+    inferenceGeo: eu
+  overrides:
+    dataHandling:
+      processingLocation: eu
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4.4'
+    cached_input_tokens:
+      per_mill_tokens: '0.22'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '5.5'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '8.8'
+    output_tokens:
+      per_mill_tokens: '22'

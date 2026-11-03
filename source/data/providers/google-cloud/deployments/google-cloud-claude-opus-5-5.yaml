@@ -1,0 +1,21 @@
+# Agent Platform's global endpoint, which routes to any region with capacity.
+# Prices from Vertex AI's SKUs (service C7E2-9256-1C43).
+# Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
+deployments:
+  modelId: claude-opus-5-5
+  routeIds: [google-cloud-messages]
+  upstream:
+    model: claude-opus-5-5
+    hosting: google
+    inferenceGeo: global
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4'
+    cached_input_tokens:
+      per_mill_tokens: '0.2'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '5'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '8'
+    output_tokens:
+      per_mill_tokens: '20'

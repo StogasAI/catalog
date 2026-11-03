@@ -33,7 +33,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 46, providers: 6, routes: 9, deployments: 230 });
+		).toEqual({ authors: 10, models: 46, providers: 6, routes: 9, deployments: 276 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -474,9 +474,14 @@ describe('compiled catalog', () => {
 			'claude-sonnet-5',
 			'claude-sonnet-5-5'
 		]);
+		// AWS and Google Cloud have US endpoints for other models, so look only at Anthropic's API.
 		const usModels = new Set(
 			Object.values(catalog.graph.deployments)
-				.filter((deployment) => deployment.upstream.inferenceGeo === 'us')
+				.filter(
+					(deployment) =>
+						Object.hasOwn(deployment.routes, 'anthropic-messages') &&
+						deployment.upstream.inferenceGeo === 'us'
+				)
 				.map((deployment) => deployment.modelId)
 		);
 		expect(usModels).toEqual(geoModels);

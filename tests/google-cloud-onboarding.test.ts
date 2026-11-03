@@ -1,4 +1,5 @@
 import { describe, test } from 'bun:test';
+import { claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
 import { catalog } from './generated-catalog';
 import {
 	assertProviderOnboardingContract,
@@ -27,74 +28,119 @@ const providerHandling: DataHandlingContract = {
 	trainingUse: false,
 	zeroDataRetention: false
 };
-const globalPrices = {
-	cache_write_1h_input_tokens: { per_mill_tokens: '20' },
-	cache_write_5m_input_tokens: { per_mill_tokens: '12.5' },
-	cached_input_tokens: { per_mill_tokens: '0.25' },
-	input_tokens: { per_mill_tokens: '10' },
-	output_tokens: { per_mill_tokens: '50' }
-};
-// The us and eu endpoints cost 10 percent more than the global one.
-const regionalPrices = {
-	cache_write_1h_input_tokens: { per_mill_tokens: '22' },
-	cache_write_5m_input_tokens: { per_mill_tokens: '13.75' },
-	cached_input_tokens: { per_mill_tokens: '0.275' },
-	input_tokens: { per_mill_tokens: '11' },
-	output_tokens: { per_mill_tokens: '55' }
-};
+type Prices = Record<string, Record<string, string>>;
 
-function fable(
+// Agent Platform's prices for each model: the global endpoint's first, then the us and eu
+// multi-regions', which cost 10 percent more. Older models have no multi-region endpoint.
+const agentPlatform: { model: ClaudeModelId; global: Prices; regional?: Prices }[] = [
+	{
+		model: 'claude-fable-5-1',
+		global: tokenPrices('10', '0.25', '12.5', '20', '50'),
+		regional: tokenPrices('11', '0.275', '13.75', '22', '55')
+	},
+	{
+		model: 'claude-fable-5',
+		global: tokenPrices('10', '1', '12.5', '20', '50'),
+		regional: tokenPrices('11', '1.1', '13.75', '22', '55')
+	},
+	{
+		model: 'claude-opus-5-5',
+		global: tokenPrices('4', '0.2', '5', '8', '20'),
+		regional: tokenPrices('4.4', '0.22', '5.5', '8.8', '22')
+	},
+	...(['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7'] as const).map((model) => ({
+		model,
+		global: tokenPrices('5', '0.5', '6.25', '10', '25'),
+		regional: tokenPrices('5.5', '0.55', '6.875', '11', '27.5')
+	})),
+	{
+		model: 'claude-sonnet-5-5',
+		global: tokenPrices('2', '0.1', '2.5', '4', '10'),
+		regional: tokenPrices('2.2', '0.11', '2.75', '4.4', '11')
+	},
+	{
+		model: 'claude-sonnet-5',
+		global: tokenPrices('2', '0.2', '2.5', '4', '10'),
+		regional: tokenPrices('2.2', '0.22', '2.75', '4.4', '11')
+	},
+	{
+		model: 'claude-haiku-5-5',
+		global: tokenPrices('0.1', '0.01', '0.125', '0.2', '0.5', ['0.5', '0.05', '0.625', '1', '2.5']),
+		regional: tokenPrices('0.11', '0.011', '0.1375', '0.22', '0.55', [
+			'0.55',
+			'0.055',
+			'0.6875',
+			'1.1',
+			'2.75'
+		])
+	},
+	...(['claude-opus-4-6', 'claude-opus-4-5'] as const).map((model) => ({
+		model,
+		global: tokenPrices('5', '0.5', '6.25', '10', '25')
+	})),
+	{ model: 'claude-sonnet-4-6', global: tokenPrices('3', '0.3', '3.75', '6', '15') },
+	{ model: 'claude-haiku-4-5', global: tokenPrices('1', '0.1', '1.25', '2', '5') }
+];
+
+function deployment(
 	id: string,
+	model: ClaudeModelId,
 	upstream: Record<string, string>,
 	dataHandling: Partial<DataHandlingContract>,
-	pricing: Record<string, Record<string, string>>
+	pricing: Prices
 ): ProviderDeploymentContract {
 	return {
-		authorId: 'anthropic',
+		...claudeModels[model],
 		capabilities,
-		contextWindowTokens: 1_000_000,
 		dataHandling: { ...providerHandling, ...dataHandling },
 		id,
-		inputModalities: ['text', 'image'],
-		maxOutputTokens: 128_000,
-		modelId: 'claude-fable-5-1',
-		modelReasoning: 'required',
-		modelReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-		outputModalities: ['text'],
+		modelId: model,
 		pricing,
 		retirementDate: null,
 		routeIds: ['google-cloud-messages'],
-		upstream: { ...upstream, model: 'claude-fable-5-1', serviceTier: 'standard' }
+		upstream: { ...upstream, model, serviceTier: 'standard' }
 	};
 }
 
+const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
+	({ model, global, regional }) => [
+		deployment(
+			`google-cloud-${model}`,
+			model,
+			{ hosting: 'google', inferenceGeo: 'global' },
+			{},
+			global
+		),
+		...(regional
+			? [
+					deployment(
+						`google-cloud-${model}-eu`,
+						model,
+						{ hosting: 'google', inferenceGeo: 'eu' },
+						{ processingLocation: 'eu' },
+						regional
+					),
+					deployment(
+						`google-cloud-${model}-us`,
+						model,
+						{ hosting: 'google', inferenceGeo: 'us' },
+						{ processingLocation: 'US' },
+						regional
+					)
+				]
+			: [])
+	]
+);
 // Anthropic keeps the prompts of its own offering for 30 days in a place it does not name.
-const deployments: ProviderDeploymentContract[] = [
-	fable(
-		'google-cloud-claude-fable-5-1',
-		{ hosting: 'google', inferenceGeo: 'global' },
-		{},
-		globalPrices
-	),
-	fable(
-		'google-cloud-claude-fable-5-1-eu',
-		{ hosting: 'google', inferenceGeo: 'eu' },
-		{ processingLocation: 'eu' },
-		regionalPrices
-	),
-	fable(
-		'google-cloud-claude-fable-5-1-us',
-		{ hosting: 'google', inferenceGeo: 'us' },
-		{ processingLocation: 'US' },
-		regionalPrices
-	),
-	fable(
+deployments.push(
+	deployment(
 		'google-cloud-claude-fable-5-1-anthropic-hosted',
+		'claude-fable-5-1',
 		{ hosting: 'anthropic', inferenceGeo: 'global' },
 		{ retentionDays: 30 },
-		globalPrices
+		agentPlatform[0]!.global
 	)
-];
+);
 
 describe('Google Cloud onboarding contract', () => {
 	test('pins the Claude route and every deployment', () => {

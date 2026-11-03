@@ -1,0 +1,28 @@
+# Bedrock's global inference profile, which routes across every Region with capacity.
+# AWS keeps prompts and completions for 30 days for abuse detection, under the aws_review
+# data retention mode that this model requires.
+# Prices from the AWS Price List (AmazonBedrockFoundationModels, "Standard, Global"), reviewed 2026-11-03:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+# Messages API support, limits and retention reviewed 2026-11-03: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html
+deployments:
+  modelId: claude-fable-5
+  routeIds: [aws-messages]
+  upstream:
+    model: global.anthropic.claude-fable-5
+    hosting: aws
+    inferenceGeo: global
+  overrides:
+    dataHandling:
+      storageLocation: world
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '10'
+    cached_input_tokens:
+      per_mill_tokens: '1'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '12.5'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '20'
+    output_tokens:
+      per_mill_tokens: '50'

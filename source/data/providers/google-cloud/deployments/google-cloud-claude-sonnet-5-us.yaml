@@ -1,0 +1,24 @@
+# Agent Platform's us multi-region endpoint, at Google's 10 percent premium over the global endpoint.
+# Vertex AI lists no SKUs for this model, so these prices come from the partner model pricing page.
+# Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
+deployments:
+  modelId: claude-sonnet-5
+  routeIds: [google-cloud-messages]
+  upstream:
+    model: claude-sonnet-5
+    hosting: google
+    inferenceGeo: us
+  overrides:
+    dataHandling:
+      processingLocation: US
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.2'
+    cached_input_tokens:
+      per_mill_tokens: '0.22'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '2.75'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '4.4'
+    output_tokens:
+      per_mill_tokens: '11'

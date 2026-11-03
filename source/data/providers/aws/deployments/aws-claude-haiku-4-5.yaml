@@ -1,0 +1,22 @@
+# Bedrock's global inference profile, which routes across every Region with capacity.
+# Prices from the AWS Price List (AmazonBedrockFoundationModels, "Standard, Global"), reviewed 2026-11-03:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+# Messages API support, limits and retention reviewed 2026-11-03: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html
+deployments:
+  modelId: claude-haiku-4-5
+  routeIds: [aws-messages]
+  upstream:
+    model: global.anthropic.claude-haiku-4-5-20251001-v1:0
+    hosting: aws
+    inferenceGeo: global
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1'
+    cached_input_tokens:
+      per_mill_tokens: '0.1'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '1.25'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '2'
+    output_tokens:
+      per_mill_tokens: '5'
