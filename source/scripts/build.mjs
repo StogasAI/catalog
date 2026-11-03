@@ -722,6 +722,15 @@ function validateServedFacts(
 			}
 		}
 	}
+	// A route narrows the efforts to its interface's, and must keep one of a deployment that has
+	// some; only an override of [] says that a deployment takes none.
+	if ((overrides.reasoningEfforts ?? model.reasoningEfforts).length > 0) {
+		for (const [routeId, route] of Object.entries(served.routes)) {
+			if (route.reasoningEfforts.length === 0) {
+				throw new Error(`${deploymentId}: ${routeId} serves none of its reasoning efforts`);
+			}
+		}
+	}
 	const reasoningMaxTokens = served.reasoningMaxTokens;
 	if (reasoningMaxTokens && overrides.reasoningMaxTokens) {
 		if (!model.reasoningMaxTokens) {
