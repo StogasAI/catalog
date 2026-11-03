@@ -175,6 +175,9 @@ function fileOwnedNodeBody(path, source) {
 // it reads deployments in batches of this many.
 const CUE_DEPLOYMENT_BATCH = 1000;
 
+// The processing location that each upstream inference geo names.
+const INFERENCE_GEO_PROCESSING = { eu: 'eu', global: 'world', us: 'US' };
+
 /**
  * The file-owned records as YAML for CUE: the first file holds every record but deployments, and
  * each further file holds a batch of deployments under their providers.
@@ -1296,13 +1299,14 @@ function compileGraph(source, places) {
 				`${deploymentId}: Azure Instant and Flex previews must keep world storage and unknown retention`
 			);
 		}
-		// Anthropic runs inference where the inference_geo it receives says.
+		// An upstream inference geo says where inference runs: Anthropic's inference_geo, Bedrock's
+		// inference profile and Google Cloud's endpoint. Anthropic runs a request that names none
+		// anywhere in the world.
+		const geo =
+			deployment.upstream.inferenceGeo ?? (providerId === 'anthropic' ? 'global' : undefined);
 		if (
-			providerId === 'anthropic' &&
-			dataHandlingValues.some(
-				(value) =>
-					value.processingLocation !== (deployment.upstream.inferenceGeo === 'us' ? 'US' : 'world')
-			)
+			geo !== undefined &&
+			dataHandlingValues.some((value) => value.processingLocation !== INFERENCE_GEO_PROCESSING[geo])
 		) {
 			throw new Error(`${deploymentId}: processingLocation must match upstream inferenceGeo`);
 		}
