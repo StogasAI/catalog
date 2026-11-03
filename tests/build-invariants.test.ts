@@ -1109,9 +1109,12 @@ describe('catalog source compiler invariants', () => {
 			source.graph.routes['openai-responses'].interfaces = ['chat_completions', 'responses'];
 			expect(efforts()).toEqual({ 'openai-responses': ['low', 'high'] });
 
+			// A route left with none of the deployment's efforts is a source error.
 			source.graph.routes['openai-responses'].interfaces = ['responses'];
 			source.graph.deployments['openai-gpt-test'].overrides = { reasoningEfforts: ['high'] };
-			expect(efforts()).toEqual({ 'openai-responses': [] });
+			expect(efforts).toThrow(
+				'openai-gpt-test: openai-responses serves none of its reasoning efforts'
+			);
 		});
 
 		test('keeps facts that differ between routes on each route', () => {
