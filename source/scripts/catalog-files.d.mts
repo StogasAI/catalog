@@ -1,7 +1,7 @@
 import type { Locations } from './locations.mjs';
 
 export const CATALOG_SCHEMA: 'stogas.catalog.v10';
-export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v9';
+export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v10';
 export const CATALOG_KINDS: readonly [
 	'authors',
 	'groups',
