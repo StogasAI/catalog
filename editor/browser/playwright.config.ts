@@ -58,7 +58,17 @@ export default defineConfig({
 	projects: [
 		{ name: 'chromium', use: devices['Desktop Chrome'] },
 		{ name: 'firefox', use: devices['Desktop Firefox'] },
-		{ name: 'webkit', use: devices['Desktop Safari'] }
+		{
+			name: 'webkit',
+			use: {
+				...devices['Desktop Safari'],
+				// Playwright's WebKit sometimes stops a page for good inside JavaScriptCore's parallel
+				// garbage collection marking, on four cores as on GitHub's runners. One marker thread
+				// made that about 18 times rarer in the verifier's tests, and no test needs more.
+				// Replacing the environment keeps the rest of it.
+				launchOptions: { env: { ...process.env, JSC_numberOfGCMarkers: '1' } }
+			}
+		}
 	],
 	use: {
 		baseURL: origin,
