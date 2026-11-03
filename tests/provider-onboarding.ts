@@ -29,7 +29,14 @@ type ProviderRouteContract = {
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
+	hostedTools?: HostedToolContract[];
+};
+
+type HostedToolContract = {
+	dataHandling: Partial<DataHandlingContract>;
+	hostings?: string[];
 	pricing?: Record<string, Record<string, string>>;
+	tool: 'mcp' | 'web_fetch' | 'web_search';
 };
 
 export type ProviderDeploymentContract = {
@@ -108,7 +115,7 @@ export function assertProviderOnboardingContract(
 			...(route.endpoint ? { endpoint: route.endpoint } : {}),
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
-			pricing: route.pricing ?? {},
+			hostedTools: route.hostedTools ?? [],
 			providerId
 		});
 	}
@@ -126,6 +133,9 @@ export function assertProviderOnboardingContract(
 			[...expected.routeIds].sort().map((routeId) => {
 				const route = routes.get(routeId);
 				if (!route) throw new Error(`${expected.id}: unknown contract route ${routeId}`);
+				const offers = (route.hostedTools ?? []).filter(
+					(offer) => !offer.hostings || offer.hostings.includes(String(expected.upstream.hosting))
+				);
 				return [
 					routeId,
 					{
@@ -134,7 +144,14 @@ export function assertProviderOnboardingContract(
 						inputModalities: expected.inputModalities.filter((modality) =>
 							route.inputModalities.includes(modality)
 						),
-						pricing: { ...route.pricing, ...expected.pricing },
+						hostedTools: Object.fromEntries(
+							offers.map((offer) => [offer.tool, { dataHandling: offer.dataHandling }])
+						),
+						pricing: Object.assign(
+							{},
+							...offers.map((offer) => offer.pricing ?? {}),
+							expected.pricing
+						),
 						reasoningEfforts:
 							expected.reasoningEffortsByRoute?.[routeId] ??
 							expected.reasoningEfforts ??

@@ -50,7 +50,11 @@ package catalog
 	inputModalities: [#Modality, ...#Modality]
 	documentFormats: #DocumentFormats
 	dataHandling:    #RouteDataHandling
-	pricing?:        #RoutePricing
+	// Tools that run at the provider, or at a service that it calls, when a
+	// request lists them. A deployment offers each tool whose hostings include
+	// its own, and requests that list a tool route only to deployments that
+	// offer it.
+	hostedTools?: [#HostedTool, ...#HostedTool]
 	overrides?: close({
 		capabilities?: #CapabilityOverrides
 	})

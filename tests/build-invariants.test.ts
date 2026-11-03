@@ -20,6 +20,19 @@ const capabilities = {
 	toolChoice: true
 };
 
+// Web search as OpenAI's Responses API offers it, with every call meter of its wire.
+function openaiWebSearch(price: string) {
+	return {
+		tool: 'web_search',
+		pricing: {
+			openai_responses_web_search_calls: { per_1k_calls: price },
+			openai_responses_web_search_preview_calls: { per_1k_calls: price },
+			openai_responses_web_search_preview_non_reasoning_calls: { per_1k_calls: price }
+		},
+		dataHandling: {}
+	} as Record<string, unknown>;
+}
+
 function sourceFixture() {
 	return {
 		locations: {
@@ -72,7 +85,8 @@ function sourceFixture() {
 					interfaces: ['responses'],
 					inputModalities: ['text', 'image'],
 					documentFormats: { extensions: [] as string[], mediaTypes: [] as string[] },
-					dataHandling: { endToEndEncrypted: false }
+					dataHandling: { endToEndEncrypted: false },
+					hostedTools: [] as Array<Record<string, unknown>>
 				}
 			},
 			deployments: {
@@ -1100,9 +1114,7 @@ describe('catalog source compiler invariants', () => {
 				capabilities: { streaming: false }
 			};
 			source.graph.routes['openai-chat-completions'].inputModalities = ['text'];
-			source.graph.routes['openai-responses'].pricing = {
-				openai_responses_web_search_calls: { per_1k_calls: '10' }
-			};
+			source.graph.routes['openai-responses'].hostedTools = [openaiWebSearch('10')];
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
 			const { routes } = buildCatalog(source).graph.deployments['openai-gpt-test'];
 			expect(routes['openai-chat-completions'].capabilities.streaming).toBe(false);
@@ -1113,9 +1125,11 @@ describe('catalog source compiler invariants', () => {
 				'input_tokens',
 				'output_tokens'
 			]);
+			expect(routes['openai-chat-completions'].hostedTools).toEqual({});
 			expect(routes['openai-responses'].pricing.openai_responses_web_search_calls).toEqual({
 				per_1k_calls: '10'
 			});
+			expect(routes['openai-responses'].hostedTools).toEqual({ web_search: { dataHandling: {} } });
 		});
 	});
 
@@ -1272,14 +1286,66 @@ describe('catalog source compiler invariants', () => {
 			[
 				'direct repetition of inherited pricing',
 				(source: Source) => {
-					source.graph.routes['openai-responses'].pricing = {
-						openai_responses_web_search_calls: { per_1k_calls: '1' }
-					};
+					source.graph.routes['openai-responses'].hostedTools = [openaiWebSearch('1')];
 					(source.graph.deployments['openai-gpt-test'].pricing as Record<string, unknown>)[
 						'openai_responses_web_search_calls'
 					] = { per_1k_calls: '2' };
 				},
-				'openai-gpt-test.pricing.openai_responses_web_search_calls repeats a price of route openai-responses'
+				'openai-gpt-test.pricing.openai_responses_web_search_calls repeats the web_search price of route openai-responses'
+			],
+			[
+				'hosted tool call meter of another tool',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{
+							tool: 'web_fetch',
+							pricing: { openai_responses_web_search_calls: { per_1k_calls: '1' } },
+							dataHandling: {}
+						}
+					];
+				},
+				'openai-responses.hostedTools[0]: web_fetch has no call meter openai_responses_web_search_calls'
+			],
+			[
+				'hosted tool offered twice to one hosting',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						openaiWebSearch('1'),
+						openaiWebSearch('2')
+					];
+				},
+				'openai-responses: web_search has two offers for one hosting'
+			],
+			[
+				'hosted tool offered to a hosting that no deployment has',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{ ...openaiWebSearch('1'), hostings: ['aws'] }
+					];
+				},
+				'openai-responses: no deployment has hosting aws of its web_search'
+			],
+			[
+				'web search without every call meter of its wire',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{
+							tool: 'web_search',
+							pricing: { openai_responses_web_search_calls: { per_1k_calls: '1' } },
+							dataHandling: {}
+						}
+					];
+				},
+				'openai-gpt-test on openai-responses: web search needs exactly the meters'
+			],
+			[
+				'hosted tool data handling in an unlisted place',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{ tool: 'mcp', dataHandling: { processingLocation: 'mars' } }
+					];
+				},
+				'openai-responses.hostedTools[0]: dataHandling names a place that locations does not list'
 			],
 			[
 				'long prompt price that no prompt can reach',

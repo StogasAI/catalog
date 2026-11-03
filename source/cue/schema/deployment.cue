@@ -55,6 +55,9 @@ package catalog
 	}
 })
 
+// Who runs the model when a provider resells another operator's service.
+#Hosting: "azure" | "anthropic" | "fireworks" | "aws" | "google"
+
 #Upstream: close({
 	model:           #UpstreamId
 	chuteId?:        #Uuid
@@ -62,7 +65,7 @@ package catalog
 	serviceTier?:    "flex" | "fast" | "ultrafast"
 	inferenceGeo?:   "global" | "us" | "eu"
 	reasoningMode?:  "pro"
-	hosting?:        "azure" | "anthropic" | "fireworks" | "aws" | "google"
+	hosting?:        #Hosting
 	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
 	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"

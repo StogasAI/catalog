@@ -503,14 +503,29 @@ describe('compiled catalog', () => {
 			retentionDays: 0,
 			zeroDataRetention: false
 		});
-		expect(catalog.graph.routes['anthropic-messages'].pricing).toEqual({
-			anthropic_web_search_calls: {
-				per_1k_calls: '10'
+		// Search and fetch run outside inference_geo, and publishers can keep fetched URLs.
+		expect(catalog.graph.routes['anthropic-messages'].hostedTools).toEqual([
+			{
+				tool: 'web_search',
+				pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
+				dataHandling: { processingLocation: 'unknown' }
+			},
+			{
+				tool: 'web_fetch',
+				dataHandling: {
+					processingLocation: 'unknown',
+					storageLocation: 'unknown',
+					retentionDays: null,
+					zeroDataRetention: false
+				}
 			}
-		});
-		expect(
-			catalog.graph.deployments['anthropic-claude-opus-5'].routes['anthropic-messages'].pricing
-		).toHaveProperty('anthropic_web_search_calls');
+		]);
+		const servedOpus =
+			catalog.graph.deployments['anthropic-claude-opus-5-us'].routes['anthropic-messages'];
+		expect(servedOpus.pricing).toHaveProperty('anthropic_web_search_calls');
+		expect(Object.keys(servedOpus.hostedTools)).toEqual(['web_fetch', 'web_search']);
+		// The deployment's own facts stay inference's: US processing.
+		expect(servedOpus.dataHandling.processingLocation).toBe('US');
 		for (const deploymentId of [
 			'anthropic-claude-fable-5',
 			'anthropic-claude-fable-5-us',

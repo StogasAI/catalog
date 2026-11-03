@@ -29,18 +29,19 @@ package catalog
 	reasoning_tokens?:            #TokenRate
 }
 
-#RoutePricing: close({
+// The call meters of a hosted tool. Content that a tool adds to the context,
+// such as search results or a fetched page, bills as input tokens.
+#HostedToolPricing: close({
 	anthropic_web_search_calls?:                              #CallRate
 	openai_responses_web_search_calls?:                       #CallRate
 	openai_responses_web_search_preview_calls?:               #CallRate
 	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
 })
 
-// A deployment prices web search itself when its route serves hostings that
-// differ, as Claude on AWS and Google Cloud does: only Anthropic's hosting runs it.
+// Search models charge for the search that every request makes, so their
+// call meters belong to the deployment.
 #DeploymentPricing: close({
 	#TokenPricing
-	anthropic_web_search_calls?:                        #CallRate
 	openai_chat_completion_search_model_calls?:         #CallRate
 	openai_chat_completion_search_preview_model_calls?: #SearchContextCallRate
 })

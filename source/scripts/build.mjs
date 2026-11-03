@@ -61,6 +61,21 @@ const dataHandlingFields = [
 	'tee',
 	'teeVerified'
 ];
+// Hosted tools in canonical order, and the call meters that each may charge. A request's content
+// that a tool reads bills as input tokens, so only web search has call meters.
+const hostedToolIds = ['web_search', 'web_fetch', 'mcp'];
+const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
+const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
+const openaiWebSearchMeters = [
+	'openai_responses_web_search_calls',
+	'openai_responses_web_search_preview_calls',
+	'openai_responses_web_search_preview_non_reasoning_calls'
+];
+const hostedToolMeters = {
+	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
+	web_fetch: [],
+	mcp: []
+};
 const canonicalCredentialModes = ['managed', 'byok'];
 const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
@@ -559,6 +574,7 @@ function servedFacts(graph, model, deployment) {
 				? model.reasoningEffortsByInterface[route.interfaces[0]]
 				: undefined;
 		const dataHandling = mergeFacts(route.dataHandling, overrides.dataHandling ?? {});
+		const offers = hostedToolOffers(route, deployment);
 		routes[routeId] = {
 			capabilities: Object.fromEntries(
 				capabilityNames.map((name) => [
@@ -571,10 +587,17 @@ function servedFacts(graph, model, deployment) {
 			dataHandling: Object.fromEntries(
 				dataHandlingFields.map((field) => [field, dataHandling[field]])
 			),
+			hostedTools: Object.fromEntries(
+				offers.map((offer) => [offer.tool, { dataHandling: structuredClone(offer.dataHandling) }])
+			),
 			inputModalities: model.inputModalities.filter((modality) =>
 				route.inputModalities.includes(modality)
 			),
-			pricing: { ...structuredClone(route.pricing), ...structuredClone(deployment.pricing) },
+			pricing: Object.assign(
+				{},
+				...offers.map((offer) => structuredClone(offer.pricing ?? {})),
+				structuredClone(deployment.pricing)
+			),
 			reasoningEfforts: reasoningEfforts.filter(
 				(effort) => !interfaceEfforts || interfaceEfforts.includes(effort)
 			)
@@ -592,6 +615,66 @@ function servedFacts(graph, model, deployment) {
 				: overrides.reasoningMaxTokens,
 		routes
 	};
+}
+
+// The route's hosted tools that run for the deployment: each offer without hostings, and each
+// whose hostings include the deployment's.
+function hostedToolOffers(route, deployment) {
+	return route.hostedTools.filter(
+		(offer) => !offer.hostings || offer.hostings.includes(deployment.upstream.hosting)
+	);
+}
+
+// A route's hosted tools in canonical order, each tool at most once for each hosting, with only
+// its own call meters and places that locations lists.
+function compileHostedTools(routeId, source, places) {
+	const offers = (source ?? []).map((offer, index) => {
+		const owner = `${routeId}.hostedTools[${index}]`;
+		if (!hostedToolRanks.has(offer.tool)) throw new Error(`${owner}: unknown tool ${offer.tool}`);
+		if (offer.hostings && new Set(offer.hostings).size !== offer.hostings.length) {
+			throw new Error(`${owner}: hostings must be unique`);
+		}
+		for (const meter of Object.keys(offer.pricing ?? {})) {
+			if (!hostedToolMeters[offer.tool].includes(meter)) {
+				throw new Error(`${owner}: ${offer.tool} has no call meter ${meter}`);
+			}
+		}
+		const { processingLocation, storageLocation } = offer.dataHandling;
+		for (const location of [processingLocation, storageLocation]) {
+			if (location !== undefined && !isLocation(places, location)) {
+				throw new Error(`${owner}: dataHandling names a place that locations does not list`);
+			}
+		}
+		return {
+			tool: offer.tool,
+			...(offer.hostings && { hostings: [...offer.hostings].sort() }),
+			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
+			dataHandling: structuredClone(offer.dataHandling)
+		};
+	});
+	const firstHosting = (offer) => offer.hostings?.[0] ?? '';
+	offers.sort(
+		(left, right) =>
+			hostedToolRanks.get(left.tool) - hostedToolRanks.get(right.tool) ||
+			(firstHosting(left) < firstHosting(right)
+				? -1
+				: firstHosting(left) > firstHosting(right)
+					? 1
+					: 0)
+	);
+	for (const [index, offer] of offers.entries()) {
+		for (const other of offers.slice(0, index)) {
+			if (
+				other.tool === offer.tool &&
+				(!other.hostings ||
+					!offer.hostings ||
+					other.hostings.some((hosting) => offer.hostings.includes(hosting)))
+			) {
+				throw new Error(`${routeId}: ${offer.tool} has two offers for one hosting`);
+			}
+		}
+	}
+	return offers;
 }
 
 // Overrides may only narrow what the model and routes offer.
@@ -660,9 +743,26 @@ function validateServedFacts(
 	}
 	for (const [routeId, route] of Object.entries(served.routes)) {
 		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling, places);
-		for (const meter of Object.keys(deployment.pricing)) {
-			if (graph.routes[routeId].pricing[meter]) {
-				throw new Error(`${deploymentId}.pricing.${meter} repeats a price of route ${routeId}`);
+		for (const offer of hostedToolOffers(graph.routes[routeId], deployment)) {
+			for (const meter of Object.keys(deployment.pricing)) {
+				if (offer.pricing?.[meter]) {
+					throw new Error(
+						`${deploymentId}.pricing.${meter} repeats the ${offer.tool} price of route ${routeId}`
+					);
+				}
+			}
+		}
+		// Each wire charges web search on its own meters, so an offer must price all of them.
+		if (route.hostedTools.web_search) {
+			const required = anthropicWire ? anthropicWebSearchMeters : openaiWebSearchMeters;
+			const missing = required.filter((meter) => !route.pricing[meter]);
+			const foreign = hostedToolMeters.web_search.filter(
+				(meter) => !required.includes(meter) && route.pricing[meter]
+			);
+			if (missing.length || foreign.length) {
+				throw new Error(
+					`${deploymentId} on ${routeId}: web search needs exactly the meters ${required.join(', ')}`
+				);
 			}
 		}
 		for (const [meter, rates] of Object.entries(route.pricing)) {
@@ -845,6 +945,7 @@ function compileGraph(source, places) {
 					}
 				}
 				validateDataHandling(routeId, dataHandling, places);
+				const hostedTools = compileHostedTools(routeId, route.hostedTools, places);
 				return [
 					routeId,
 					{
@@ -859,7 +960,7 @@ function compileGraph(source, places) {
 						dataHandling: Object.fromEntries(
 							dataHandlingFields.map((field) => [field, dataHandling[field]])
 						),
-						pricing: route.pricing ?? {},
+						hostedTools,
 						...(retirementDate !== null && { retirementDate })
 					}
 				];
@@ -1223,6 +1324,22 @@ function compileGraph(source, places) {
 			retirementDate,
 			...served
 		};
+	}
+
+	// An offer for a hosting that no deployment of its route has would never run.
+	for (const [routeId, route] of Object.entries(graph.routes)) {
+		for (const offer of route.hostedTools) {
+			for (const hosting of offer.hostings ?? []) {
+				if (
+					!Object.values(deployments).some(
+						(deployment) =>
+							deployment.upstream.hosting === hosting && Object.hasOwn(deployment.routes, routeId)
+					)
+				) {
+					throw new Error(`${routeId}: no deployment has hosting ${hosting} of its ${offer.tool}`);
+				}
+			}
+		}
 	}
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the

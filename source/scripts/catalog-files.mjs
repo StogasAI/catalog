@@ -16,7 +16,7 @@
  * retired, so a record leaves what readers load as it retires, without a release.
  */
 export const CATALOG_SCHEMA = 'stogas.catalog.v10';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v9';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v10';
 
 export const CATALOG_KINDS = Object.freeze([
 	'authors',
