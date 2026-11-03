@@ -107,7 +107,14 @@ function replaceSource(root: string, path: string, from: string, to: string) {
 describe('catalog build process boundaries', () => {
 	test('rejects an invalid node filename before generating YAML', () => {
 		const root = catalogCopy();
-		for (const id of ['Uppercase', 'has space', 'line\nbreak', '__proto__', 'trailing\n']) {
+		for (const id of [
+			'Uppercase',
+			'has space',
+			'kind:id',
+			'line\nbreak',
+			'__proto__',
+			'trailing\n'
+		]) {
 			const path = join(root, `source/data/${id}.yaml`);
 			writeFileSync(path, 'models:\n  unknown: true\n');
 			const result = runBuild(root, ['--validate-only']);
@@ -141,7 +148,7 @@ describe('catalog build process boundaries', () => {
 
 	test('quotes valid file-owned IDs that YAML could otherwise interpret as scalars or syntax', () => {
 		const root = catalogCopy();
-		for (const id of ['null', 'true', '123', 'a:']) {
+		for (const id of ['null', 'true', '123', '1e3']) {
 			writeFileSync(join(root, `source/data/${id}.yaml`), 'authors:\n  name: Quoted identifier\n');
 		}
 		expectBuildSuccess(runBuild(root, ['--validate-only']));

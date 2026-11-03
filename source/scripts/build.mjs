@@ -86,7 +86,7 @@ const cloudClaudeHostings = {
 	aws: ['anthropic', 'aws'],
 	'google-cloud': ['anthropic', 'google']
 };
-const nodeIdPattern = /^[a-z0-9][a-z0-9._:-]*$/;
+const nodeIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
 let tempBuildDir = null;

@@ -190,7 +190,14 @@ function asAzureClaude(source: Source) {
 describe('catalog source compiler invariants', () => {
 	test('rejects invalid IDs in every collection before interpreting their node fields', () => {
 		for (const kind of ['authors', 'groups', 'models', 'providers', 'routes', 'deployments']) {
-			for (const id of ['Uppercase', 'has/slash', '__proto__', 'trailing\n', 'a: injected']) {
+			for (const id of [
+				'Uppercase',
+				'has/slash',
+				'kind:id',
+				'__proto__',
+				'trailing\n',
+				'a: injected'
+			]) {
 				const source = sourceFixture();
 				source.graph[kind] = { ...source.graph[kind], [id]: { unvalidated: true } };
 				expect(() => buildCatalog(source)).toThrow(`${kind}: invalid node ID`);

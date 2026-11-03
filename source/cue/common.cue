@@ -1,7 +1,9 @@
 package catalog
 
-#Id:          string & =~"^[a-z0-9][a-z0-9._:-]*$"
-#Slug:        string & =~"^[a-z0-9][a-z0-9._:+-]*$"
+// A request's model field separates terms with spaces and kinds with ':', and reads the text
+// before a '/' as an author, so IDs and aliases use none of them.
+#Id:          string & =~"^[a-z0-9][a-z0-9._-]*$"
+#Slug:        string & =~"^[a-z0-9][a-z0-9._+-]*$"
 #UpstreamId:  string & !=""
 #Date:        string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 #Timestamp:   string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
