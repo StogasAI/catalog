@@ -70,6 +70,13 @@ offer(
 	tokenPrices('2', '0.1', '2.5', '4', '10'),
 	tokenPrices('2.2', '0.11', '2.75', '4.4', '11')
 );
+// Its model card marks the Messages API unsupported, but the Messages API serves it.
+offer(
+	'claude-sonnet-4-6',
+	'anthropic.claude-sonnet-4-6',
+	tokenPrices('3', '0.3', '3.75', '6', '15'),
+	tokenPrices('3.3', '0.33', '4.125', '6.6', '16.5')
+);
 offer(
 	'claude-sonnet-5',
 	'anthropic.claude-sonnet-5',
