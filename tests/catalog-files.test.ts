@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { canonicalJson } from '../source/scripts/canonical-json.mjs';
 import {
 	CATALOG_PART_LIMIT,
+	CATALOG_PART_SCHEMA,
+	CATALOG_SCHEMA,
 	assembleCatalog,
 	isRetired,
 	partsInEffect,
@@ -143,6 +145,12 @@ function deploymentsOf(parts: CatalogPart[]) {
 }
 
 describe('catalog parts', () => {
+	test('share the version of the root’s schema, which alone says whether a reader reads them', () => {
+		const version = /^stogas\.catalog\.(v[1-9][0-9]*)$/.exec(CATALOG_SCHEMA)?.[1];
+		expect(version).toBeDefined();
+		expect(CATALOG_PART_SCHEMA).toBe(`stogas.catalog.part.${version}`);
+	});
+
 	test('name each part by the SHA-256 and size of its exact bytes, and its latest date', () => {
 		const catalog = synthetic(3000, 1500, (index) => (index % 3 ? null : day(index % 400)));
 		const partitioned = partitionCatalog(catalog);

@@ -14,6 +14,10 @@
  * groups. Parts hold the records without a date first and then those with one, by date, and the
  * root gives each part the latest date in it. A reader skips each part whose records have all
  * retired, so a record leaves what readers load as it retires, without a release.
+ *
+ * The root and its parts share a schema version, and a change to either names a new version of
+ * both, so a reader knows from the root alone whether it reads a catalog, and readers that find a
+ * newer format keep the newest catalog whose root they read.
  */
 export const CATALOG_SCHEMA = 'stogas.catalog.v10';
 export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v10';
