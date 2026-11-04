@@ -23,9 +23,17 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 
 ## Retirement
 
-- A deployment, a route, or a provider can have a `retirementDate`, as its provider names it. A provider's date ends each of its routes.
-- A deployment retires once all its routes have. A model or a route retires with its last deployment, a provider with its last route, an author with its last model, and a group with the last model in it or in its child groups. A record retires this way only once all those records have dates.
-- A record serves until its date has ended everywhere on Earth, at 12:00 UTC on the next day, so it never retires before its provider stops it.
+Deployments, routes, and providers take a `retirementDate` from their provider, and a provider's date also ends its routes. A record also retires once all of these have retired:
+
+| Record       | Retires with                |
+| ------------ | --------------------------- |
+| Deployment   | its routes                  |
+| Model, route | its deployments             |
+| Provider     | its routes                  |
+| Author       | its models                  |
+| Group        | its models and child groups |
+
+A record serves until its date ends everywhere on Earth, at 12:00 UTC the next day.
 
 ## Develop
 
