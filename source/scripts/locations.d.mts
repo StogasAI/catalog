@@ -1,4 +1,11 @@
-export type Location = { name: string; parentIds: string[] };
+export type LocationKind = 'world' | 'continent' | 'region' | 'union' | 'country' | 'subdivision';
+export type Location = {
+	name: string;
+	/** Catalogs built before places had kinds have none. */
+	kind?: LocationKind;
+	description?: string;
+	parentIds: string[];
+};
 export type Locations = Record<string, Location>;
 /** Each place with the places that contain it, and with the places inside it, in order. */
 export type PlaceIndex = {

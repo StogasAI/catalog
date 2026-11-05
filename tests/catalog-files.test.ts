@@ -16,12 +16,13 @@ import {
 } from '../source/scripts/catalog-files.mjs';
 import { PART_BYTES, partitionCatalog, retirementDates } from '../source/scripts/catalog-parts.mjs';
 import { catalogFileList } from '../source/scripts/release-format.mjs';
+import type { Locations } from '../source/scripts/locations.mjs';
 import { catalog as built } from './generated-catalog';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Catalog JSON of any shape, which these tests read and change in place.
 type Nodes = Record<string, Record<string, any>>;
 type Source = {
-	locations: Record<string, { name: string; parentIds: string[] }>;
+	locations: Locations;
 	graph: Record<string, Nodes>;
 	schedule: { start: string; graph: Record<string, Nodes> }[];
 	periods: object[];
@@ -76,7 +77,7 @@ function synthetic(
 ): Source {
 	const providers = Array.from({ length: 40 }, (_, index) => index);
 	return {
-		locations: { world: { name: 'World', parentIds: [] } },
+		locations: { world: { name: 'World', kind: 'world', parentIds: [] } },
 		graph: {
 			authors: { author: { aliases: [], name: 'Author' } },
 			groups: {},

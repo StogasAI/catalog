@@ -347,6 +347,12 @@ describe('Azure provider onboarding contract', () => {
 	test('keeps Azure BYOK-only and uses only the three verified wire routes', () => {
 		// Product names such as Azure OpenAI are not aliases; see the catalog alias rule.
 		expect(catalog.graph.providers.azure).toEqual({
+			// The Azure geographies that offer Foundry models, where a resource keeps data at rest.
+			accountLocations: [
+				...['AE', 'AT', 'AU', 'BE', 'BR', 'CA', 'CH', 'CL', 'DE', 'DK', 'ES', 'FI', 'FR', 'GB'],
+				...['ID', 'IL', 'IN', 'IT', 'JP', 'KR', 'MX', 'MY', 'NO', 'NZ', 'PL', 'QA', 'SA', 'SE'],
+				...['SG', 'TW', 'US', 'ZA', 'apac', 'europe']
+			],
 			aliases: [],
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',

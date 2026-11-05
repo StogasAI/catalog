@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
 import { earliest, partitionCatalog } from './catalog-parts.mjs';
 import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
-import { isLocation, placeIndex } from './locations.mjs';
+import { WORLD, isLocation, placeIndex } from './locations.mjs';
 import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
@@ -845,11 +845,42 @@ export function buildCatalog(source) {
 	const locations = compileLocations(source.locations);
 	const places = placeIndex(locations);
 	const { base, states, periods } = periodStates(source.graph);
+	requireNamedPlaces(places, [base, ...states.map((state) => state.graph)]);
 	const graph = compileGraph(base, places);
 	const schedule = [];
 	for (const state of states)
 		addScheduleEntry(schedule, state.start, graph, compileGraph(state.graph, places));
 	return { locations, graph, schedule, periods };
+}
+
+const PLACE_FIELDS = new Set([
+	'accountLocations',
+	'headquarteredCountry',
+	'processingLocation',
+	'storageLocation'
+]);
+
+/**
+ * Throws unless a record names each place or a place inside it, in the base graph or a dated
+ * state. The catalog lists the places that data can be in, and a place that nothing can be in
+ * would only lengthen every list that offers places.
+ */
+function requireNamedPlaces(places, graphs) {
+	const named = new Set();
+	const visit = (value) => {
+		if (Array.isArray(value)) for (const item of value) visit(item);
+		else if (value && typeof value === 'object')
+			for (const [key, item] of Object.entries(value)) {
+				if (PLACE_FIELDS.has(key))
+					for (const place of [item].flat())
+						for (const within of places.within.get(place) ?? []) named.add(within);
+				else visit(item);
+			}
+	};
+	for (const graph of graphs) visit(graph);
+	for (const id of places.within.keys())
+		if (!named.has(id))
+			throw new Error(`Location ${id}: no record names it or a place inside it, so remove it`);
 }
 
 /**
@@ -875,6 +906,24 @@ function compileLocations(source) {
 		const country = /^([A-Z]{2})-/.exec(id)?.[1];
 		if (country && !places.within.get(id).includes(country))
 			throw new Error(`Location ${id} must lie in its country ${country}`);
+	}
+	// world, countries and subdivisions have IDs of their own form; other places are continents,
+	// regions and unions, which only their kind tells apart.
+	for (const [id, { kind }] of Object.entries(locations)) {
+		const expected =
+			id === WORLD
+				? 'world'
+				: /^[A-Z]{2}$/.test(id)
+					? 'country'
+					: /^[A-Z]{2}-/.test(id)
+						? 'subdivision'
+						: null;
+		if (
+			expected
+				? kind !== expected
+				: !['continent', 'region', 'union'].includes(/** @type {string} */ (kind))
+		)
+			throw new Error(`Location ${id}: kind ${kind} does not fit its ID`);
 	}
 	return locations;
 }
@@ -1056,6 +1105,15 @@ function compileGraph(source, places) {
 			canonicalCredentialModeRanks,
 			`${providerId}: credentialModes`
 		);
+		const accountLocations = provider.accountLocations ?? [];
+		if (
+			accountLocations.some(
+				(location, index) => !places.within.has(location) || location <= accountLocations[index - 1]
+			)
+		)
+			throw new Error(
+				`${providerId}: accountLocations must list places that locations lists, in order, once each`
+			);
 		validateDataHandling(providerId, provider.dataHandling, places);
 		validateRetirementDate(providerId, provider.retirementDate);
 	}

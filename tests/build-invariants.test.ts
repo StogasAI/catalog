@@ -36,13 +36,13 @@ function openaiWebSearch(price: string) {
 function sourceFixture() {
 	return {
 		locations: {
-			world: { name: 'World' },
-			europe: { name: 'Europe', parentIds: ['world'] },
-			eu: { name: 'European Union', parentIds: ['europe'] },
-			DE: { name: 'Germany', parentIds: ['eu'] },
-			'north-america': { name: 'North America', parentIds: ['world'] },
-			US: { name: 'United States', parentIds: ['north-america'] }
-		} as Record<string, { name: string; parentIds?: string[] }>,
+			world: { name: 'World', kind: 'world' },
+			europe: { name: 'Europe', kind: 'continent', parentIds: ['world'] },
+			eu: { name: 'European Union', kind: 'union', parentIds: ['europe'] },
+			DE: { name: 'Germany', kind: 'country', parentIds: ['eu'] },
+			'north-america': { name: 'North America', kind: 'continent', parentIds: ['world'] },
+			US: { name: 'United States', kind: 'country', parentIds: ['north-america'] }
+		} as Record<string, { name: string; kind: string; description?: string; parentIds?: string[] }>,
 		graph: {
 			authors: {
 				openai: { name: 'OpenAI' }
@@ -66,6 +66,7 @@ function sourceFixture() {
 				openai: {
 					name: 'OpenAI',
 					credentialModes: ['byok'],
+					accountLocations: ['DE', 'US'] as string[] | undefined,
 					capabilities: structuredClone(capabilities),
 					dataHandling: {
 						processingLocation: 'world',
@@ -279,6 +280,7 @@ describe('catalog source compiler invariants', () => {
 			routes: { 'openai-responses': { reasoningEfforts: ['low', 'high'] } }
 		});
 		expect(catalogs.graph.providers.openai).toEqual({
+			accountLocations: ['DE', 'US'],
 			aliases: [],
 			credentialModes: ['byok'],
 			name: 'OpenAI'
@@ -307,9 +309,15 @@ describe('catalog source compiler invariants', () => {
 
 	test('lists each place with the places that directly contain it, in order', () => {
 		const source = sourceFixture();
-		source.locations['US-CA'] = { name: 'California', parentIds: ['US'] };
-		source.locations.CY = { name: 'Cyprus', parentIds: ['eu', 'asia'] };
-		source.locations.asia = { name: 'Asia', parentIds: ['world'] };
+		source.locations['US-CA'] = { name: 'California', kind: 'subdivision', parentIds: ['US'] };
+		source.locations.CY = { name: 'Cyprus', kind: 'country', parentIds: ['eu', 'asia'] };
+		source.locations.asia = {
+			name: 'Asia',
+			kind: 'continent',
+			description: 'The continent, with the Middle East.',
+			parentIds: ['world']
+		};
+		source.graph.providers.openai.accountLocations = ['CY', 'DE'];
 		Object.assign(source.graph.providers.openai.dataHandling, {
 			processingLocation: 'eu',
 			storageLocation: 'US-CA'
@@ -317,9 +325,19 @@ describe('catalog source compiler invariants', () => {
 		Object.assign(source.graph.authors.openai, { headquarteredCountry: 'US' });
 		const { locations } = buildCatalog(source);
 		expect(Object.keys(locations)).toEqual(Object.keys(locations).sort());
-		expect(locations.world).toEqual({ name: 'World', parentIds: [] });
-		expect(locations.CY).toEqual({ name: 'Cyprus', parentIds: ['asia', 'eu'] });
-		expect(locations['US-CA']).toEqual({ name: 'California', parentIds: ['US'] });
+		expect(locations.world).toEqual({ name: 'World', kind: 'world', parentIds: [] });
+		expect(locations.asia).toEqual({
+			name: 'Asia',
+			kind: 'continent',
+			description: 'The continent, with the Middle East.',
+			parentIds: ['world']
+		});
+		expect(locations.CY).toEqual({ name: 'Cyprus', kind: 'country', parentIds: ['asia', 'eu'] });
+		expect(locations['US-CA']).toEqual({
+			name: 'California',
+			kind: 'subdivision',
+			parentIds: ['US']
+		});
 	});
 
 	describe('rejects invalid locations and places that they do not list', () => {
@@ -360,22 +378,62 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				'IDs that differ only in case',
-				(source: Source) => (source.locations.EU = { name: 'EU', parentIds: ['europe'] }),
+				(source: Source) =>
+					(source.locations.EU = { name: 'EU', kind: 'union', parentIds: ['europe'] }),
 				'Locations EU and eu differ only in case'
 			],
 			[
 				'subdivision outside its country',
-				(source: Source) => (source.locations['DE-BE'] = { name: 'Berlin', parentIds: ['eu'] }),
+				(source: Source) =>
+					(source.locations['DE-BE'] = { name: 'Berlin', kind: 'subdivision', parentIds: ['eu'] }),
 				'Location DE-BE must lie in its country DE'
 			],
 			...['unknown', 'none', 'Europe', 'e_u', 'DEU'].map(
 				(id) =>
 					[
 						`invalid ID ${id}`,
-						(source: Source) => (source.locations[id] = { name: id, parentIds: ['world'] }),
+						(source: Source) =>
+							(source.locations[id] = { name: id, kind: 'region', parentIds: ['world'] }),
 						`Location ${JSON.stringify(id)} has an invalid ID`
 					] as const
 			),
+			...(
+				[
+					['DE', 'region'],
+					['eu', 'country'],
+					['world', 'continent'],
+					['europe', 'world'],
+					['US', undefined]
+				] as const
+			).map(
+				([id, kind]) =>
+					[
+						`${id} as a ${kind}`,
+						(source: Source) => (source.locations[id]!.kind = kind as string),
+						`Location ${id}: kind ${kind} does not fit its ID`
+					] as const
+			),
+			[
+				'place that no record names',
+				(source: Source) =>
+					(source.locations.FR = { name: 'France', kind: 'country', parentIds: ['eu'] }),
+				'Location FR: no record names it or a place inside it, so remove it'
+			],
+			[
+				'account location that locations does not list',
+				(source: Source) => (source.graph.providers.openai.accountLocations = ['DE', 'FR', 'US']),
+				'openai: accountLocations must list places that locations lists, in order, once each'
+			],
+			[
+				'account locations out of order',
+				(source: Source) => (source.graph.providers.openai.accountLocations = ['US', 'DE']),
+				'openai: accountLocations must list places that locations lists, in order, once each'
+			],
+			[
+				'account location listed twice',
+				(source: Source) => (source.graph.providers.openai.accountLocations = ['DE', 'DE', 'US']),
+				'openai: accountLocations must list places that locations lists, in order, once each'
+			],
 			[
 				'unlisted processing location',
 				(source: Source) => (source.graph.providers.openai.dataHandling.processingLocation = 'FR'),
