@@ -1,0 +1,28 @@
+deployments:
+  modelId: claude-haiku-5-5
+  routeIds: [anthropic-message-batches]
+  upstream:
+    model: claude-haiku-5-5
+    serviceTier: batch
+    inferenceGeo: us
+  overrides:
+    dataHandling:
+      processingLocation: US
+      storageLocation: unknown
+      retentionDays: 29
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.055'
+      per_mill_context_gt_100k: '0.275'
+    cached_input_tokens:
+      per_mill_tokens: '0.0055'
+      per_mill_context_gt_100k: '0.0275'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '0.06875'
+      per_mill_context_gt_100k: '0.34375'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '0.11'
+      per_mill_context_gt_100k: '0.55'
+    output_tokens:
+      per_mill_tokens: '0.275'
+      per_mill_context_gt_100k: '1.375'

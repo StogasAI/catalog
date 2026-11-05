@@ -33,7 +33,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 46, providers: 6, routes: 9, deployments: 306 });
+		).toEqual({ authors: 10, models: 46, providers: 6, routes: 12, deployments: 351 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -170,11 +170,14 @@ describe('compiled catalog', () => {
 				Object.hasOwn(deployment.routes, routeId)
 			);
 			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
-				const matchingIds = deployments
-					.filter(([, deployment]) => deployment.modelId === modelId)
-					.map(([deploymentId]) => deploymentId);
-				if (matchingIds.length > 1) {
-					expect(matchingIds).toContain(`${route.providerId}-${modelId}`);
+				const matching = deployments.filter(([, deployment]) => deployment.modelId === modelId);
+				if (matching.length > 1) {
+					// Deployments that all share a tier, as a batch API's do, have a base named after it.
+					const tiers = new Set(matching.map(([, deployment]) => deployment.upstream.serviceTier));
+					const tier = tiers.size === 1 ? [...tiers][0] : 'standard';
+					expect(matching.map(([deploymentId]) => deploymentId)).toContain(
+						`${route.providerId}-${modelId}${tier === 'standard' ? '' : `-${tier}`}`
+					);
 				}
 			}
 		}
@@ -561,7 +564,11 @@ describe('compiled catalog', () => {
 		const expected = [
 			'anthropic-claude-mythos-5',
 			'anthropic-claude-mythos-5-1',
+			'anthropic-claude-mythos-5-1-batch',
+			'anthropic-claude-mythos-5-1-batch-us',
 			'anthropic-claude-mythos-5-1-us',
+			'anthropic-claude-mythos-5-batch',
+			'anthropic-claude-mythos-5-batch-us',
 			'anthropic-claude-mythos-5-us',
 			'anthropic-claude-opus-5-fast',
 			'anthropic-claude-opus-5-fast-us',
@@ -823,6 +830,7 @@ describe('compiled catalog', () => {
 		const tierScale = {
 			standard: [1n, 1n],
 			flex: [1n, 2n],
+			batch: [1n, 2n],
 			fast: [2n, 1n],
 			ultrafast: [6n, 1n]
 		} as const;
@@ -858,7 +866,7 @@ describe('compiled catalog', () => {
 			if (chat) expect(chat.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh']);
 			checked.push(deploymentId);
 		}
-		expect(checked).toHaveLength(32);
+		expect(checked).toHaveLength(42);
 	});
 
 	test('puts each place in every place that holds all the places directly inside it', () => {
@@ -888,11 +896,16 @@ describe('compiled catalog', () => {
 	});
 
 	test('orders parts so that they retire as a whole', () => {
-		const dates = catalogRoot.parts.map(({ through }) => through);
-		const undated = dates.filter((date) => date === null).length;
-		// Parts without a retirement date come first, and the others follow by their latest date.
-		expect(dates.slice(0, undated).every((date) => date === null)).toBe(true);
-		expect(dates.slice(undated)).toEqual(dates.slice(undated).toSorted());
+		// Parts of what Stogas does not serve come last, and the gateway never reads them.
+		const served = catalogRoot.parts.filter((part) => !part.stogasUnsupported);
+		expect(catalogRoot.parts.slice(0, served.length)).toEqual(served);
+		for (const parts of [served, catalogRoot.parts.slice(served.length)]) {
+			const dates = parts.map(({ through }) => through);
+			const undated = dates.filter((date) => date === null).length;
+			// Parts without a retirement date come first, and the others follow by their latest date.
+			expect(dates.slice(0, undated).every((date) => date === null)).toBe(true);
+			expect(dates.slice(undated)).toEqual(dates.slice(undated).toSorted());
+		}
 		for (const [kind, summaries] of Object.entries(catalogRoot.summaries))
 			for (const summary of Object.values(summaries)) {
 				if (!('part' in summary)) continue;

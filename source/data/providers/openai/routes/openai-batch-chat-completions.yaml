@@ -1,0 +1,21 @@
+# OpenAI's Batch API runs a file of Chat Completions requests within 24 hours at its Batch
+# prices, on the same models and inputs as the Chat Completions route
+# (https://developers.openai.com/api/docs/guides/batch). Batch requests cannot stream. OpenAI
+# keeps batch files until they are deleted, outside zero data retention
+# (https://developers.openai.com/api/docs/guides/your-data), so each batch deployment states
+# unknown retention. Hosted tools stay off until OpenAI prices them for batches.
+routes:
+  providerId: openai
+  endpoint: https://api.openai.com/v1/batches
+  interfaces: [chat_completions]
+  inputModalities: [text, image, audio]
+  # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs
+  documentFormats:
+    extensions: [.pdf]
+    mediaTypes: [application/pdf]
+  dataHandling:
+    endToEndEncrypted: false
+  overrides:
+    capabilities:
+      streaming: false
+  stogasUnsupported: The gateway answers each request as it arrives and has no batch API.

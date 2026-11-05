@@ -1,15 +1,17 @@
 package catalog
 
 // serviceTier names a provider-neutral tier; the compiler records an omitted tier as standard.
+// batch is a provider's batch API, which runs a file of requests within a window at its batch
+// prices on routes of its own.
 #OpenAIUpstream: close({
 	model:          #UpstreamId
 	reasoningMode?: "pro"
-	serviceTier?:   "flex" | "fast" | "ultrafast"
+	serviceTier?:   "flex" | "fast" | "ultrafast" | "batch"
 })
 
 #AnthropicUpstream: close({
 	model:         #UpstreamId
-	serviceTier?:  "fast"
+	serviceTier?:  "fast" | "batch"
 	inferenceGeo?: "global" | "us"
 })
 
@@ -70,7 +72,7 @@ package catalog
 	model:           #UpstreamId
 	chuteId?:        #Uuid
 	gpuCount?:       int & >=1 & <=8
-	serviceTier?:    "flex" | "fast" | "ultrafast"
+	serviceTier?:    "flex" | "fast" | "ultrafast" | "batch"
 	inferenceGeo?:   #InferenceGeography
 	reasoningMode?:  "pro"
 	hosting?:        #Hosting

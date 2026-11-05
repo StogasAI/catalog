@@ -1060,7 +1060,13 @@ function compileGraph(source, places) {
 		}
 		const [modelId, routeId] = key.split('\0');
 		const providerId = requireNode(graph.routes, routeId, modelId).providerId;
-		const baseId = `${providerId}-${modelId}`;
+		// A route whose deployments of the model all share one tier, as a batch API's do, names its
+		// base after that tier.
+		const tiers = new Set(
+			deploymentIds.map((id) => graph.deployments[id].upstream.serviceTier ?? 'standard')
+		);
+		const tier = tiers.size === 1 ? [...tiers][0] : 'standard';
+		const baseId = `${providerId}-${modelId}${tier === 'standard' ? '' : `-${tier}`}`;
 		if (!deploymentIds.includes(baseId)) {
 			throw new Error(
 				`${key.replace('\0', '/')}: multiple deployments require canonical base ${baseId}`

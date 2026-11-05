@@ -14,8 +14,9 @@ type Catalog = {
 	periods: Record<string, any>[];
 };
 
-/** A build's root and its whole catalog. */
-export const readCatalog = (directory: string) => readGeneratedCatalog<Catalog>({ directory });
+/** A build's root and its whole catalog, with what Stogas does not serve. */
+export const readCatalog = (directory: string) =>
+	readGeneratedCatalog<Catalog>({ directory, unsupported: true });
 
-/** The checkout's root and whole catalog. */
-export const { root: catalogRoot, catalog } = readGeneratedCatalog<Catalog>();
+/** The checkout's root and whole catalog, with what Stogas does not serve. */
+export const { root: catalogRoot, catalog } = readGeneratedCatalog<Catalog>({ unsupported: true });

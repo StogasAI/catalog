@@ -1,0 +1,22 @@
+deployments:
+  modelId: claude-opus-4-7
+  routeIds: [anthropic-message-batches]
+  upstream:
+    model: claude-opus-4-7
+    serviceTier: batch
+    inferenceGeo: global
+  overrides:
+    dataHandling:
+      storageLocation: unknown
+      retentionDays: 29
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.5'
+    cached_input_tokens:
+      per_mill_tokens: '0.25'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '3.125'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '5'
+    output_tokens:
+      per_mill_tokens: '12.5'

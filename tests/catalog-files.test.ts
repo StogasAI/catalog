@@ -351,7 +351,12 @@ describe('catalog parts', () => {
 	});
 
 	test('read a root and parts of the previous format as the current format', () => {
-		const { root, parts } = files(partitionCatalog(scheduled()));
+		// The previous format had no records that Stogas does not serve.
+		const catalog = scheduled();
+		for (const nodes of Object.values(catalog.graph))
+			for (const [id, node] of Object.entries(nodes ?? {}))
+				if (node.stogasUnsupported) delete nodes![id];
+		const { root, parts } = files(partitionCatalog(catalog));
 		expect(root.parts.some((part) => part.stogasUnsupported)).toBe(false);
 		// The previous format is the current one without the mark on each part.
 		const previousRoot = {
