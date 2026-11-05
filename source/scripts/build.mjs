@@ -175,8 +175,17 @@ function fileOwnedNodeBody(path, source) {
 // it reads deployments in batches of this many.
 const CUE_DEPLOYMENT_BATCH = 1000;
 
-// The processing location that each upstream inference geo names.
-const INFERENCE_GEO_PROCESSING = { eu: 'eu', global: 'world', us: 'US' };
+// Where each inference geography runs inference: Anthropic's, Bedrock's inference profiles' and
+// Google Cloud's endpoints'.
+const INFERENCE_GEO_PROCESSING = {
+	au: 'AU',
+	ca: 'CA',
+	eu: 'eu',
+	global: 'world',
+	in: 'IN',
+	jp: 'JP',
+	us: 'US'
+};
 
 /**
  * The file-owned records as YAML for CUE: the first file holds every record but deployments, and

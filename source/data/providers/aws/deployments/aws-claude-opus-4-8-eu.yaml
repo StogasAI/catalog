@@ -1,0 +1,27 @@
+# Bedrock's EU inference profile, at AWS's 10 percent premium over the global profile. From
+# Frankfurt, Stockholm, Ireland or Paris it runs only in EU Regions; the gateway uses no other
+# source Region for it, since London adds its own Region.
+# Prices from the AWS Price List (AmazonBedrockFoundationModels, "Standard"), reviewed 2026-11-05:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+# Messages API support, limits and retention reviewed 2026-11-03: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-8.html
+deployments:
+  modelId: claude-opus-4-8
+  routeIds: [aws-messages]
+  upstream:
+    model: eu.anthropic.claude-opus-4-8
+    hosting: aws
+    inferenceGeo: eu
+  overrides:
+    dataHandling:
+      processingLocation: eu
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5.5'
+    cached_input_tokens:
+      per_mill_tokens: '0.55'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '6.875'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '11'
+    output_tokens:
+      per_mill_tokens: '27.5'

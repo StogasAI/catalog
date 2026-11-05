@@ -97,6 +97,21 @@ offer(
 	tokenPrices('1.1', '0.11', '1.375', '2.2', '5.5')
 );
 
+// The other geographies of each model's profiles, which cost what the US profile does, and the
+// place where each keeps inference.
+const GEOGRAPHY_PLACES = { eu: 'eu', jp: 'JP', au: 'AU', in: 'IN', ca: 'CA' } as const;
+const geographies: Partial<Record<ClaudeModelId, (keyof typeof GEOGRAPHY_PLACES)[]>> = {
+	'claude-haiku-4-5': ['eu', 'jp', 'au', 'in'],
+	'claude-haiku-5-5': ['eu', 'jp', 'au', 'ca'],
+	'claude-opus-4-7': ['eu', 'jp', 'au'],
+	'claude-opus-4-8': ['eu', 'jp', 'au'],
+	'claude-opus-5': ['eu', 'au', 'in'],
+	'claude-opus-5-5': ['eu', 'jp', 'au'],
+	'claude-sonnet-4-6': ['eu', 'jp', 'au'],
+	'claude-sonnet-5': ['eu', 'au', 'in'],
+	'claude-sonnet-5-5': ['eu', 'au']
+};
+
 function deployment(
 	id: string,
 	model: ClaudeModelId,
@@ -138,6 +153,15 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
 				},
 				us
+			),
+			...(geographies[model] ?? []).map((geo) =>
+				deployment(
+					`aws-${model}-${geo}`,
+					model,
+					{ hosting: 'aws', inferenceGeo: geo, model: `${geo}.${profile}` },
+					{ processingLocation: GEOGRAPHY_PLACES[geo] },
+					us
+				)
 			)
 		];
 	}
