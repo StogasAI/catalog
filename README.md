@@ -20,7 +20,7 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 - `generated/catalog.json` is the root. It lists every record with the fields that list, link, and resolve it, and names each part in `generated/catalog.parts/` by SHA-256 and size. A page that shows one model reads one part.
 - A record can list named, dated periods that change its facts for a time, such as a promotional price. The catalog holds the base graph and, for each dated state, the records that differ from it.
 - Prices are decimal USD strings. `retentionDays: null` means unknown, not zero.
-- `source/data/locations.yaml` lists places as a graph. Each place has a kind, `world`, `continent`, `region`, `union`, `country` or `subdivision`, and lists the places that directly contain it. A record names a place for data handling, a headquarters, or a provider's `accountLocations`, where an account's resources can keep data. A place stays listed only while a record names it or a place inside it.
+- `source/data/locations.yaml` lists places as a graph. Each place has a kind, `world`, `continent`, `region`, `union`, `country` or `subdivision`. A continent, region or union lists every country that it covers, and the build derives the places that directly contain each place from those lists. A record names a place for data handling, a headquarters, or a provider's `accountLocations`, where an account's resources can keep data. A place stays listed only while a record names it or a place inside it.
 
 ## Retirement
 

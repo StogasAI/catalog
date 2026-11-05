@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
 import { earliest, partitionCatalog } from './catalog-parts.mjs';
 import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
-import { WORLD, isLocation, placeIndex } from './locations.mjs';
+import { WORLD, isLocation, isPlaceId, placeIndex } from './locations.mjs';
 import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
@@ -892,47 +892,82 @@ function requireNamedPlaces(places, graphs) {
 			throw new Error(`Location ${id}: no record names it or a place inside it, so remove it`);
 }
 
+const REGION_KINDS = ['continent', 'region', 'union'];
+const COUNTRY_ID = /^[A-Z]{2}$/;
+
 /**
- * The locations with their parents in order. Each parent is the smallest place that contains the
- * location there, so none contains another, and a subdivision lies in its country.
+ * The locations in order, each with the places that directly contain it. A continent, region or
+ * union lists the countries that it covers, and the rest follows from those lists: a country lies
+ * in each smallest region that lists it, a region in each smallest region that lists all of its
+ * countries and more, and a subdivision in the country of its code. A place that no region holds
+ * lies in world. Deriving the parents keeps each region's containment true of all its countries,
+ * and not only of the countries that the catalog happens to list.
  */
 function compileLocations(source) {
-	const locations = Object.fromEntries(
-		Object.entries(source ?? {})
-			.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-			.map(([id, location]) => [
-				id,
-				{ ...location, parentIds: [...(location.parentIds ?? [])].sort() }
-			])
+	const entries = Object.entries(source ?? {}).sort(([left], [right]) =>
+		left < right ? -1 : left > right ? 1 : 0
 	);
-	const places = placeIndex(locations);
-	for (const [id, { parentIds }] of Object.entries(locations)) {
-		for (const parentId of parentIds)
-			if (
-				parentIds.some((other) => other !== parentId && places.within.get(other).includes(parentId))
-			)
-				throw new Error(`Location ${id}: parent ${parentId} contains another of its parents`);
-		const country = /^([A-Z]{2})-/.exec(id)?.[1];
-		if (country && !places.within.get(id).includes(country))
-			throw new Error(`Location ${id} must lie in its country ${country}`);
-	}
-	// world, countries and subdivisions have IDs of their own form; other places are continents,
-	// regions and unions, which only their kind tells apart.
-	for (const [id, { kind }] of Object.entries(locations)) {
+	const regions = new Map();
+	for (const [id, location] of entries) {
+		if (!isPlaceId(id)) throw new Error(`Location ${JSON.stringify(id)} has an invalid ID`);
+		// world, countries and subdivisions have IDs of their own form; other places are continents,
+		// regions and unions, which only their kind tells apart.
+		const { kind, countries } = location;
 		const expected =
 			id === WORLD
 				? 'world'
-				: /^[A-Z]{2}$/.test(id)
+				: COUNTRY_ID.test(id)
 					? 'country'
 					: /^[A-Z]{2}-/.test(id)
 						? 'subdivision'
 						: null;
-		if (
-			expected
-				? kind !== expected
-				: !['continent', 'region', 'union'].includes(/** @type {string} */ (kind))
-		)
+		if (expected ? kind !== expected : !REGION_KINDS.includes(/** @type {string} */ (kind)))
 			throw new Error(`Location ${id}: kind ${kind} does not fit its ID`);
+		if (Object.hasOwn(location, 'parentIds'))
+			throw new Error(
+				`Location ${id}: the places that contain it follow from the countries that regions list, so it lists no parentIds`
+			);
+		if ((expected === null) !== (countries !== undefined))
+			throw new Error(
+				`Location ${id}: a continent, region or union lists its countries, and no other place does`
+			);
+		if (countries === undefined) continue;
+		if (
+			!Array.isArray(countries) ||
+			!countries.length ||
+			countries.some(
+				(country, index) =>
+					!COUNTRY_ID.test(country) || (index > 0 && country <= countries[index - 1])
+			)
+		)
+			throw new Error(`Location ${id}: countries must list ISO 3166-1 codes in order, once each`);
+		regions.set(id, new Set(countries));
+	}
+	const holds = (outer, inner) => [...inner].every((country) => outer.has(country));
+	const locations = {};
+	for (const [id, location] of entries) {
+		const own = regions.get(id);
+		let parentIds;
+		if (id === WORLD) parentIds = [];
+		else if (/^[A-Z]{2}-/.test(id)) parentIds = [id.slice(0, 2)];
+		else {
+			const holders = [...regions.keys()].filter(
+				(other) =>
+					other !== id && (own ? holds(regions.get(other), own) : regions.get(other).has(id))
+			);
+			for (const other of holders)
+				if (own && holds(own, regions.get(other)))
+					throw new Error(`Locations ${id} and ${other} list the same countries`);
+			// Of the regions that hold the place, the smallest: those that hold none of the others.
+			const smallest = holders.filter(
+				(holder) =>
+					!holders.some(
+						(other) => other !== holder && holds(regions.get(holder), regions.get(other))
+					)
+			);
+			parentIds = smallest.length ? smallest : [WORLD];
+		}
+		locations[id] = { ...location, parentIds };
 	}
 	return locations;
 }

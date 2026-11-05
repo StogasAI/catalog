@@ -3,6 +3,7 @@ import { canonicalJson } from '../source/scripts/canonical-json.mjs';
 import { buildCatalog, catalogFiles, main } from '../source/scripts/build.mjs';
 import { assembleCatalog, partsInEffect } from '../source/scripts/catalog-files.mjs';
 import { everyStateCatalogChains } from '../source/scripts/resolved-chains.mjs';
+import { countriesIn, locationWithin, placeIndex } from '../source/scripts/locations.mjs';
 import { catalogAt } from '../source/scripts/schedule.mjs';
 
 type Source = ReturnType<typeof sourceFixture>;
@@ -37,12 +38,21 @@ function sourceFixture() {
 	return {
 		locations: {
 			world: { name: 'World', kind: 'world' },
-			europe: { name: 'Europe', kind: 'continent', parentIds: ['world'] },
-			eu: { name: 'European Union', kind: 'union', parentIds: ['europe'] },
-			DE: { name: 'Germany', kind: 'country', parentIds: ['eu'] },
-			'north-america': { name: 'North America', kind: 'continent', parentIds: ['world'] },
-			US: { name: 'United States', kind: 'country', parentIds: ['north-america'] }
-		} as Record<string, { name: string; kind: string; description?: string; parentIds?: string[] }>,
+			europe: { name: 'Europe', kind: 'continent', countries: ['CH', 'CY', 'DE', 'FR'] },
+			eu: { name: 'European Union', kind: 'union', countries: ['CY', 'DE', 'FR'] },
+			DE: { name: 'Germany', kind: 'country' },
+			'north-america': { name: 'North America', kind: 'continent', countries: ['CA', 'US'] },
+			US: { name: 'United States', kind: 'country' }
+		} as Record<
+			string,
+			{
+				name: string;
+				kind?: string;
+				description?: string;
+				countries?: string[];
+				parentIds?: string[];
+			}
+		>,
 		graph: {
 			authors: {
 				openai: { name: 'OpenAI' }
@@ -307,17 +317,18 @@ describe('catalog source compiler invariants', () => {
 		expect(canonicalJson(buildCatalog(reversed))).toBe(canonicalJson(buildCatalog(source)));
 	});
 
-	test('lists each place with the places that directly contain it, in order', () => {
+	test('derives the places that contain each place from the countries that regions list', () => {
 		const source = sourceFixture();
-		source.locations['US-CA'] = { name: 'California', kind: 'subdivision', parentIds: ['US'] };
-		source.locations.CY = { name: 'Cyprus', kind: 'country', parentIds: ['eu', 'asia'] };
+		source.locations['US-CA'] = { name: 'California', kind: 'subdivision' };
+		source.locations.CY = { name: 'Cyprus', kind: 'country' };
+		source.locations.AQ = { name: 'Antarctica', kind: 'country' };
 		source.locations.asia = {
 			name: 'Asia',
 			kind: 'continent',
 			description: 'The continent, with the Middle East.',
-			parentIds: ['world']
+			countries: ['CY', 'JP']
 		};
-		source.graph.providers.openai.accountLocations = ['CY', 'DE'];
+		source.graph.providers.openai.accountLocations = ['AQ', 'CY', 'DE'];
 		Object.assign(source.graph.providers.openai.dataHandling, {
 			processingLocation: 'eu',
 			storageLocation: 'US-CA'
@@ -330,14 +341,50 @@ describe('catalog source compiler invariants', () => {
 			name: 'Asia',
 			kind: 'continent',
 			description: 'The continent, with the Middle East.',
+			countries: ['CY', 'JP'],
 			parentIds: ['world']
 		});
+		// The EU lists Cyprus and lies in Europe, which also lists it, so Europe is no parent.
 		expect(locations.CY).toEqual({ name: 'Cyprus', kind: 'country', parentIds: ['asia', 'eu'] });
+		expect(locations.eu!.parentIds).toEqual(['europe']);
+		expect(locations.europe!.parentIds).toEqual(['world']);
+		// A country that no region lists lies in world, and a subdivision in its country.
+		expect(locations.AQ).toEqual({ name: 'Antarctica', kind: 'country', parentIds: ['world'] });
 		expect(locations['US-CA']).toEqual({
 			name: 'California',
 			kind: 'subdivision',
 			parentIds: ['US']
 		});
+	});
+
+	test('keeps a region inside another only when the other lists all of its countries', () => {
+		const source = sourceFixture();
+		// The EU holds Germany but not Switzerland, so a region of both lies only in Europe.
+		source.locations.alps = { name: 'Alps', kind: 'region', countries: ['CH', 'DE'] };
+		source.graph.providers.openai.dataHandling.processingLocation = 'alps';
+		const { locations } = buildCatalog(source);
+		expect(locations.alps!.parentIds).toEqual(['europe']);
+		expect(locations.DE!.parentIds).toEqual(['alps', 'eu']);
+	});
+
+	test('reads a place index that a catalog lists, and rejects one that cannot be', () => {
+		const places = placeIndex(buildCatalog(sourceFixture()).locations);
+		expect(places.countries.get('eu')).toEqual(['CY', 'DE', 'FR']);
+		expect(countriesIn(places, 'eu')).toEqual(['CY', 'DE', 'FR']);
+		expect(countriesIn(places, 'DE')).toEqual(['DE']);
+		// A country that the catalog does not list lies in each region that lists it.
+		expect(locationWithin(places, 'FR')).toEqual(['FR', 'eu', 'europe', 'world']);
+		expect(locationWithin(places, 'JP')).toEqual(['JP', 'world']);
+		expect(locationWithin(places, 'unknown')).toEqual(['unknown']);
+		const place = (parentIds: string[]) => ({ name: 'Place', parentIds });
+		for (const [locations, message] of [
+			[{ world: place(['eu']), eu: place(['world']) }, 'Locations must have world'],
+			[{ world: place([]), eu: place([]) }, 'Location eu lies in no place'],
+			[{ world: place([]), eu: place(['emea']) }, 'Location eu lies in unknown place emea'],
+			[{ world: place([]), eu: place(['world', 'world']) }, 'Location eu repeats a parent'],
+			[{ world: place([]), eu: place(['europe']), europe: place(['eu']) }, 'lies in itself']
+		] as const)
+			expect(() => placeIndex(locations), message).toThrow(message);
 	});
 
 	describe('rejects invalid locations and places that they do not list', () => {
@@ -346,54 +393,66 @@ describe('catalog source compiler invariants', () => {
 				'no world',
 				(source: Source) => {
 					delete source.locations.world;
-					source.locations.europe.parentIds = [];
 				},
 				'Locations must have world'
 			],
 			[
-				'world inside a place',
-				(source: Source) => (source.locations.world.parentIds = ['europe']),
-				'Locations must have world'
+				'listed parents',
+				(source: Source) => (source.locations.DE.parentIds = ['eu']),
+				'Location DE: the places that contain it follow from the countries that regions list, so it lists no parentIds'
 			],
+			...(
+				[
+					['region without countries', (source: Source) => delete source.locations.eu.countries],
+					['country with countries', (source: Source) => (source.locations.DE.countries = ['DE'])],
+					['world with countries', (source: Source) => (source.locations.world.countries = ['DE'])]
+				] as const
+			).map(
+				([name, mutate]) =>
+					[
+						name,
+						mutate,
+						/a continent, region or union lists its countries, and no other place does/
+					] as const
+			),
+			...(
+				[
+					['no countries', []],
+					['countries out of order', ['DE', 'CY', 'FR']],
+					['a country listed twice', ['CY', 'DE', 'DE', 'FR']],
+					['a code that is not a country', ['CY', 'DE', 'FRA']],
+					['a lowercase code', ['CY', 'de', 'FR']]
+				] as const
+			).map(
+				([name, countries]) =>
+					[
+						name,
+						(source: Source) => (source.locations.eu.countries = [...countries]),
+						'Location eu: countries must list ISO 3166-1 codes in order, once each'
+					] as const
+			),
 			[
-				'place in no place',
-				(source: Source) => (source.locations.DE.parentIds = []),
-				'Location DE lies in no place'
-			],
-			[
-				'unknown parent',
-				(source: Source) => (source.locations.DE.parentIds = ['emea']),
-				'Location DE lies in unknown place emea'
-			],
-			['cycle', (source: Source) => (source.locations.europe.parentIds = ['eu']), 'lies in itself'],
-			[
-				'repeated parent',
-				(source: Source) => (source.locations.DE.parentIds = ['eu', 'eu']),
-				'Location DE repeats a parent'
-			],
-			[
-				'parent that another parent contains',
-				(source: Source) => (source.locations.DE.parentIds = ['eu', 'europe']),
-				'Location DE: parent europe contains another of its parents'
+				'regions that list the same countries',
+				(source: Source) =>
+					(source.locations.emea = { name: 'EMEA', kind: 'region', countries: ['CY', 'DE', 'FR'] }),
+				'Locations emea and eu list the same countries'
 			],
 			[
 				'IDs that differ only in case',
-				(source: Source) =>
-					(source.locations.EU = { name: 'EU', kind: 'union', parentIds: ['europe'] }),
+				(source: Source) => (source.locations.EU = { name: 'EU', kind: 'country' }),
 				'Locations EU and eu differ only in case'
 			],
 			[
-				'subdivision outside its country',
-				(source: Source) =>
-					(source.locations['DE-BE'] = { name: 'Berlin', kind: 'subdivision', parentIds: ['eu'] }),
-				'Location DE-BE must lie in its country DE'
+				'subdivision of a country that locations does not list',
+				(source: Source) => (source.locations['FR-75'] = { name: 'Paris', kind: 'subdivision' }),
+				'Location FR-75 lies in unknown place FR'
 			],
 			...['unknown', 'none', 'Europe', 'e_u', 'DEU'].map(
 				(id) =>
 					[
 						`invalid ID ${id}`,
 						(source: Source) =>
-							(source.locations[id] = { name: id, kind: 'region', parentIds: ['world'] }),
+							(source.locations[id] = { name: id, kind: 'region', countries: ['DE'] }),
 						`Location ${JSON.stringify(id)} has an invalid ID`
 					] as const
 			),
@@ -415,8 +474,7 @@ describe('catalog source compiler invariants', () => {
 			),
 			[
 				'place that no record names',
-				(source: Source) =>
-					(source.locations.FR = { name: 'France', kind: 'country', parentIds: ['eu'] }),
+				(source: Source) => (source.locations.FR = { name: 'France', kind: 'country' }),
 				'Location FR: no record names it or a place inside it, so remove it'
 			],
 			[

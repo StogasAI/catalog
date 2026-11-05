@@ -7,7 +7,7 @@ import {
 	CATALOG_ROOT_LIMIT
 } from '../source/scripts/catalog-files.mjs';
 import { ancestorGroupIds } from '../source/scripts/model-groups.mjs';
-import { placeIndex } from '../source/scripts/locations.mjs';
+import { countriesIn, placeIndex } from '../source/scripts/locations.mjs';
 import { catalog, catalogRoot } from './generated-catalog';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
@@ -869,24 +869,23 @@ describe('compiled catalog', () => {
 		expect(checked).toHaveLength(42);
 	});
 
-	test('puts each place in every place that holds all the places directly inside it', () => {
+	test('puts each place in every place that holds all of its countries, and in no other', () => {
 		const { locations } = catalog;
-		const { within, inside } = placeIndex(locations);
+		const places = placeIndex(locations);
+		const regions = [...places.countries.keys()];
+		expect(regions.length).toBeGreaterThan(0);
 		for (const id of Object.keys(locations)) {
-			const members = Object.keys(locations).filter((place) =>
-				locations[place]!.parentIds.includes(id)
-			);
-			if (!members.length) continue;
+			if (id === 'world' || /^[A-Z]{2}-/.test(id)) continue;
+			const own = countriesIn(places, id);
 			// A policy that names a place admits a deployment in a place that it holds.
-			const holders = within
-				.get(members[0]!)!
-				.filter(
-					(place) =>
-						!within.get(id)!.includes(place) &&
-						!inside.get(id)!.includes(place) &&
-						members.every((member) => within.get(member)!.includes(place))
-				);
-			expect(holders, id).toEqual([]);
+			const holders = regions.filter(
+				(region) =>
+					region !== id && own.every((country) => places.countries.get(region)!.includes(country))
+			);
+			expect(
+				places.within.get(id)!.filter((place) => place !== id && place !== 'world'),
+				id
+			).toEqual(holders);
 		}
 	});
 
