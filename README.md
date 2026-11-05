@@ -36,6 +36,12 @@ Deployments, routes, and providers take a `retirementDate` from their provider, 
 
 A record serves until its date ends everywhere on Earth, at 12:00 UTC the next day.
 
+## What Stogas does not serve
+
+The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment states why in `stogasUnsupported`, one sentence, and the reason passes down the same way a retirement date does: a provider's reason goes to its routes, and a route's reason to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
+
+Unserved records sit in their own parts, which the root marks with `stogasUnsupported: true`. The gateway never reads those parts, so it never routes to these records. A request that names one fails with the reason.
+
 ## Develop
 
 ```sh

@@ -15,12 +15,44 @@
  * root gives each part the latest date in it. A reader skips each part whose records have all
  * retired, so a record leaves what readers load as it retires, without a release.
  *
+ * The catalog also lists what Stogas does not serve, so that it shows the whole market. Such a
+ * summary says why, and the records sit in parts of their own after the others, which the root
+ * marks. The gateway never reads those parts, so it never routes to them.
+ *
  * The root and its parts share a schema version, and a change to either names a new version of
  * both, so a reader knows from the root alone whether it reads a catalog, and readers that find a
- * newer format keep the newest catalog whose root they read.
+ * newer format keep the newest catalog whose root they read. Readers also read the previous
+ * format as the current one, so that a reader without a catalog of its own, such as the website,
+ * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v10';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v10';
+export const CATALOG_SCHEMA = 'stogas.catalog.v11';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v11';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v10';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v10';
+
+/**
+ * A root or part of the previous format as one of the current format, which differs only in that
+ * the root marks each part that holds what Stogas does not serve: the previous format lists none.
+ * Any other value comes back as it is, for the reader to check.
+ */
+export function currentCatalogFile(value) {
+	if (!isObject(value)) return value;
+	if (value.schema === PREVIOUS_CATALOG_PART_SCHEMA)
+		return { ...value, schema: CATALOG_PART_SCHEMA };
+	if (
+		value.schema !== PREVIOUS_CATALOG_SCHEMA ||
+		!Array.isArray(value.parts) ||
+		value.parts.some((part) => isObject(part) && Object.hasOwn(part, 'stogasUnsupported'))
+	)
+		return value;
+	return {
+		...value,
+		schema: CATALOG_SCHEMA,
+		parts: value.parts.map((part) =>
+			isObject(part) ? { ...part, stogasUnsupported: false } : part
+		)
+	};
+}
 
 export const CATALOG_KINDS = Object.freeze([
 	'authors',
@@ -63,11 +95,15 @@ export function isRetired(date, at = Date.now()) {
 	return date !== null && date !== undefined && at.valueOf() >= retiredFrom(date);
 }
 
-/** What the root keeps of a record that a part holds, or of a whole record. */
-export function recordSummary(kind, record, part, retirementDate) {
+/**
+ * What the root keeps of a record that a part holds, or of a whole record, with why Stogas does not
+ * serve it when it does not.
+ */
+export function recordSummary(kind, record, part, retirementDate, stogasUnsupported = null) {
+	const reason = stogasUnsupported === null ? {} : { stogasUnsupported };
 	const fields = Object.hasOwn(PART_KINDS, kind) ? PART_KINDS[kind] : null;
-	if (!fields) return { ...record, retirementDate };
-	const summary = { part, retirementDate };
+	if (!fields) return { ...record, retirementDate, ...reason };
+	const summary = { part, retirementDate, ...reason };
 	for (const field of fields) if (Object.hasOwn(record, field)) summary[field] = record[field];
 	if (kind === 'deployments') summary.routeIds = Object.keys(record.routes).sort();
 	return summary;
@@ -75,7 +111,7 @@ export function recordSummary(kind, record, part, retirementDate) {
 
 /** A whole record from its summary in the root. */
 function wholeRecord(summary) {
-	const { retirementDate: _retirementDate, ...record } = summary;
+	const { retirementDate: _retirementDate, stogasUnsupported: _reason, ...record } = summary;
 	return record;
 }
 
@@ -98,7 +134,8 @@ export function checkedCatalogFiles(root, rootSize) {
 	let bytes = rootSize;
 	for (const file of root.parts) {
 		if (
-			!hasKeys(file, ['sha256', 'size', 'through']) ||
+			!hasKeys(file, ['sha256', 'size', 'through', 'stogasUnsupported']) ||
+			typeof file.stogasUnsupported !== 'boolean' ||
 			typeof file.sha256 !== 'string' ||
 			!/^[0-9a-f]{64}$/.test(file.sha256) ||
 			seen.has(file.sha256) ||
@@ -118,10 +155,13 @@ export function checkedCatalogFiles(root, rootSize) {
 
 /**
  * The positions of the parts that hold a record that has not retired at `at`, which is every part
- * whose records do not all retire by then.
+ * whose records do not all retire by then. Without `unsupported`, it leaves out the parts of the
+ * records that Stogas does not serve, as the gateway does.
  */
-export function partsInEffect(root, at = Date.now()) {
-	return root.parts.flatMap(({ through }, index) => (isRetired(through, at) ? [] : [index]));
+export function partsInEffect(root, at = Date.now(), { unsupported = false } = {}) {
+	return root.parts.flatMap(({ through, stogasUnsupported }, index) =>
+		isRetired(through, at) || (stogasUnsupported && !unsupported) ? [] : [index]
+	);
 }
 
 /** The positions of the parts that hold the records of the given kinds and IDs, once each. */
@@ -272,7 +312,13 @@ function partMembers(root) {
 
 /** The record, after checking that the summary repeats its fields. */
 function matching(kind, id, record, summary) {
-	const expected = recordSummary(kind, record, summary.part, summary.retirementDate);
+	const expected = recordSummary(
+		kind,
+		record,
+		summary.part,
+		summary.retirementDate,
+		summary.stogasUnsupported ?? null
+	);
 	if (canonical(expected) !== canonical(summary))
 		throw new Error(`${kind} ${id} differs from its summary.`);
 	return record;

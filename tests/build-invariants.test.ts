@@ -699,6 +699,108 @@ describe('catalog source compiler invariants', () => {
 		expect(canonicalJson(assembleCatalog(root, parts).graph)).toBe(canonicalJson(catalog.graph));
 	});
 
+	test('lists what Stogas does not serve, with its reason, in parts that the gateway skips', () => {
+		const source = sourceFixture();
+		addSecondOpenAIRoute(source);
+		const { authors, deployments, models, providers, routes } = source.graph;
+		models['gpt-batch'] = { ...models['gpt-test'], name: 'GPT Batch', aliases: ['gpt.batch'] };
+		deployments['openai-gpt-batch'] = {
+			...structuredClone(deployments['openai-gpt-test']),
+			modelId: 'gpt-batch',
+			routeIds: ['openai-chat-completions'],
+			upstream: { model: 'gpt-batch' }
+		};
+		const batch = 'The gateway has no batch API.';
+		Object.assign(routes['openai-chat-completions'], { stogasUnsupported: batch });
+		let catalog = buildCatalog(source);
+		// The route's deployments take its reason; the other route and its deployment stay served.
+		expect(catalog.graph.routes['openai-chat-completions'].stogasUnsupported).toBe(batch);
+		expect(catalog.graph.deployments['openai-gpt-batch'].stogasUnsupported).toBe(batch);
+		expect(catalog.graph.routes['openai-responses']).not.toHaveProperty('stogasUnsupported');
+		expect(catalog.graph.deployments['openai-gpt-test']).not.toHaveProperty('stogasUnsupported');
+		let files = catalogFiles(catalog);
+		let root = JSON.parse(files.rootJson);
+		// A model goes unserved with its deployments, and a provider with its routes.
+		expect(root.summaries.models['gpt-batch'].stogasUnsupported).toBe(batch);
+		expect(root.summaries.models['gpt-test']).not.toHaveProperty('stogasUnsupported');
+		expect(root.summaries.providers.openai).not.toHaveProperty('stogasUnsupported');
+		expect(root.summaries.deployments['openai-gpt-batch'].stogasUnsupported).toBe(batch);
+		// Unserved records follow the others in parts of their own, which readers skip by default.
+		const flags = root.parts.map(
+			({ stogasUnsupported }: { stogasUnsupported: boolean }) => stogasUnsupported
+		);
+		expect(flags).toEqual([false, true]);
+		expect(root.summaries.deployments['openai-gpt-batch'].part).toBe(1);
+		expect(root.summaries.models['gpt-batch'].part).toBe(1);
+		expect(root.summaries.routes['openai-chat-completions'].part).toBe(1);
+		expect(partsInEffect(root)).toEqual([0]);
+		expect(partsInEffect(root, Date.now(), { unsupported: true })).toEqual([0, 1]);
+		const read = (positions: number[]) =>
+			root.parts.map(({ sha256 }: { sha256: string }, index: number) =>
+				positions.includes(index) ? JSON.parse(files.parts.get(`${sha256}.json`)!) : null
+			);
+		expect(canonicalJson(assembleCatalog(root, read([0, 1])).graph)).toBe(
+			canonicalJson(catalog.graph)
+		);
+		// The served records reach no unserved one.
+		const served = assembleCatalog(root, read([0])).graph;
+		expect(Object.keys(served.deployments)).toEqual(['openai-gpt-test']);
+		expect(Object.keys(served.routes)).toEqual(['openai-responses']);
+
+		// A provider that Stogas does not serve gives each route its reason, and its record, which
+		// the root holds whole, carries none of its own.
+		const cloud = 'Stogas has no account in this cloud.';
+		Object.assign(providers.openai, { stogasUnsupported: cloud });
+		catalog = buildCatalog(source);
+		expect(catalog.graph.routes['openai-responses'].stogasUnsupported).toBe(cloud);
+		expect(catalog.graph.routes['openai-chat-completions'].stogasUnsupported).toBe(batch);
+		expect(catalog.graph.deployments['openai-gpt-test'].stogasUnsupported).toBe(cloud);
+		expect(catalog.graph.providers.openai).not.toHaveProperty('stogasUnsupported');
+		files = catalogFiles(catalog);
+		root = JSON.parse(files.rootJson);
+		// Routes with different reasons leave their provider and author the general one.
+		expect(root.summaries.providers.openai.stogasUnsupported).toBe(
+			'Stogas serves none of its routes.'
+		);
+		expect(root.summaries.authors.openai.stogasUnsupported).toBe(
+			'Stogas serves none of its models.'
+		);
+		expect(
+			root.parts.every(({ stogasUnsupported }: { stogasUnsupported: boolean }) => stogasUnsupported)
+		).toBe(true);
+		expect(partsInEffect(root)).toEqual([]);
+		expect(authors.openai).not.toHaveProperty('stogasUnsupported');
+	});
+
+	testRejections([
+		[
+			'rejects a deployment on routes that Stogas serves and on one that it does not',
+			(source) => {
+				addSecondOpenAIRoute(source);
+				source.graph.deployments['openai-gpt-test'].routeIds = [
+					'openai-chat-completions',
+					'openai-responses'
+				];
+				Object.assign(source.graph.routes['openai-chat-completions'], {
+					stogasUnsupported: 'The gateway has no batch API.'
+				});
+			},
+			'openai-gpt-test: split the routes that Stogas serves from those that it does not'
+		],
+		[
+			'rejects a period that changes whether Stogas serves a record',
+			(source) =>
+				setPeriods(source.graph.deployments['openai-gpt-test'], [
+					{
+						name: 'Test',
+						start: '2026-11-01T00:00:00Z',
+						set: { stogasUnsupported: 'Not yet.' }
+					}
+				]),
+			'cannot change stogasUnsupported'
+		]
+	]);
+
 	test('compiles dated periods into a schedule of whole changed nodes', () => {
 		const source = sourceFixture();
 		setPeriods(source.graph.deployments['openai-gpt-test'], [
@@ -1619,6 +1721,16 @@ describe('catalog source compiler invariants', () => {
 					};
 				},
 				'openai-gpt-test-fast: Fast matches several Standard deployments on openai-responses'
+			],
+			[
+				'a Standard deployment that Stogas does not serve',
+				(source: Source) => {
+					addFast(source);
+					Object.assign(source.graph.deployments['openai-gpt-test'], {
+						stogasUnsupported: 'Not served.'
+					});
+				},
+				'openai-gpt-test-fast: Fast needs a Standard deployment on openai-responses'
 			],
 			[
 				'a Standard deployment that retires first',

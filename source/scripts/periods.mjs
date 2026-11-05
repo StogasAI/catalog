@@ -2,9 +2,9 @@ import { canonicalJson } from './canonical-json.mjs';
 
 const nodeKinds = ['authors', 'groups', 'models', 'providers', 'routes', 'deployments'];
 
-// A period changes facts about a node, never its identity, its edges or when it retires, so
-// every dated state has the same nodes, selectors and links as the base graph, and each record
-// has one retirement date.
+// A period changes facts about a node, never its identity, its edges, when it retires or whether
+// Stogas serves it, so every dated state has the same nodes, selectors and links as the base
+// graph, and each record has one retirement date and one answer to whether Stogas serves it.
 const structuralFields = new Set([
 	'aliases',
 	'authorId',
@@ -15,7 +15,8 @@ const structuralFields = new Set([
 	'periods',
 	'providerId',
 	'retirementDate',
-	'routeIds'
+	'routeIds',
+	'stogasUnsupported'
 ]);
 
 /**

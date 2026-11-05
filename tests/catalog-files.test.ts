@@ -7,6 +7,8 @@ import {
 	CATALOG_PART_SCHEMA,
 	CATALOG_SCHEMA,
 	assembleCatalog,
+	checkedCatalogFiles,
+	currentCatalogFile,
 	isRetired,
 	partsInEffect,
 	partsOfRecords,
@@ -163,7 +165,8 @@ describe('catalog parts', () => {
 			expect(root.parts[index]).toEqual({
 				sha256: part.sha256,
 				size: part.size,
-				through: root.parts[index]!.through
+				through: root.parts[index]!.through,
+				stogasUnsupported: false
 			});
 		});
 		deploymentsOf(parts).forEach((ids, index) => {
@@ -345,6 +348,38 @@ describe('catalog parts', () => {
 			).toEqual(repriced);
 		}
 		expect(whole(assembleCatalog<Source>(root, parts))).toBe(whole(catalog));
+	});
+
+	test('read a root and parts of the previous format as the current format', () => {
+		const { root, parts } = files(partitionCatalog(scheduled()));
+		expect(root.parts.some((part) => part.stogasUnsupported)).toBe(false);
+		// The previous format is the current one without the mark on each part.
+		const previousRoot = {
+			...root,
+			schema: 'stogas.catalog.v10',
+			parts: root.parts.map(({ stogasUnsupported: _, ...part }) => part)
+		};
+		const previousParts = parts.map((part) => ({ ...part, schema: 'stogas.catalog.part.v10' }));
+		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
+		expect(currentRoot).toEqual(root);
+		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
+		expect(checkedCatalogFiles(currentRoot, 1)).toEqual(root.parts);
+		expect(
+			assembleCatalog(currentRoot, previousParts.map(currentCatalogFile) as CatalogPart[])
+		).toEqual(assembleCatalog(root, parts));
+		// Without the conversion, and for anything else, the reader refuses as before.
+		expect(() => assembleCatalog(previousRoot as never, parts)).toThrow('root is invalid');
+		for (const other of [
+			null,
+			'stogas.catalog.v10',
+			{ ...previousRoot, schema: 'stogas.catalog.v9' },
+			{ ...previousRoot, parts: undefined },
+			{ ...previousRoot, parts: root.parts },
+			{ ...parts[0], schema: 'stogas.catalog.part.v9' }
+		])
+			expect(currentCatalogFile(other)).toBe(other);
+		expect(currentCatalogFile(root)).toBe(root);
+		expect(currentCatalogFile(parts[0])).toBe(parts[0]);
 	});
 
 	test('refuse parts that do not match their root', () => {
@@ -556,12 +591,13 @@ describe('catalog limits', () => {
 	const file = (sha256 = 'a'.repeat(64), size = 1, through: string | null = null) => ({
 		sha256,
 		size,
-		through
+		through,
+		stogasUnsupported: false
 	});
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v10',
+				schema: 'stogas.catalog.v11',
 				locations: {},
 				summaries: {},
 				parts,

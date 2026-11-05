@@ -15,6 +15,10 @@ package catalog
 #CountryCode: string & =~"^[A-Z]{2}$"
 #Uuid:        string & =~"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 
+// Why Stogas does not serve a provider, route or deployment, in one sentence. The catalog lists
+// what the market offers; the gateway never routes to a record that Stogas does not serve.
+#UnsupportedReason: string & =~"^[A-Z][^\\n]{0,298}\\.$"
+
 #Modality:        "text" | "image" | "audio" | "video"
 #ReasoningEffort: "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 #Reasoning:       "unsupported" | "optional" | "required"

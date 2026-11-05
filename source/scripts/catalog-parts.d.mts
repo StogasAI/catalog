@@ -22,3 +22,8 @@ export function partitionCatalog(catalog: {
 
 /** Each record's retirement date, by kind and ID, or null. */
 export function retirementDates(graph: Graph): Record<CatalogKind, Record<string, string | null>>;
+
+/** Why Stogas does not serve each record, by kind and ID, or null when it serves it. */
+export function unsupportedReasons(
+	graph: Graph
+): Record<CatalogKind, Record<string, string | null>>;

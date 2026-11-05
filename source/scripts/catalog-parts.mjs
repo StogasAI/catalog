@@ -12,7 +12,8 @@ import { ancestorGroupIds } from './model-groups.mjs';
 
 // Records go to parts in a fixed order: those without a retirement date by kind, owner and ID,
 // then those with one by date, kind, owner and ID, so that a part's records retire together and a
-// release with later retirements adds parts after the others. A part ends before a record whose
+// release with later retirements adds parts after the others. The records that Stogas does not
+// serve follow in the same order in parts of their own, which the gateway never reads. A part ends before a record whose
 // kind and ID hash below the record's share of PART_BYTES, so parts take PART_BYTES on average
 // whatever the size of their records, and where a part ends depends only on the record there:
 // adding, changing or removing a record changes its part, and the part beside it only when the
@@ -39,11 +40,14 @@ export function partitionCatalog(catalog) {
 	const { graph, schedule } = catalog;
 	const dates = retirementDates(graph);
 	const dateOf = (kind, id) => dates[kind][id];
+	const reasons = unsupportedReasons(graph);
+	const reasonOf = (kind, id) => reasons[kind][id];
 	const records = Object.keys(PART_KINDS).flatMap((kind) =>
 		Object.entries(graph[kind]).map(([id, record]) => ({
 			kind,
 			id,
 			date: dateOf(kind, id),
+			unsupported: reasonOf(kind, id) !== null,
 			owner: owner(graph, kind, record),
 			// What the record adds to its part's file: its member, and its member of each schedule
 			// entry that changes it with that entry's frame, which is at least the file's share because
@@ -61,6 +65,7 @@ export function partitionCatalog(catalog) {
 	);
 	records.sort(
 		(left, right) =>
+			Number(left.unsupported) - Number(right.unsupported) ||
 			Number(left.date !== null) - Number(right.date !== null) ||
 			compare(left.date ?? '', right.date ?? '') ||
 			KIND_RANKS.get(left.kind) - KIND_RANKS.get(right.kind) ||
@@ -71,11 +76,13 @@ export function partitionCatalog(catalog) {
 	const contents = Array.from({ length: records.length ? assignment.at(-1) + 1 : 0 }, () => ({
 		graph: {},
 		schedule: new Map(),
-		through: null
+		through: null,
+		unsupported: false
 	}));
 	const partOf = Object.fromEntries(Object.keys(PART_KINDS).map((kind) => [kind, new Map()]));
-	records.forEach(({ kind, id, date }, position) => {
+	records.forEach(({ kind, id, date, unsupported }, position) => {
 		const content = contents[assignment[position]];
+		content.unsupported = unsupported;
 		(content.graph[kind] ??= {})[id] = graph[kind][id];
 		if (date !== null && (content.through === null || date > content.through))
 			content.through = date;
@@ -95,7 +102,7 @@ export function partitionCatalog(catalog) {
 		if (size > CATALOG_PART_LIMIT)
 			throw new Error(`A catalog part is ${size} bytes; the limit is ${CATALOG_PART_LIMIT}.`);
 	const summarize = (kind, id, record) =>
-		recordSummary(kind, record, partOf[kind]?.get(id), dateOf(kind, id));
+		recordSummary(kind, record, partOf[kind]?.get(id), dateOf(kind, id), reasonOf(kind, id));
 	const summaries = Object.fromEntries(
 		CATALOG_KINDS.map((kind) => [
 			kind,
@@ -111,7 +118,8 @@ export function partitionCatalog(catalog) {
 		parts: parts.map(({ sha256, size }, index) => ({
 			sha256,
 			size,
-			through: contents[index].through
+			through: contents[index].through,
+			stogasUnsupported: contents[index].unsupported
 		})),
 		periods: catalog.periods,
 		// Every start stays, because parts can change where the root does not.
@@ -152,7 +160,10 @@ export function retirementDates(graph) {
 	// Each record's date from the dates of the records it exists for, listed by its ID.
 	const dated = (kind, pairs) => {
 		const members = new Map();
-		for (const [id, date] of pairs) members.set(id, [...(members.get(id) ?? []), date]);
+		for (const [id, date] of pairs) {
+			if (!members.has(id)) members.set(id, []);
+			members.get(id).push(date);
+		}
 		return Object.fromEntries(Object.keys(graph[kind]).map((id) => [id, latest(members.get(id))]));
 	};
 	const deployments = Object.fromEntries(
@@ -187,6 +198,70 @@ export function retirementDates(graph) {
 	return { authors, groups, models, providers, routes, deployments };
 }
 
+/**
+ * Why Stogas does not serve each record, by kind and ID, or null when it serves it. A route and a
+ * deployment can say so themselves, and the build has given each route its provider's reason and
+ * each deployment its routes'. A record also goes unserved once Stogas serves none of the records
+ * it exists for, as it retires with them: a model or a route with its deployments, a provider with
+ * its routes, an author with its models, and a group with the models in it and in its child
+ * groups. It takes their reason when they share one. Periods cannot change reasons.
+ */
+export function unsupportedReasons(graph) {
+	const members = { models: 'deployments', routes: 'deployments', providers: 'routes' };
+	Object.assign(members, { authors: 'models', groups: 'models' });
+	// Each record's reason from the reasons of the records it exists for, listed by its ID.
+	const derived = (kind, pairs) => {
+		const reasons = new Map();
+		for (const [id, reason] of pairs) {
+			if (!reasons.has(id)) reasons.set(id, []);
+			reasons.get(id).push(reason);
+		}
+		return Object.fromEntries(
+			Object.keys(graph[kind]).map((id) => {
+				const listed = reasons.get(id) ?? [];
+				if (!listed.length || listed.includes(null)) return [id, null];
+				return [
+					id,
+					new Set(listed).size === 1 ? listed[0] : `Stogas serves none of its ${members[kind]}.`
+				];
+			})
+		);
+	};
+	const deployments = Object.fromEntries(
+		Object.entries(graph.deployments).map(([id, deployment]) => [
+			id,
+			deployment.stogasUnsupported ?? null
+		])
+	);
+	const models = derived(
+		'models',
+		Object.entries(graph.deployments).map(([id, { modelId }]) => [modelId, deployments[id]])
+	);
+	const routes = derived(
+		'routes',
+		Object.entries(graph.deployments).flatMap(([id, deployment]) =>
+			Object.keys(deployment.routes).map((routeId) => [routeId, deployments[id]])
+		)
+	);
+	for (const [id, route] of Object.entries(graph.routes))
+		routes[id] = route.stogasUnsupported ?? routes[id];
+	const providers = derived(
+		'providers',
+		Object.entries(graph.routes).map(([id, { providerId }]) => [providerId, routes[id]])
+	);
+	const authors = derived(
+		'authors',
+		Object.entries(graph.models).map(([id, { authorId }]) => [authorId, models[id]])
+	);
+	const groups = derived(
+		'groups',
+		Object.entries(graph.models).flatMap(([id, model]) =>
+			ancestorGroupIds(graph.groups, model.groupIds).map((groupId) => [groupId, models[id]])
+		)
+	);
+	return { authors, groups, models, providers, routes, deployments };
+}
+
 /** The part of each record, in order. */
 function cut(records) {
 	const frame = byteLength(canonicalJson({ schema: CATALOG_PART_SCHEMA, graph: {}, schedule: [] }));
@@ -195,19 +270,23 @@ function cut(records) {
 	let size = 0;
 	let kinds = new Set();
 	let dated = false;
-	for (const { kind, id, date, weight } of records) {
+	let unsupported = false;
+	for (const { kind, id, date, unsupported: unserved, weight } of records) {
 		// The first record of a kind in a part adds the kind's member too.
 		const grows = () => weight + (kinds.has(kind) ? 0 : byteLength(JSON.stringify(kind)) + 3);
 		if (
 			size > 0 &&
 			(isBoundary(kind, id, weight) ||
 				frame + size + grows() > CATALOG_PART_LIMIT ||
-				(date !== null && !dated))
+				(date !== null && !dated) ||
+				unserved !== unsupported)
 		) {
 			part += 1;
 			size = 0;
 			kinds = new Set();
 		}
+		// The records that Stogas does not serve start over, without and then with dates.
+		if (unserved !== unsupported) [unsupported, dated] = [unserved, false];
 		dated ||= date !== null;
 		parts.push(part);
 		size += grows();

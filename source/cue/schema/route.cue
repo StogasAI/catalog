@@ -62,5 +62,7 @@ package catalog
 	// API that it retires. Its deployments stop serving through it then, and a
 	// deployment that no other route serves retires.
 	retirementDate?: #Date
+	// Stogas does not serve this route, so none of its deployments either.
+	stogasUnsupported?: #UnsupportedReason
 	periods?: [#Period, ...#Period]
 })

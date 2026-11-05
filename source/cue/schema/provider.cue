@@ -14,5 +14,7 @@ package catalog
 	// The date that the provider names for ending its service. Its routes and
 	// deployments retire then.
 	retirementDate?: #Date
+	// Stogas serves none of its routes; each of them takes this reason.
+	stogasUnsupported?: #UnsupportedReason
 	periods?: [#Period, ...#Period]
 })

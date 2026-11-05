@@ -1001,6 +1001,9 @@ function compileGraph(source, places) {
 					route.retirementDate ?? null,
 					provider.retirementDate ?? null
 				);
+				// Stogas does not serve a route that it says so of, or any route of a provider that
+				// it says so of.
+				const stogasUnsupported = route.stogasUnsupported ?? provider.stogasUnsupported;
 				const overrides = route.overrides ?? {};
 				rejectRedundantOverride(
 					provider.capabilities,
@@ -1031,7 +1034,8 @@ function compileGraph(source, places) {
 							dataHandlingFields.map((field) => [field, dataHandling[field]])
 						),
 						hostedTools,
-						...(retirementDate !== null && { retirementDate })
+						...(retirementDate !== null && { retirementDate }),
+						...(stogasUnsupported !== undefined && { stogasUnsupported })
 					}
 				];
 			})
@@ -1238,6 +1242,17 @@ function compileGraph(source, places) {
 		if (retirementDate !== null && retirementDate < model.releaseDate) {
 			throw new Error(`${deploymentId}: retirementDate precedes model releaseDate`);
 		}
+		// Stogas serves a deployment on every route that serves it or on none, so the gateway
+		// loads whole records, and a deployment that Stogas does not serve takes its routes' reason.
+		const routeReasons = deployment.routeIds.map(
+			(routeId) => graph.routes[routeId].stogasUnsupported
+		);
+		if (new Set(routeReasons.map((reason) => reason === undefined)).size > 1) {
+			throw new Error(
+				`${deploymentId}: split the routes that Stogas serves from those that it does not`
+			);
+		}
+		const stogasUnsupported = deployment.stogasUnsupported ?? routeReasons[0];
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
@@ -1402,6 +1417,7 @@ function compileGraph(source, places) {
 			// Closed models do not disclose how their weights are stored.
 			weightPrecision: deployment.weightPrecision ?? 'unknown',
 			retirementDate,
+			...(stogasUnsupported !== undefined && { stogasUnsupported }),
 			...served
 		};
 	}
@@ -1450,7 +1466,8 @@ function compileGraph(source, places) {
 			if (
 				!standard ||
 				(standard.retirementDate !== null &&
-					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate))
+					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate)) ||
+				(standard.stogasUnsupported !== undefined && fast.stogasUnsupported === undefined)
 			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}
@@ -1458,7 +1475,8 @@ function compileGraph(source, places) {
 	}
 
 	// Routes and deployments carry resolved facts, so readers never combine records, and each
-	// route record names the hash of its chain. A provider's date is its routes' already.
+	// route record names the hash of its chain. A provider's date, and whether Stogas serves it,
+	// are its routes' already.
 	const compiled = {
 		...sourceGraph,
 		providers: Object.fromEntries(
@@ -1467,6 +1485,7 @@ function compileGraph(source, places) {
 					capabilities: _routeDefaults,
 					dataHandling: _dataDefaults,
 					retirementDate: _routesDate,
+					stogasUnsupported: _routesReason,
 					...facts
 				} = provider;
 				return [id, facts];

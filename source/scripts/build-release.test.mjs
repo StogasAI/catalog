@@ -16,7 +16,14 @@ function fixture(t, probe = '', part = null) {
 	const root = join(parent, 'catalog');
 	mkdirSync(root);
 	const parts = part
-		? [{ sha256: digest(part), size: Buffer.byteLength(part), through: null }]
+		? [
+				{
+					sha256: digest(part),
+					size: Buffer.byteLength(part),
+					through: null,
+					stogasUnsupported: false
+				}
+			]
 		: [];
 	const canary = `test-publication-canary-${randomUUID()}`;
 	const secretFile = join(parent, 'publisher-secret');
@@ -36,7 +43,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-const root = { schema: 'stogas.catalog.v10', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
+const root = { schema: 'stogas.catalog.v11', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
 mkdirSync('generated', { recursive: true });
 writeFileSync('generated/catalog.json', JSON.stringify(root));
 const part = ${JSON.stringify(part)};
@@ -137,7 +144,7 @@ helper.unref();
 			readFileSync(join(source.root, 'generated/catalog.json'), 'utf8')
 		);
 		assert.deepEqual(root, {
-			schema: 'stogas.catalog.v10',
+			schema: 'stogas.catalog.v11',
 			locations: {},
 			summaries: {},
 			parts: source.parts

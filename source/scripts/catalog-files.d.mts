@@ -1,7 +1,13 @@
 import type { Locations } from './locations.mjs';
 
-export const CATALOG_SCHEMA: 'stogas.catalog.v10';
-export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v10';
+export const CATALOG_SCHEMA: 'stogas.catalog.v11';
+export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v11';
+/**
+ * A root or part of the previous format as one of the current format, which differs only in that
+ * the root marks each part that holds what Stogas does not serve: the previous format lists none.
+ * Any other value comes back as it is, for the reader to check.
+ */
+export function currentCatalogFile(value: unknown): unknown;
 export const CATALOG_KINDS: readonly [
 	'authors',
 	'groups',
@@ -33,12 +39,20 @@ export function retiredFrom(date: string): number;
 export function isRetired(date: string | null | undefined, at?: Date | number): boolean;
 
 /**
- * A part that the root names: the SHA-256 of its bytes in hex, its size, and the latest retirement
- * date of its records, or null when one of them has none.
+ * A part that the root names: the SHA-256 of its bytes in hex, its size, the latest retirement
+ * date of its records, or null when one of them has none, and whether it holds the records that
+ * Stogas does not serve.
  */
-export type CatalogPartFile = { sha256: string; size: number; through: string | null };
+export type CatalogPartFile = {
+	sha256: string;
+	size: number;
+	through: string | null;
+	stogasUnsupported: boolean;
+};
 
-type Summary = { part: number; retirementDate: string | null };
+/** Why Stogas does not serve a record; a record that it serves has none. */
+type Unsupported = { stogasUnsupported?: string };
+type Summary = { part: number; retirementDate: string | null } & Unsupported;
 export type ModelSummary = Summary & {
 	aliases: string[];
 	authorId: string;
@@ -49,8 +63,13 @@ export type ModelSummary = Summary & {
 };
 export type RouteSummary = Summary & { interfaces: string[]; providerId: string };
 export type DeploymentSummary = Summary & { modelId: string; routeIds: string[] };
-/** An author, group or provider: its whole record and its retirement date. */
-export type WholeSummary = Record<string, unknown> & { retirementDate: string | null };
+/**
+ * An author, group or provider: its whole record, its retirement date, and why Stogas does not
+ * serve it when it does not.
+ */
+export type WholeSummary = Record<string, unknown> & {
+	retirementDate: string | null;
+} & Unsupported;
 
 export type CatalogSummaries = {
 	authors: Record<string, WholeSummary>;
@@ -106,7 +125,8 @@ export function recordSummary(
 	kind: CatalogKind,
 	record: object,
 	part: number | undefined,
-	retirementDate: string | null
+	retirementDate: string | null,
+	stogasUnsupported?: string | null
 ): object;
 
 /**
@@ -115,10 +135,14 @@ export function recordSummary(
  */
 export function checkedCatalogFiles(root: unknown, rootSize: number): CatalogPartFile[];
 
-/** The positions of the parts that hold a record that has not retired at `at`. */
+/**
+ * The positions of the parts that hold a record that has not retired at `at`. Without
+ * `unsupported`, it leaves out the parts of the records that Stogas does not serve.
+ */
 export function partsInEffect(
 	root: { parts: readonly CatalogPartFile[] },
-	at?: Date | number
+	at?: Date | number,
+	options?: { unsupported?: boolean }
 ): number[];
 
 /** The positions of the parts that hold the records of the given kinds and IDs, once each. */

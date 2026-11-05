@@ -337,10 +337,15 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 
 	/** Names one more part in the release's root, as a build does, and returns its name. */
 	function withPart(release: string) {
-		const bytes = Buffer.from(JSON.stringify({ schema: 'stogas.catalog.part.v10', graph: {} }));
+		const bytes = Buffer.from(JSON.stringify({ schema: 'stogas.catalog.part.v11', graph: {} }));
 		writeFileSync(join(release, 'blobs/sha256', `${digest(bytes)}.json`), bytes);
 		rooted(release, (root) =>
-			root.parts.push({ sha256: digest(bytes), size: bytes.byteLength, through: null })
+			root.parts.push({
+				sha256: digest(bytes),
+				size: bytes.byteLength,
+				through: null,
+				stogasUnsupported: false
+			})
 		);
 		return `${digest(bytes)}.json`;
 	}
