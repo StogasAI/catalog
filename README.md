@@ -26,13 +26,13 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 
 Deployments, routes, and providers take a `retirementDate` from their provider, and a provider's date also ends its routes. A record also retires once all of these have retired:
 
-| Record       | Retires with                |
-| ------------ | --------------------------- |
-| Deployment   | its routes                  |
-| Model, route | its deployments             |
-| Provider     | its routes                  |
-| Author       | its models                  |
-| Group        | its models and child groups |
+| Record       | Retires with                                   |
+| ------------ | ---------------------------------------------- |
+| Deployment   | its routes                                     |
+| Model, route | its deployments                                |
+| Provider     | its routes                                     |
+| Author       | its models                                     |
+| Group        | its models, including its child groups' models |
 
 A record serves until its date ends everywhere on Earth, at 12:00 UTC the next day.
 
