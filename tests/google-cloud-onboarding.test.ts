@@ -1,5 +1,5 @@
 import { describe, test } from 'bun:test';
-import { claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
+import { anthropicHosted, claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
 import { catalog } from './generated-catalog';
 import {
 	assertProviderOnboardingContract,
@@ -131,16 +131,9 @@ const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 			: [])
 	]
 );
-// Anthropic keeps the prompts of its own offering for 30 days in a place it does not name.
-deployments.push(
-	deployment(
-		'google-cloud-claude-fable-5-1-anthropic-hosted',
-		'claude-fable-5-1',
-		{ hosting: 'anthropic', inferenceGeo: 'global' },
-		{ retentionDays: 30 },
-		agentPlatform[0]!.global
-	)
-);
+// Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
+// serves what Anthropic's does. Mythos and Fast mode are not listed yet.
+const platformModels = Object.keys(claudeModels) as ClaudeModelId[];
 
 describe('Google Cloud onboarding contract', () => {
 	test('pins the Claude route and every deployment', () => {
@@ -182,9 +175,39 @@ describe('Google Cloud onboarding contract', () => {
 					id: 'google-cloud-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
+				},
+				{
+					capabilities: { streaming: false },
+					documentFormats: {
+						extensions: ['.csv', '.md', '.pdf', '.txt'],
+						mediaTypes: ['application/pdf', 'text/plain']
+					},
+					hostedTools: [
+						{
+							dataHandling: { processingLocation: 'unknown' },
+							hostings: ['anthropic'],
+							pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
+							tool: 'web_search'
+						},
+						{
+							dataHandling: {
+								processingLocation: 'unknown',
+								retentionDays: null,
+								storageLocation: 'unknown',
+								zeroDataRetention: false
+							},
+							hostings: ['anthropic'],
+							tool: 'web_fetch'
+						}
+					],
+					id: 'google-cloud-batch-messages',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions', 'responses'],
+					stogasUnsupported: 'The gateway answers each request as it arrives and has no batch API.'
 				}
 			],
-			deployments
+			deployments,
+			anthropicHosted: anthropicHosted('google-cloud', platformModels)
 		});
 	});
 });

@@ -81,11 +81,14 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
-// Who runs Claude on each cloud. Both hostings share the provider's Messages route.
+// Who runs Claude on each cloud. Both hostings share the provider's Messages route, and its batch
+// route.
 const cloudClaudeHostings = {
 	aws: ['anthropic', 'aws'],
 	'google-cloud': ['anthropic', 'google']
 };
+// The hosting that is the provider itself; a deployment ID names any other host.
+const providerHostings = { aws: 'aws', azure: 'azure', 'google-cloud': 'google' };
 const nodeIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
@@ -1095,13 +1098,17 @@ function compileGraph(source, places) {
 		}
 		const [modelId, routeId] = key.split('\0');
 		const providerId = requireNode(graph.routes, routeId, modelId).providerId;
-		// A route whose deployments of the model all share one tier, as a batch API's do, names its
-		// base after that tier.
-		const tiers = new Set(
-			deploymentIds.map((id) => graph.deployments[id].upstream.serviceTier ?? 'standard')
-		);
-		const tier = tiers.size === 1 ? [...tiers][0] : 'standard';
-		const baseId = `${providerId}-${modelId}${tier === 'standard' ? '' : `-${tier}`}`;
+		// A route whose deployments of the model all share one tier, as a batch API's do, or one host
+		// other than the provider, names its base after them.
+		const shared = (field, fallback) => {
+			const values = new Set(
+				deploymentIds.map((id) => graph.deployments[id].upstream[field] ?? fallback)
+			);
+			return values.size === 1 ? [...values][0] : fallback;
+		};
+		const tier = shared('serviceTier', 'standard');
+		const host = shared('hosting', providerHostings[providerId]);
+		const baseId = `${providerId}-${modelId}${host === providerHostings[providerId] ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`;
 		if (!deploymentIds.includes(baseId)) {
 			throw new Error(
 				`${key.replace('\0', '/')}: multiple deployments require canonical base ${baseId}`
@@ -1321,8 +1328,10 @@ function compileGraph(source, places) {
 						'serviceTier'
 					].includes(key)
 				)) ||
+			// Anthropic takes no inference geography for models before Claude 4.6.
 			((providerId === 'aws' || providerId === 'google-cloud') &&
-				['hosting', 'inferenceGeo', 'model'].every((key) => selectorKeys.includes(key)) &&
+				['hosting', 'model'].every((key) => selectorKeys.includes(key)) &&
+				(selectorKeys.includes('inferenceGeo') || deployment.upstream.hosting === 'anthropic') &&
 				selectorKeys.every((key) =>
 					['hosting', 'inferenceGeo', 'model', 'serviceTier'].includes(key)
 				));
@@ -1354,7 +1363,8 @@ function compileGraph(source, places) {
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
 		// AWS and Google Cloud serve only Claude, on the provider's Messages route, and a batch
-		// deployment on its batch route.
+		// deployment, from the cloud's batch service or Anthropic's Message Batches API, on its batch
+		// route.
 		const cloudClaudeRoute = `${providerId}-${upstream.serviceTier === 'batch' ? 'batch-messages' : 'messages'}`;
 		if (
 			cloudClaudeHostings[providerId] &&

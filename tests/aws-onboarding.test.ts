@@ -1,10 +1,11 @@
 import { describe, test } from 'bun:test';
 import { catalog } from './generated-catalog';
-import { claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
+import { anthropicHosted, claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
 import {
 	assertProviderOnboardingContract,
 	type DataHandlingContract,
-	type ProviderDeploymentContract
+	type ProviderDeploymentContract,
+	type ProviderRouteContract
 } from './provider-onboarding';
 
 const capabilities = {
@@ -208,16 +209,29 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 		});
 	}
 }
-// Anthropic keeps the prompts of Claude Platform on AWS for 30 days in a place it does not name.
-deployments.push(
-	deployment(
-		'aws-claude-fable-5-1-anthropic-hosted',
-		'claude-fable-5-1',
-		{ hosting: 'anthropic', inferenceGeo: 'global', model: 'claude-fable-5-1' },
-		{ retentionDays: 30, storageLocation: 'unknown' },
-		bedrock['claude-fable-5-1']!.global
-	)
-);
+// Claude Platform on AWS is Anthropic's own API, so each of its deployments serves what Anthropic's
+// does. It offers every model of the Claude API but Mythos, without Fast mode.
+const platformModels = Object.keys(claudeModels) as ClaudeModelId[];
+
+// Only Claude Platform on AWS runs web search and web fetch, on both routes.
+const cloudHostedTools: ProviderRouteContract['hostedTools'] = [
+	{
+		dataHandling: { processingLocation: 'unknown' },
+		hostings: ['anthropic'],
+		pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
+		tool: 'web_search'
+	},
+	{
+		dataHandling: {
+			processingLocation: 'unknown',
+			retentionDays: null,
+			storageLocation: 'unknown',
+			zeroDataRetention: false
+		},
+		hostings: ['anthropic'],
+		tool: 'web_fetch'
+	}
+];
 
 describe('AWS onboarding contract', () => {
 	test('pins the Claude route and every deployment', () => {
@@ -237,25 +251,7 @@ describe('AWS onboarding contract', () => {
 						extensions: ['.csv', '.md', '.pdf', '.txt'],
 						mediaTypes: ['application/pdf', 'text/plain']
 					},
-					// Only Claude Platform on AWS runs web search and web fetch.
-					hostedTools: [
-						{
-							dataHandling: { processingLocation: 'unknown' },
-							hostings: ['anthropic'],
-							pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
-							tool: 'web_search'
-						},
-						{
-							dataHandling: {
-								processingLocation: 'unknown',
-								retentionDays: null,
-								storageLocation: 'unknown',
-								zeroDataRetention: false
-							},
-							hostings: ['anthropic'],
-							tool: 'web_fetch'
-						}
-					],
+					hostedTools: cloudHostedTools,
 					id: 'aws-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
@@ -266,14 +262,15 @@ describe('AWS onboarding contract', () => {
 						extensions: ['.csv', '.md', '.pdf', '.txt'],
 						mediaTypes: ['application/pdf', 'text/plain']
 					},
-					endpoint: 'https://bedrock.{region}.amazonaws.com/model-invocation-job',
+					hostedTools: cloudHostedTools,
 					id: 'aws-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
 					stogasUnsupported: 'The gateway answers each request as it arrives and has no batch API.'
 				}
 			],
-			deployments
+			deployments,
+			anthropicHosted: anthropicHosted('aws', platformModels)
 		});
 	});
 });

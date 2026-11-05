@@ -36,20 +36,18 @@ package catalog
 // AWS serves Claude two ways: Amazon Bedrock runs it on AWS (hosting aws),
 // and Claude Platform on AWS is Anthropic's own service billed through AWS
 // (hosting anthropic). inferenceGeo is the geography of Bedrock's inference
-// profile, the prefix of its ID, or Anthropic's inference geography. batch is
-// Bedrock's batch inference, which runs a file of requests from Amazon S3 on
-// a route of its own.
+// profile, the prefix of its ID, or Anthropic's inference geography, which
+// models before Claude 4.6 do not take; the build requires it for Bedrock.
+// batch is Bedrock's batch inference, which runs a file of requests from
+// Amazon S3, or Anthropic's Message Batches API, on a route of their own.
 #AWSUpstream: close({
-	model:   #UpstreamId
-	hosting: "aws" | "anthropic"
-	inferenceGeo: #InferenceGeography
+	model:         #UpstreamId
+	hosting:       "aws" | "anthropic"
+	inferenceGeo?: #InferenceGeography
 	if hosting == "anthropic" {
-		inferenceGeo: "global" | "us"
+		inferenceGeo?: "global" | "us"
 	}
 	serviceTier?: "batch"
-	if serviceTier != _|_ {
-		hosting: "aws"
-	}
 })
 
 // Every inference geography: Bedrock's inference profiles name global and
@@ -61,13 +59,19 @@ package catalog
 // formerly Vertex AI (hosting google), and Anthropic runs it itself, billed
 // through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
 // location, global or the us or eu multi-region, or Anthropic's inference
-// geography, which has no eu.
+// geography, which has no eu and which models before Claude 4.6 do not take;
+// the build requires it for Agent Platform. batch is Anthropic's Message
+// Batches API, on a route of its own.
 #GoogleCloudUpstream: close({
-	model:   #UpstreamId
-	hosting: "google" | "anthropic"
-	inferenceGeo: "global" | "us" | "eu"
+	model:         #UpstreamId
+	hosting:       "google" | "anthropic"
+	inferenceGeo?: "global" | "us" | "eu"
 	if hosting == "anthropic" {
-		inferenceGeo: "global" | "us"
+		inferenceGeo?: "global" | "us"
+	}
+	serviceTier?: "batch"
+	if serviceTier != _|_ {
+		hosting: "anthropic"
 	}
 })
 

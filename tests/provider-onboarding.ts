@@ -21,7 +21,7 @@ export type DataHandlingContract = {
 	teeVerified: boolean;
 };
 
-type ProviderRouteContract = {
+export type ProviderRouteContract = {
 	capabilities?: Record<string, boolean>;
 	dataHandling?: Partial<DataHandlingContract>;
 	documentFormats: { extensions: string[]; mediaTypes: string[] };
@@ -80,6 +80,11 @@ export type ProviderOnboardingContract = {
 		name: string;
 	};
 	deployments: ProviderDeploymentContract[];
+	/**
+	 * Deployments that Anthropic runs on the provider's cloud. Each serves what Anthropic's own
+	 * deployment of the same upstream model, tier and inference geography serves.
+	 */
+	anthropicHosted?: string[];
 	routes: ProviderRouteContract[];
 };
 
@@ -129,7 +134,33 @@ export function assertProviderOnboardingContract(
 		)
 		.map(([id]) => id)
 		.sort();
-	expect(deploymentIds).toEqual(contract.deployments.map(({ id }) => id).sort());
+	expect(deploymentIds).toEqual(
+		[...contract.deployments.map(({ id }) => id), ...(contract.anthropicHosted ?? [])].sort()
+	);
+	for (const id of contract.anthropicHosted ?? []) {
+		const copy = graph.deployments[id] as Record<string, unknown> & {
+			routes: Record<string, { chainHash: string }>;
+			upstream: Record<string, string>;
+		};
+		const { hosting, ...upstream } = copy.upstream;
+		expect(hosting).toBe('anthropic');
+		const sources = Object.entries(graph.deployments).filter(
+			([, deployment]) =>
+				JSON.stringify(deployment.upstream) === JSON.stringify(upstream) &&
+				Object.keys(deployment.routes).every(
+					(routeId) => graph.routes[routeId]?.providerId === 'anthropic'
+				)
+		);
+		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
+		const [, source] = sources[0]!;
+		// Route IDs and chain hashes name the provider; everything that the routes serve matches.
+		const served = (deployment: typeof copy) => ({
+			...deployment,
+			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => route),
+			upstream: undefined
+		});
+		expect(served(copy)).toEqual(served(source as typeof copy));
+	}
 
 	for (const expected of contract.deployments) {
 		const servedRoutes = Object.fromEntries(

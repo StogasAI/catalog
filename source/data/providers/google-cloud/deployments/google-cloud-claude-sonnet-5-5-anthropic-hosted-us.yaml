@@ -1,0 +1,27 @@
+# Claude Models on Google Cloud (Anthropic managed) rates usage at Anthropic's standard prices,
+# and US inference at its multiplier. Reviewed 2026-11-05:
+# https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/anthropic-managed
+# and https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing
+deployments:
+  modelId: claude-sonnet-5-5
+  routeIds: [google-cloud-messages]
+  upstream:
+    model: claude-sonnet-5-5
+    hosting: anthropic
+    inferenceGeo: us
+  overrides:
+    dataHandling:
+      processingLocation: US
+      storageLocation: none
+      retentionDays: 0
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.2'
+    cached_input_tokens:
+      per_mill_tokens: '0.11'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '2.75'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '4.4'
+    output_tokens:
+      per_mill_tokens: '11'

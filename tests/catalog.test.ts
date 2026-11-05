@@ -33,7 +33,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 46, providers: 6, routes: 13, deployments: 367 });
+		).toEqual({ authors: 10, models: 46, providers: 6, routes: 14, deployments: 461 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -162,6 +162,11 @@ describe('compiled catalog', () => {
 	});
 
 	test('derives one canonical base deployment without a default flag', () => {
+		const providerHostings: Record<string, string> = {
+			aws: 'aws',
+			azure: 'azure',
+			'google-cloud': 'google'
+		};
 		for (const deployment of Object.values(catalog.graph.deployments)) {
 			expect(deployment).not.toHaveProperty('default');
 		}
@@ -172,11 +177,17 @@ describe('compiled catalog', () => {
 			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
 				const matching = deployments.filter(([, deployment]) => deployment.modelId === modelId);
 				if (matching.length > 1) {
-					// Deployments that all share a tier, as a batch API's do, have a base named after it.
-					const tiers = new Set(matching.map(([, deployment]) => deployment.upstream.serviceTier));
-					const tier = tiers.size === 1 ? [...tiers][0] : 'standard';
+					// Deployments that all share a tier, as a batch API's do, or a host other than the
+					// provider, as Claude Platform on AWS's do, have a base named after them.
+					const shared = (field: string, fallback: string | undefined) => {
+						const values = new Set(matching.map(([, deployment]) => deployment.upstream[field]));
+						return values.size === 1 ? ([...values][0] ?? fallback) : fallback;
+					};
+					const self = providerHostings[route.providerId];
+					const tier = shared('serviceTier', 'standard');
+					const host = shared('hosting', self);
 					expect(matching.map(([deploymentId]) => deploymentId)).toContain(
-						`${route.providerId}-${modelId}${tier === 'standard' ? '' : `-${tier}`}`
+						`${route.providerId}-${modelId}${host === self ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`
 					);
 				}
 			}

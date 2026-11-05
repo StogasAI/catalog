@@ -1,0 +1,26 @@
+# Anthropic's Message Batches API on Claude Models on Google Cloud (Anthropic managed), at
+# Anthropic's batch prices. Reviewed 2026-11-05:
+# https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/anthropic-managed
+# and https://platform.claude.com/docs/en/about-claude/pricing#batch-processing
+deployments:
+  modelId: claude-fable-5
+  routeIds: [google-cloud-batch-messages]
+  upstream:
+    model: claude-fable-5
+    hosting: anthropic
+    serviceTier: batch
+    inferenceGeo: global
+  overrides:
+    dataHandling:
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5'
+    cached_input_tokens:
+      per_mill_tokens: '0.5'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '6.25'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '10'
+    output_tokens:
+      per_mill_tokens: '25'
