@@ -30,6 +30,8 @@ type ProviderRouteContract = {
 	inputModalities: string[];
 	interfaces: string[];
 	hostedTools?: HostedToolContract[];
+	/** Why Stogas does not serve the route, which its deployments carry. */
+	stogasUnsupported?: string;
 };
 
 type HostedToolContract = {
@@ -116,7 +118,8 @@ export function assertProviderOnboardingContract(
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
 			hostedTools: route.hostedTools ?? [],
-			providerId
+			providerId,
+			...(route.stogasUnsupported ? { stogasUnsupported: route.stogasUnsupported } : {})
 		});
 	}
 
@@ -175,6 +178,12 @@ export function assertProviderOnboardingContract(
 					: (expected.modelReasoningMaxTokens ?? null),
 			retirementDate: expected.retirementDate,
 			routes: servedRoutes,
+			...Object.fromEntries(
+				expected.routeIds.flatMap((routeId) => {
+					const reason = routes.get(routeId)?.stogasUnsupported;
+					return reason ? [['stogasUnsupported', reason]] : [];
+				})
+			),
 			upstream: expected.upstream,
 			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};

@@ -1,0 +1,20 @@
+# Batch inference through Bedrock's global inference profile.
+# Prices from the AWS Price List (AmazonBedrockFoundationModels, "Batch, Global"), reviewed 2026-11-05:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+deployments:
+  modelId: claude-opus-5
+  routeIds: [aws-batch-messages]
+  upstream:
+    model: global.anthropic.claude-opus-5
+    hosting: aws
+    inferenceGeo: global
+    serviceTier: batch
+  overrides:
+    dataHandling:
+      storageLocation: unknown
+      retentionDays: null
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.5'
+    output_tokens:
+      per_mill_tokens: '12.5'

@@ -166,6 +166,48 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 		];
 	}
 );
+// Bedrock's batch inference, through the same profiles, for the models that AWS prices it for: input
+// and output tokens only, at half of each profile's price. The customer's S3 buckets hold the
+// requests and results, so where and for how long is unknown.
+const batch: Partial<Record<ClaudeModelId, (keyof typeof GEOGRAPHY_PLACES | 'us')[]>> = {
+	'claude-haiku-4-5': ['au', 'eu', 'in', 'jp', 'us'],
+	'claude-opus-5': ['au', 'eu', 'in', 'us'],
+	'claude-sonnet-4-6': ['au', 'eu', 'jp', 'us']
+};
+const half = (prices: Prices) =>
+	Object.fromEntries(
+		['input_tokens', 'output_tokens'].map((meter) => [
+			meter,
+			{ per_mill_tokens: String(Number(prices[meter]!.per_mill_tokens) / 2) }
+		])
+	);
+for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]) {
+	const { profile, global, us } = bedrock[model]!;
+	for (const geo of ['global', ...geos]) {
+		const place = geo === 'us' ? 'US' : GEOGRAPHY_PLACES[geo as keyof typeof GEOGRAPHY_PLACES];
+		deployments.push({
+			...deployment(
+				`aws-${model}-batch${geo === 'global' ? '' : `-${geo}`}`,
+				model,
+				{ hosting: 'aws', inferenceGeo: geo, model: `${geo}.${profile}` },
+				{
+					...(place ? { processingLocation: place } : {}),
+					retentionDays: null,
+					storageLocation: 'unknown'
+				},
+				half(geo === 'global' ? global : us)
+			),
+			capabilities: { ...capabilities, streaming: false },
+			routeIds: ['aws-batch-messages'],
+			upstream: {
+				hosting: 'aws',
+				inferenceGeo: geo,
+				model: `${geo}.${profile}`,
+				serviceTier: 'batch'
+			}
+		});
+	}
+}
 // Anthropic keeps the prompts of Claude Platform on AWS for 30 days in a place it does not name.
 deployments.push(
 	deployment(
@@ -217,6 +259,18 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
+				},
+				{
+					capabilities: { streaming: false },
+					documentFormats: {
+						extensions: ['.csv', '.md', '.pdf', '.txt'],
+						mediaTypes: ['application/pdf', 'text/plain']
+					},
+					endpoint: 'https://bedrock.{region}.amazonaws.com/model-invocation-job',
+					id: 'aws-batch-messages',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions', 'responses'],
+					stogasUnsupported: 'The gateway answers each request as it arrives and has no batch API.'
 				}
 			],
 			deployments

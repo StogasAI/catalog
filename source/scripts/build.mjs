@@ -1322,7 +1322,10 @@ function compileGraph(source, places) {
 					].includes(key)
 				)) ||
 			((providerId === 'aws' || providerId === 'google-cloud') &&
-				JSON.stringify(selectorKeys) === JSON.stringify(['hosting', 'inferenceGeo', 'model']));
+				['hosting', 'inferenceGeo', 'model'].every((key) => selectorKeys.includes(key)) &&
+				selectorKeys.every((key) =>
+					['hosting', 'inferenceGeo', 'model', 'serviceTier'].includes(key)
+				));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
@@ -1350,8 +1353,9 @@ function compileGraph(source, places) {
 			providerId === 'aws' ||
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
-		// AWS and Google Cloud serve only Claude, on the provider's one Messages route.
-		const cloudClaudeRoute = `${providerId}-messages`;
+		// AWS and Google Cloud serve only Claude, on the provider's Messages route, and a batch
+		// deployment on its batch route.
+		const cloudClaudeRoute = `${providerId}-${upstream.serviceTier === 'batch' ? 'batch-messages' : 'messages'}`;
 		if (
 			cloudClaudeHostings[providerId] &&
 			(model.authorId !== 'anthropic' ||

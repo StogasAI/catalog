@@ -36,13 +36,19 @@ package catalog
 // AWS serves Claude two ways: Amazon Bedrock runs it on AWS (hosting aws),
 // and Claude Platform on AWS is Anthropic's own service billed through AWS
 // (hosting anthropic). inferenceGeo is the geography of Bedrock's inference
-// profile, the prefix of its ID, or Anthropic's inference geography.
+// profile, the prefix of its ID, or Anthropic's inference geography. batch is
+// Bedrock's batch inference, which runs a file of requests from Amazon S3 on
+// a route of its own.
 #AWSUpstream: close({
 	model:   #UpstreamId
 	hosting: "aws" | "anthropic"
 	inferenceGeo: #InferenceGeography
 	if hosting == "anthropic" {
 		inferenceGeo: "global" | "us"
+	}
+	serviceTier?: "batch"
+	if serviceTier != _|_ {
+		hosting: "aws"
 	}
 })
 
