@@ -1,8 +1,10 @@
 // A chain is one executable path from author to provider. Each fact appears once, on the node
 // whose value applies to the path. The deployment holds what it serves on the route, which the
 // compiler resolved from the model, the route and the deployment's own facts, so the model and
-// the route keep only what the deployment does not state. Group membership and the model's
-// efforts for each interface are not facts of the path: the route's efforts already apply them.
+// the route keep only what the deployment does not state. A route's retirement date is its own:
+// the deployment's date covers all its routes, so the route keeps an earlier date of its own. Group
+// membership and the model's efforts for each interface are not facts of the path: the route's
+// efforts already apply them.
 export function catalogChain(graph, deploymentId, routeId) {
 	const { routes, ...deployment } = requireNode(graph.deployments, deploymentId);
 	const { chainHash: _chainHash, ...routeFacts } = requireNode(routes, routeId);
@@ -17,7 +19,13 @@ export function catalogChain(graph, deploymentId, routeId) {
 		author: { id: model.authorId, data: requireNode(graph.authors, model.authorId) },
 		model: { id: deployment.modelId, data: unstated(model, served) },
 		deployment: { id: deploymentId, data: served },
-		route: { id: routeId, data: unstated(route, served) },
+		route: {
+			id: routeId,
+			data: {
+				...unstated(route, served),
+				...(Object.hasOwn(route, 'retirementDate') && { retirementDate: route.retirementDate })
+			}
+		},
 		provider: { id: route.providerId, data: requireNode(graph.providers, route.providerId) }
 	};
 }

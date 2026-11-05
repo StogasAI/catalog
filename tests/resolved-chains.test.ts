@@ -26,10 +26,15 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.route.id).toBe(entry.routeId);
 		expect(chain.model.data.groupIds).toBeUndefined();
 		expect(chain.model.data.reasoningEffortsByInterface).toBeUndefined();
-		// Each fact appears once: what the deployment states, the model and the route leave out.
+		// Each fact appears once: what the deployment states, the model and the route leave out. A
+		// route's own retirement date is a fact of the route, apart from the deployment's.
 		for (const node of [chain.model, chain.route])
 			for (const key of Object.keys(node.data))
-				expect(Object.hasOwn(chain.deployment.data, key)).toBe(false);
+				if (node !== chain.route || key !== 'retirementDate')
+					expect(Object.hasOwn(chain.deployment.data, key)).toBe(false);
+		expect(chain.route.data.retirementDate).toBe(
+			catalog.graph.routes[entry.routeId].retirementDate
+		);
 		// What the deployment doesn't state, the model and the route keep.
 		const {
 			groupIds: _groups,
@@ -63,6 +68,23 @@ test('a chain shows each fact once, as the path runs it', () => {
 		anthropic_web_search_calls: { per_1k_calls: '10' },
 		input_tokens: { per_mill_tokens: '10' }
 	});
+});
+
+test("a chain keeps its route's retirement date beside its deployment's", () => {
+	const graph = structuredClone(catalog.graph);
+	const entry = chains(graph).find(
+		(candidate) => Object.keys(graph.deployments[candidate.deploymentId].routes).length > 1
+	)!;
+	graph.deployments[entry.deploymentId].retirementDate = '2099-01-02';
+	graph.routes[entry.routeId].retirementDate = '2099-01-01';
+	const chain = JSON.parse(
+		chains(graph).find(
+			(candidate) =>
+				candidate.deploymentId === entry.deploymentId && candidate.routeId === entry.routeId
+		)!.json
+	);
+	expect(chain.deployment.data.retirementDate).toBe('2099-01-02');
+	expect(chain.route.data.retirementDate).toBe('2099-01-01');
 });
 
 test('node order does not change chain identities', () => {
