@@ -3,6 +3,7 @@ models:
   name: GPT-5.5
   groupIds: [gpt-5.5]
   contextWindowTokens: 1050000
+  maxInputTokens: 922000
   maxOutputTokens: 128000
   inputModalities: [text, image]
   outputModalities: [text]
