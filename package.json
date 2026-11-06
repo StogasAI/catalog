@@ -8,6 +8,7 @@
 		"./groups": "./source/scripts/model-groups.mjs",
 		"./locations": "./source/scripts/locations.mjs",
 		"./schedule": "./source/scripts/schedule.mjs",
+		"./selectors": "./source/scripts/selectors.mjs",
 		"./viewer": "./editor/src/catalog.ts",
 		"./viewer/types": "./editor/src/types.ts",
 		"./files": "./source/scripts/catalog-files.mjs",

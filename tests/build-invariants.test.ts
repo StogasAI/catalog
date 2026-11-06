@@ -297,10 +297,31 @@ describe('catalog source compiler invariants', () => {
 		});
 	});
 
-	test('accepts an alias that respells the model ID', () => {
+	test('accepts aliases that move a word across the version, add or remove the snapshot date, or name a group', () => {
 		const source = sourceFixture();
-		Object.assign(source.graph.models['gpt-test'], { aliases: ['gpt.test'] });
-		expect(buildCatalog(source).graph.models['gpt-test'].aliases).toEqual(['gpt.test']);
+		const { models } = source.graph;
+		Object.assign(source.graph, { groups: { gpt: { authorId: 'openai', name: 'GPT' } } });
+		Object.assign(models['gpt-test'], { aliases: ['gpt'], groupIds: ['gpt'] });
+		models['gpt-opus-4-5'] = {
+			...models['gpt-test'],
+			name: 'GPT Opus 4.5',
+			aliases: ['gpt-4.5-opus', 'gpt-opus-4-5-20260102'],
+			groupIds: [],
+			snapshot: '2026-01-02'
+		};
+		models['gpt-snap-2026-01-03'] = {
+			...models['gpt-test'],
+			name: 'GPT Snap',
+			aliases: ['gpt-snap'],
+			groupIds: [],
+			snapshot: '2026-01-03'
+		};
+		const built = buildCatalog(source).graph;
+		expect(built.models['gpt-test'].aliases).toEqual(['gpt']);
+		expect(built.models['gpt-opus-4-5'].aliases).toEqual(['gpt-4.5-opus', 'gpt-opus-4-5-20260102']);
+		expect(built.models['gpt-snap-2026-01-03'].aliases).toEqual(['gpt-snap']);
+		// The model that the author's API serves under a group's ID shares it as an alias.
+		expect(Object.keys(built.groups)).toEqual(['gpt']);
 	});
 
 	test('is deterministic across source map insertion order', () => {
@@ -720,7 +741,7 @@ describe('catalog source compiler invariants', () => {
 		const source = sourceFixture();
 		addSecondOpenAIRoute(source);
 		const { deployments, models, providers, routes } = source.graph;
-		models['gpt-only'] = { ...models['gpt-test'], name: 'GPT Only', aliases: ['gpt.only'] };
+		models['gpt-only'] = { ...models['gpt-test'], name: 'GPT Only', aliases: [] };
 		deployments['openai-gpt-test'].routeIds = ['openai-chat-completions', 'openai-responses'];
 		deployments['openai-gpt-only'] = {
 			...structuredClone(deployments['openai-gpt-test']),
@@ -761,7 +782,7 @@ describe('catalog source compiler invariants', () => {
 		const source = sourceFixture();
 		addSecondOpenAIRoute(source);
 		const { authors, deployments, models, providers, routes } = source.graph;
-		models['gpt-batch'] = { ...models['gpt-test'], name: 'GPT Batch', aliases: ['gpt.batch'] };
+		models['gpt-batch'] = { ...models['gpt-test'], name: 'GPT Batch', aliases: [] };
 		deployments['openai-gpt-batch'] = {
 			...structuredClone(deployments['openai-gpt-test']),
 			modelId: 'gpt-batch',
@@ -1015,7 +1036,7 @@ describe('catalog source compiler invariants', () => {
 		const source = sourceFixture();
 		const deployment = source.graph.deployments['openai-gpt-test'];
 		const { models, deployments } = source.graph;
-		models['gpt-other'] = { ...models['gpt-test'], name: 'GPT Other', aliases: ['gpt.other'] };
+		models['gpt-other'] = { ...models['gpt-test'], name: 'GPT Other', aliases: [] };
 		models['gpt-listed'] = { ...models['gpt-test'], name: 'GPT Listed' };
 		deployments['openai-gpt-later'] = {
 			...structuredClone(deployment),
@@ -1599,17 +1620,77 @@ describe('catalog source compiler invariants', () => {
 				'gpt-test selects both model:gpt-test and deployment:gpt-test'
 			],
 			[
-				'model/group selector collision',
+				'model selector collision under request matching',
+				(source: Source) => {
+					source.graph.deployments = { gpt_test: source.graph.deployments['openai-gpt-test'] };
+				},
+				'gpt_test selects both model:gpt-test and deployment:gpt_test'
+			],
+			[
+				'group selector collision under request matching',
 				(source: Source) =>
 					Object.assign(source.graph, {
-						groups: { 'gpt-test': { authorId: 'openai', name: 'GPT Test' } }
+						groups: {
+							'gpt.test': { authorId: 'openai', name: 'GPT Test' },
+							'gpt-test': { authorId: 'openai', name: 'GPT Test' }
+						}
 					}),
-				'gpt-test selects both model:gpt-test and group:gpt-test'
+				'gpt-test selects both group:gpt.test and group:gpt-test'
+			],
+			[
+				'alias that only respells the ID',
+				(source: Source) => (source.graph.models['gpt-test'].aliases = ['gpt.test']),
+				'gpt-test: alias gpt.test only respells the ID'
 			],
 			[
 				'alias that names another model',
 				(source: Source) => (source.graph.models['gpt-test'].aliases = ['gpt-latest']),
-				'gpt-test: alias gpt-latest may differ from the ID only in dots and dashes'
+				'gpt-test: alias gpt-latest must move one word of the ID across its version, add or remove its snapshot date, or name its group whose ID begins the ID'
+			],
+			[
+				'alias that moves the first word',
+				(source: Source) => (source.graph.models['gpt-test'].aliases = ['test-gpt']),
+				'gpt-test: alias test-gpt must move one word'
+			],
+			[
+				'alias that moves a word across another word',
+				(source: Source) => {
+					source.graph.models['gpt-test-4-5'] = {
+						...source.graph.models['gpt-test'],
+						name: 'GPT Test 4.5',
+						aliases: ['test-gpt-4-5']
+					};
+				},
+				'gpt-test-4-5: alias test-gpt-4-5 must move one word'
+			],
+			[
+				'snapshot alias with another date',
+				(source: Source) =>
+					Object.assign(source.graph.models['gpt-test'], {
+						aliases: ['gpt-test-2026-01-03'],
+						snapshot: '2026-01-02'
+					}),
+				'gpt-test: alias gpt-test-2026-01-03 must move one word'
+			],
+			[
+				'snapshot alias in a short date form',
+				(source: Source) =>
+					Object.assign(source.graph.models['gpt-test'], {
+						aliases: ['gpt-test-0102'],
+						snapshot: '2026-01-02'
+					}),
+				'gpt-test: alias gpt-test-0102 must move one word'
+			],
+			[
+				'alias that names a group whose ID does not begin the ID',
+				(source: Source) => {
+					Object.assign(source.graph, { groups: { other: { authorId: 'openai', name: 'Other' } } });
+					Object.assign(source.graph.models['gpt-test'], {
+						aliases: ['other'],
+						groupIds: ['other']
+					});
+				},
+				'gpt-test: alias other must move one word'
 			],
 			[
 				'noncanonical qualifier',

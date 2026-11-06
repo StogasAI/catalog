@@ -21,6 +21,7 @@ import { WORLD, isLocation, isPlaceId, placeIndex } from './locations.mjs';
 import { orderModelGroups } from './model-groups.mjs';
 import { periodStates } from './periods.mjs';
 import { resolvedCatalogChains } from './resolved-chains.mjs';
+import { selectorKey } from './selectors.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const repositoryRoot = join(sourceRoot, '..');
@@ -384,6 +385,46 @@ async function resolveCueCommand() {
 
 function same(left, right) {
 	return canonicalJson(left) === canonicalJson(right);
+}
+
+/**
+ * Whether an alias is another name that clients send for the model, compared as requests match
+ * IDs. It moves one word of the ID, other than the first, to the other side of the version beside
+ * it, as gateways that write Claude models version first send them (`claude-4.5-opus`). Where the
+ * author's API serves the name as this model, it can also add or remove the snapshot date as the
+ * last part (`gpt-5.5`), or be the model's group whose ID begins the model's (`gpt-5.6` for
+ * `gpt-5.6-sol`).
+ */
+function isModelAlias(modelId, model, alias) {
+	const id = selectorKey(modelId);
+	const name = selectorKey(alias);
+	if (versionSwaps(id.split('-')).includes(name)) return true;
+	if (model.snapshot !== null) {
+		for (const date of [model.snapshot, model.snapshot.replaceAll('-', '')])
+			if (name === `${id}-${date}` || id === `${name}-${date}`) return true;
+	}
+	return model.groupIds.some(
+		(groupId) => selectorKey(groupId) === name && id.startsWith(`${name}-`)
+	);
+}
+
+/** The spellings of an ID's parts with one word, other than the first, moved across the version beside it. */
+function versionSwaps(parts) {
+	const version = (part) => /\d/u.test(part);
+	const swaps = [];
+	for (let start = 1; start < parts.length; start++) {
+		if (!version(parts[start]) || version(parts[start - 1])) continue;
+		let end = start;
+		while (end < parts.length && version(parts[end])) end++;
+		const run = parts.slice(start, end);
+		if (start > 1)
+			swaps.push(
+				[...parts.slice(0, start - 1), ...run, parts[start - 1], ...parts.slice(end)].join('-')
+			);
+		if (end < parts.length)
+			swaps.push([...parts.slice(0, start), parts[end], ...run, ...parts.slice(end + 1)].join('-'));
+	}
+	return swaps;
 }
 
 function validDate(value) {
@@ -1080,6 +1121,7 @@ function compileGraph(source, places) {
 		)
 	};
 	const selectors = new Map();
+	const groupSelectors = new Map();
 	const deployments = {};
 	const baseByModelRoute = new Map();
 	const deploymentsByModelRoute = new Map();
@@ -1125,11 +1167,11 @@ function compileGraph(source, places) {
 				if (qualifier.trim() !== qualifier || qualifier.includes('/')) {
 					throw new Error(`${kind} ${id}: qualifier ${qualifier} is not canonical`);
 				}
-				const owner = qualifiers.get(qualifier);
+				const owner = qualifiers.get(selectorKey(qualifier));
 				if (owner) {
 					throw new Error(`${kind} qualifier ${qualifier} belongs to both ${owner} and ${id}`);
 				}
-				qualifiers.set(qualifier, id);
+				qualifiers.set(selectorKey(qualifier), id);
 			}
 		}
 	}
@@ -1140,13 +1182,15 @@ function compileGraph(source, places) {
 		}
 	}
 
-	function addSelector(selector, kind, id) {
+	// An ID alone names a model, by its ID or an alias, or a deployment, and `group:` names a
+	// group, so each of the two namespaces holds one owner for each spelling that a request matches.
+	function addSelector(namespace, selector, kind, id) {
 		if (selector.trim() !== selector || selector.includes('/')) {
 			throw new Error(`${kind} ${id}: selector ${selector} is not canonical`);
 		}
-		const owner = selectors.get(selector);
+		const owner = namespace.get(selectorKey(selector));
 		if (owner) throw new Error(`${selector} selects both ${owner} and ${kind}:${id}`);
-		selectors.set(selector, `${kind}:${id}`);
+		namespace.set(selectorKey(selector), `${kind}:${id}`);
 	}
 
 	validateQualifierAliases(graph.authors, 'author');
@@ -1248,21 +1292,24 @@ function compileGraph(source, places) {
 		) {
 			throw new Error(`${modelId}: invalid manual reasoning token bounds`);
 		}
-		addSelector(modelId, 'model', modelId);
-		// An alias that only respells the ID can never come to mean another model.
+		addSelector(selectors, modelId, 'model', modelId);
 		for (const alias of model.aliases) {
-			if (alias.replaceAll('.', '-') !== modelId.replaceAll('.', '-')) {
+			if (selectorKey(alias) === selectorKey(modelId)) {
 				throw new Error(
-					`${modelId}: alias ${alias} may differ from the ID only in dots and dashes`
+					`${modelId}: alias ${alias} only respells the ID, which requests match with case ignored and dots and underscores read as hyphens`
 				);
 			}
-			addSelector(alias, 'model', modelId);
+			if (!isModelAlias(modelId, model, alias)) {
+				throw new Error(
+					`${modelId}: alias ${alias} must move one word of the ID across its version, add or remove its snapshot date, or name its group whose ID begins the ID`
+				);
+			}
+			addSelector(selectors, alias, 'model', modelId);
 		}
 	}
 	validateModelDerivation(graph.models);
-	// A group selects its newest model, so requests can follow a family without aliases
-	// that move between models.
-	for (const groupId of Object.keys(graph.groups)) addSelector(groupId, 'group', groupId);
+	for (const groupId of Object.keys(graph.groups))
+		addSelector(groupSelectors, groupId, 'group', groupId);
 
 	for (const [deploymentId, sourceDeployment] of Object.entries(graph.deployments)) {
 		const deployment = structuredClone(sourceDeployment);
@@ -1463,7 +1510,7 @@ function compileGraph(source, places) {
 			throw new Error(`${deploymentId}: split deployments whose routes have different bases`);
 		}
 
-		addSelector(deploymentId, 'deployment', deploymentId);
+		addSelector(selectors, deploymentId, 'deployment', deploymentId);
 
 		deployments[deploymentId] = {
 			modelId: deployment.modelId,

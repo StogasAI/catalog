@@ -8,6 +8,7 @@ import {
 } from '../source/scripts/catalog-files.mjs';
 import { ancestorGroupIds } from '../source/scripts/model-groups.mjs';
 import { countriesIn, placeIndex } from '../source/scripts/locations.mjs';
+import { selectorKey as key } from '../source/scripts/selectors.mjs';
 import { catalog, catalogRoot } from './generated-catalog';
 
 const graphNodeTypes = ['authors', 'models', 'providers', 'routes', 'deployments'] as const;
@@ -99,28 +100,33 @@ describe('compiled catalog', () => {
 		});
 	});
 
-	test('keeps aliases to respellings and selectors globally unique', () => {
+	test('keeps each selector to one model, deployment or group in its namespace', () => {
+		// An ID alone names a model or a deployment, and `group:` names a group.
 		const selectors = new Set<string>();
 		for (const [modelId, model] of Object.entries(catalog.graph.models)) {
-			for (const alias of model.aliases) {
-				expect(alias.replaceAll('.', '-')).toBe(modelId.replaceAll('.', '-'));
-			}
 			for (const selector of [modelId, ...model.aliases]) {
 				expect(selector).not.toContain('/');
-				expect(selectors.has(selector)).toBe(false);
-				selectors.add(selector);
+				expect(selectors.has(key(selector))).toBe(false);
+				selectors.add(key(selector));
 			}
 		}
-		const groupIds = new Set(
-			Object.values(catalog.graph.models).flatMap((model) =>
-				ancestorGroupIds(catalog.graph.groups, model.groupIds)
-			)
-		);
-		for (const selector of [...Object.keys(catalog.graph.deployments), ...groupIds]) {
-			expect(selectors.has(selector)).toBe(false);
-			selectors.add(selector);
+		for (const selector of Object.keys(catalog.graph.deployments)) {
+			expect(selectors.has(key(selector))).toBe(false);
+			selectors.add(key(selector));
 		}
-		expect(catalog.graph.models['claude-haiku-4-5'].aliases).toEqual(['claude-haiku-4.5']);
+		const groups = new Set(Object.keys(catalog.graph.groups).map(key));
+		expect(groups.size).toBe(Object.keys(catalog.graph.groups).length);
+		expect(catalog.graph.models['claude-haiku-4-5'].aliases).toEqual([
+			'claude-haiku-4-5-20251001',
+			'claude-4.5-haiku'
+		]);
+		// OpenAI's aliases name the model that its API serves under them, beside the groups.
+		expect(catalog.graph.models['gpt-5.6-sol'].aliases).toEqual(['gpt-5.6']);
+		expect(catalog.graph.models['gpt-5.5-2026-04-23'].aliases).toEqual(['gpt-5.5']);
+		expect(groups.has(key('gpt-5.6')) && groups.has(key('gpt-5.5'))).toBe(true);
+		// OpenAI has no gpt-6 model, so the GPT-6 group takes `group:`.
+		expect(selectors.has('gpt-6')).toBe(false);
+		expect(groups.has('gpt-6')).toBe(true);
 		expect(selectors.has('claude-haiku-latest')).toBe(false);
 		// A model names its own groups, and readers add their ancestors.
 		expect(catalog.graph.models['claude-haiku-4-5'].groupIds).toEqual(['claude-haiku']);
@@ -453,20 +459,10 @@ describe('compiled catalog', () => {
 		for (const modelId of expectedActiveModels)
 			expect(baseDeploymentsByModel.has(modelId)).toBe(true);
 
-		for (const [modelId, alias] of [
-			['claude-fable-5-1', 'claude-fable-5.1'],
-			['claude-haiku-4-5', 'claude-haiku-4.5'],
-			['claude-haiku-5-5', 'claude-haiku-5.5'],
-			['claude-mythos-5-1', 'claude-mythos-5.1'],
-			['claude-opus-4-5', 'claude-opus-4.5'],
-			['claude-opus-4-6', 'claude-opus-4.6'],
-			['claude-opus-4-7', 'claude-opus-4.7'],
-			['claude-opus-4-8', 'claude-opus-4.8'],
-			['claude-opus-5-5', 'claude-opus-5.5'],
-			['claude-sonnet-4-6', 'claude-sonnet-4.6'],
-			['claude-sonnet-5-5', 'claude-sonnet-5.5']
-		] as const) {
-			expect(catalog.graph.models[modelId].aliases).toContain(alias);
+		// Other gateways write Claude models version first, as in claude-4.5-opus.
+		for (const [modelId, model] of Object.entries(catalog.graph.models)) {
+			const [, tier, version] = /^claude-([a-z]+)-([\d-]+)$/u.exec(modelId) ?? [];
+			if (tier) expect(model.aliases).toContain(`claude-${version!.replaceAll('-', '.')}-${tier}`);
 		}
 		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toMatchObject({
 			modelId: 'claude-haiku-4-5',
