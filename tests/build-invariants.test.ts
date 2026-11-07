@@ -867,6 +867,28 @@ describe('catalog source compiler invariants', () => {
 			'openai-gpt-test: split the routes that Stogas serves from those that it does not'
 		],
 		[
+			'rejects a deployment on a batch route and on another',
+			(source) => {
+				addSecondOpenAIRoute(source);
+				source.graph.deployments['openai-gpt-test'].routeIds = [
+					'openai-chat-completions',
+					'openai-responses'
+				];
+				Object.assign(source.graph.routes['openai-chat-completions'], { batch: true });
+			},
+			'openai-gpt-test: split the batch routes from the others'
+		],
+		[
+			'rejects a service tier on a batch deployment',
+			(source) => {
+				Object.assign(source.graph.routes['openai-responses'], { batch: true });
+				Object.assign(source.graph.deployments['openai-gpt-test'].upstream, {
+					serviceTier: 'flex'
+				});
+			},
+			'openai-gpt-test: a batch deployment names no service tier'
+		],
+		[
 			'rejects a period that changes whether Stogas serves a record',
 			(source) =>
 				setPeriods(source.graph.deployments['openai-gpt-test'], [

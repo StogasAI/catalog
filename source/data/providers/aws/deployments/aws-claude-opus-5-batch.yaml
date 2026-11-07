@@ -8,7 +8,6 @@ deployments:
     model: global.anthropic.claude-opus-5
     hosting: aws
     inferenceGeo: global
-    serviceTier: batch
   overrides:
     dataHandling:
       storageLocation: unknown

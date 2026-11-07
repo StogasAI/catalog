@@ -9,7 +9,6 @@ deployments:
     model: eu.anthropic.claude-sonnet-4-6
     hosting: aws
     inferenceGeo: eu
-    serviceTier: batch
   overrides:
     dataHandling:
       processingLocation: eu

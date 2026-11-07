@@ -29,6 +29,8 @@ export type ProviderRouteContract = {
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
+	/** The route is a batch API. */
+	batch?: true;
 	hostedTools?: HostedToolContract[];
 	/** Why Stogas does not serve the route, which its deployments carry. */
 	stogasUnsupported?: string;
@@ -84,7 +86,8 @@ export type ProviderOnboardingContract = {
 	deployments: ProviderDeploymentContract[];
 	/**
 	 * Deployments that Anthropic runs on the provider's cloud. Each serves what Anthropic's own
-	 * deployment of the same upstream model, tier and inference geography serves.
+	 * deployment of the same upstream model, tier and inference geography serves, on a batch route
+	 * when it is on one.
 	 */
 	anthropicHosted?: string[];
 	routes: ProviderRouteContract[];
@@ -124,6 +127,7 @@ export function assertProviderOnboardingContract(
 			...(route.endpoint ? { endpoint: route.endpoint } : {}),
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
+			...(route.batch ? { batch: true } : {}),
 			hostedTools: route.hostedTools ?? [],
 			providerId,
 			...(route.stogasUnsupported ? { stogasUnsupported: route.stogasUnsupported } : {})
@@ -139,6 +143,8 @@ export function assertProviderOnboardingContract(
 	expect(deploymentIds).toEqual(
 		[...contract.deployments.map(({ id }) => id), ...(contract.anthropicHosted ?? [])].sort()
 	);
+	const batch = (deployment: { routes: Record<string, unknown> }) =>
+		Object.keys(deployment.routes).some((routeId) => graph.routes[routeId]?.batch === true);
 	for (const id of contract.anthropicHosted ?? []) {
 		const copy = graph.deployments[id] as Record<string, unknown> & {
 			routes: Record<string, { chainHash: string }>;
@@ -149,6 +155,7 @@ export function assertProviderOnboardingContract(
 		const sources = Object.entries(graph.deployments).filter(
 			([, deployment]) =>
 				JSON.stringify(deployment.upstream) === JSON.stringify(upstream) &&
+				batch(deployment) === batch(copy) &&
 				Object.keys(deployment.routes).every(
 					(routeId) => graph.routes[routeId]?.providerId === 'anthropic'
 				)

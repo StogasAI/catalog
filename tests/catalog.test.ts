@@ -183,14 +183,15 @@ describe('compiled catalog', () => {
 			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
 				const matching = deployments.filter(([, deployment]) => deployment.modelId === modelId);
 				if (matching.length > 1) {
-					// Deployments that all share a tier, as a batch API's do, or a host other than the
-					// provider, as Claude Platform on AWS's do, have a base named after them.
+					// A batch route's deployments have a base named after the batch API, and deployments
+					// that all share a tier, or a host other than the provider, as Claude Platform on
+					// AWS's do, one named after them.
 					const shared = (field: string, fallback: string | undefined) => {
 						const values = new Set(matching.map(([, deployment]) => deployment.upstream[field]));
 						return values.size === 1 ? ([...values][0] ?? fallback) : fallback;
 					};
 					const self = providerHostings[route.providerId];
-					const tier = shared('serviceTier', 'standard');
+					const tier = route.batch ? 'batch' : shared('serviceTier', 'standard');
 					const host = shared('hosting', self);
 					expect(matching.map(([deploymentId]) => deploymentId)).toContain(
 						`${route.providerId}-${modelId}${host === self ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`
@@ -846,8 +847,11 @@ describe('compiled catalog', () => {
 			if (!deploymentId.startsWith('openai-') || !(deployment.modelId in standardRates)) continue;
 			const [input, cached, output] =
 				standardRates[deployment.modelId as keyof typeof standardRates].map(coefficient);
+			const batch = Object.keys(deployment.routes).some(
+				(routeId) => catalog.graph.routes[routeId].batch
+			);
 			const [numerator, denominator] =
-				tierScale[deployment.upstream.serviceTier as keyof typeof tierScale];
+				tierScale[batch ? 'batch' : (deployment.upstream.serviceTier as keyof typeof tierScale)];
 			// Cache writes cost 1.25x input. Prompts over 272K double input rates and raise output by half.
 			for (const [meter, short, long] of [
 				['input_tokens', input, input * 2n],

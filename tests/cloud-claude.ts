@@ -40,9 +40,9 @@ export type ClaudeModelId = keyof typeof claudeModels;
 export function anthropicHosted(providerId: string, models: readonly ClaudeModelId[]) {
 	const usOnly = new Set(['claude-opus-4-5', 'claude-haiku-4-5']);
 	return models.flatMap((model) =>
-		['', '-batch'].flatMap((tier) =>
+		['', '-batch'].flatMap((batch) =>
 			['', ...(usOnly.has(model) ? [] : ['-us'])].map(
-				(geo) => `${providerId}-${model}-anthropic-hosted${tier}${geo}`
+				(geo) => `${providerId}-${model}-anthropic-hosted${batch}${geo}`
 			)
 		)
 	);

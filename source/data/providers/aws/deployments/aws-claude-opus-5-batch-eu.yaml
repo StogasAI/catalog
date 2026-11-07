@@ -9,7 +9,6 @@ deployments:
     model: eu.anthropic.claude-opus-5
     hosting: aws
     inferenceGeo: eu
-    serviceTier: batch
   overrides:
     dataHandling:
       processingLocation: eu

@@ -3,7 +3,6 @@ deployments:
   routeIds: [anthropic-message-batches]
   upstream:
     model: claude-mythos-5-1
-    serviceTier: batch
     inferenceGeo: us
   approvalRequired: true
   overrides:

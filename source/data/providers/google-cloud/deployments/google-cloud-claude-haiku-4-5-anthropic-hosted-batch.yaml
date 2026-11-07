@@ -8,7 +8,6 @@ deployments:
   upstream:
     model: claude-haiku-4-5-20251001
     hosting: anthropic
-    serviceTier: batch
   overrides:
     dataHandling:
       retentionDays: 29

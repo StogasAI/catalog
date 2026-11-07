@@ -4,7 +4,6 @@ deployments:
   upstream:
     model: gpt-6.1-terra
     reasoningMode: pro
-    serviceTier: batch
   overrides:
     dataHandling:
       retentionDays: null

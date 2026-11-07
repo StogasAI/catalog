@@ -3,7 +3,6 @@ deployments:
   routeIds: [openai-batch-chat-completions, openai-batch-responses]
   upstream:
     model: gpt-6-astra
-    serviceTier: batch
   overrides:
     dataHandling:
       retentionDays: null

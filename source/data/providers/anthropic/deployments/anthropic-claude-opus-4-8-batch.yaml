@@ -3,7 +3,6 @@ deployments:
   routeIds: [anthropic-message-batches]
   upstream:
     model: claude-opus-4-8
-    serviceTier: batch
     inferenceGeo: global
   overrides:
     dataHandling:

@@ -8,7 +8,6 @@ deployments:
   upstream:
     model: claude-fable-5-1
     hosting: anthropic
-    serviceTier: batch
     inferenceGeo: us
   overrides:
     dataHandling:

@@ -8,6 +8,7 @@ routes:
   providerId: openai
   endpoint: https://api.openai.com/v1/batches
   interfaces: [responses]
+  batch: true
   inputModalities: [text, image]
   # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs#supported-file-types
   documentFormats:

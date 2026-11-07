@@ -45,6 +45,10 @@ package catalog
 	providerId: #Id
 	endpoint?:  string & =~"^https://"
 	interfaces: [#Interface, ...#Interface]
+	// The route is a provider's batch API, which runs a file of requests within
+	// a window at its batch prices. Its deployments serve no other route and
+	// name no service tier.
+	batch?: true
 	// Content the route carries to the provider. A deployment accepts the
 	// modalities that both its model and the route accept.
 	inputModalities: [#Modality, ...#Modality]

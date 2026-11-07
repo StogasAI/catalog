@@ -8,7 +8,6 @@ deployments:
   upstream:
     model: claude-sonnet-5
     hosting: anthropic
-    serviceTier: batch
     inferenceGeo: us
   overrides:
     dataHandling:

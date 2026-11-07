@@ -8,6 +8,7 @@ routes:
   providerId: anthropic
   endpoint: https://api.anthropic.com/v1/messages/batches
   interfaces: [chat_completions, responses]
+  batch: true
   inputModalities: [text, image]
   # Native document formats reviewed 2026-10-05: https://platform.claude.com/docs/en/build-with-claude/files
   documentFormats:

@@ -199,13 +199,7 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 				half(geo === 'global' ? global : us)
 			),
 			capabilities: { ...capabilities, streaming: false },
-			routeIds: ['aws-batch-messages'],
-			upstream: {
-				hosting: 'aws',
-				inferenceGeo: geo,
-				model: `${geo}.${profile}`,
-				serviceTier: 'batch'
-			}
+			routeIds: ['aws-batch-messages']
 		});
 	}
 }
@@ -266,6 +260,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					batch: true,
 					stogasUnsupported: 'The gateway answers each request as it arrives and has no batch API.'
 				}
 			],

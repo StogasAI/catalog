@@ -3,7 +3,6 @@ deployments:
   routeIds: [anthropic-message-batches]
   upstream:
     model: claude-opus-4-5-20251101
-    serviceTier: batch
   overrides:
     dataHandling:
       storageLocation: unknown

@@ -1,17 +1,15 @@
 package catalog
 
 // serviceTier names a provider-neutral tier; the compiler records an omitted tier as standard.
-// batch is a provider's batch API, which runs a file of requests within a window at its batch
-// prices on routes of its own.
 #OpenAIUpstream: close({
 	model:          #UpstreamId
 	reasoningMode?: "pro"
-	serviceTier?:   "flex" | "fast" | "ultrafast" | "batch"
+	serviceTier?:   "flex" | "fast" | "ultrafast"
 })
 
 #AnthropicUpstream: close({
 	model:         #UpstreamId
-	serviceTier?:  "fast" | "batch"
+	serviceTier?:  "fast"
 	inferenceGeo?: "global" | "us"
 })
 
@@ -42,8 +40,6 @@ package catalog
 // (hosting anthropic). inferenceGeo is the geography of Bedrock's inference
 // profile, the prefix of its ID, or Anthropic's inference geography, which
 // models before Claude 4.6 do not take; the build requires it for Bedrock.
-// batch is Bedrock's batch inference, which runs a file of requests from
-// Amazon S3, or Anthropic's Message Batches API, on a route of their own.
 #AWSUpstream: close({
 	model:         #UpstreamId
 	hosting:       "aws" | "anthropic"
@@ -51,7 +47,6 @@ package catalog
 	if hosting == "anthropic" {
 		inferenceGeo?: "global" | "us"
 	}
-	serviceTier?: "batch"
 })
 
 // Every inference geography: Bedrock's inference profiles name global and
@@ -64,18 +59,13 @@ package catalog
 // through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
 // location, global or the us or eu multi-region, or Anthropic's inference
 // geography, which has no eu and which models before Claude 4.6 do not take;
-// the build requires it for Agent Platform. batch is Anthropic's Message
-// Batches API, on a route of its own.
+// the build requires it for Agent Platform.
 #GoogleCloudUpstream: close({
 	model:         #UpstreamId
 	hosting:       "google" | "anthropic"
 	inferenceGeo?: "global" | "us" | "eu"
 	if hosting == "anthropic" {
 		inferenceGeo?: "global" | "us"
-	}
-	serviceTier?: "batch"
-	if serviceTier != _|_ {
-		hosting: "anthropic"
 	}
 })
 
@@ -87,7 +77,7 @@ package catalog
 	model:           #UpstreamId
 	chuteId?:        #Uuid
 	gpuCount?:       int & >=1 & <=8
-	serviceTier?:    "flex" | "fast" | "ultrafast" | "batch"
+	serviceTier?:    "flex" | "fast" | "ultrafast"
 	inferenceGeo?:   #InferenceGeography
 	reasoningMode?:  "pro"
 	hosting?:        #Hosting

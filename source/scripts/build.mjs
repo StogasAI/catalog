@@ -82,11 +82,14 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
-// Who runs Claude on each cloud. Both hostings share the provider's Messages route, and its batch
-// route.
-const cloudClaudeHostings = {
-	aws: ['anthropic', 'aws'],
-	'google-cloud': ['anthropic', 'google']
+// The routes that serve Claude on each cloud, and who runs it on each. Google Cloud's batch route
+// is Anthropic's Message Batches API.
+const cloudClaudeRoutes = {
+	aws: { 'aws-messages': ['anthropic', 'aws'], 'aws-batch-messages': ['anthropic', 'aws'] },
+	'google-cloud': {
+		'google-cloud-messages': ['anthropic', 'google'],
+		'google-cloud-batch-messages': ['anthropic']
+	}
 };
 // The hosting that is the provider itself; a deployment ID names any other host.
 const providerHostings = { aws: 'aws', azure: 'azure', 'google-cloud': 'google' };
@@ -1120,6 +1123,7 @@ function compileGraph(source, places) {
 						providerId: route.providerId,
 						...(route.endpoint && { endpoint: route.endpoint }),
 						interfaces: [...route.interfaces],
+						...(route.batch && { batch: true }),
 						inputModalities: [...route.inputModalities],
 						documentFormats: structuredClone(route.documentFormats),
 						capabilities: Object.fromEntries(
@@ -1155,16 +1159,16 @@ function compileGraph(source, places) {
 			continue;
 		}
 		const [modelId, routeId] = key.split('\0');
-		const providerId = requireNode(graph.routes, routeId, modelId).providerId;
-		// A route whose deployments of the model all share one tier, as a batch API's do, or one host
-		// other than the provider, names its base after them.
+		const { batch, providerId } = requireNode(graph.routes, routeId, modelId);
+		// A batch route names its base after the batch API, and a route whose deployments of the model
+		// all share one tier, or one host other than the provider, after them.
 		const shared = (field, fallback) => {
 			const values = new Set(
 				deploymentIds.map((id) => graph.deployments[id].upstream[field] ?? fallback)
 			);
 			return values.size === 1 ? [...values][0] : fallback;
 		};
-		const tier = shared('serviceTier', 'standard');
+		const tier = batch ? 'batch' : shared('serviceTier', 'standard');
 		const host = shared('hosting', providerHostings[providerId]);
 		const baseId = `${providerId}-${modelId}${host === providerHostings[providerId] ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`;
 		if (!deploymentIds.includes(baseId)) {
@@ -1364,6 +1368,15 @@ function compileGraph(source, places) {
 			);
 		}
 		const stogasUnsupported = deployment.stogasUnsupported ?? routeReasons[0];
+		// A deployment's token prices hold on all of its routes, and a batch API bills its own, so a
+		// batch deployment serves only batch routes and names no service tier.
+		const batch = deployment.routeIds.map((routeId) => graph.routes[routeId].batch === true);
+		if (new Set(batch).size > 1) {
+			throw new Error(`${deploymentId}: split the batch routes from the others`);
+		}
+		if (batch[0] && deployment.upstream.serviceTier !== undefined) {
+			throw new Error(`${deploymentId}: a batch deployment names no service tier`);
+		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
@@ -1399,9 +1412,7 @@ function compileGraph(source, places) {
 			((providerId === 'aws' || providerId === 'google-cloud') &&
 				['hosting', 'model'].every((key) => selectorKeys.includes(key)) &&
 				(selectorKeys.includes('inferenceGeo') || deployment.upstream.hosting === 'anthropic') &&
-				selectorKeys.every((key) =>
-					['hosting', 'inferenceGeo', 'model', 'serviceTier'].includes(key)
-				));
+				selectorKeys.every((key) => ['hosting', 'inferenceGeo', 'model'].includes(key)));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
@@ -1439,19 +1450,19 @@ function compileGraph(source, places) {
 			providerId === 'aws' ||
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
-		// AWS and Google Cloud serve only Claude, on the provider's Messages route, and a batch
-		// deployment, from the cloud's batch service or Anthropic's Message Batches API, on its batch
-		// route.
-		const cloudClaudeRoute = `${providerId}-${upstream.serviceTier === 'batch' ? 'batch-messages' : 'messages'}`;
-		if (
-			cloudClaudeHostings[providerId] &&
-			(model.authorId !== 'anthropic' ||
-				!cloudClaudeHostings[providerId].includes(deployment.upstream.hosting) ||
-				deployment.routeIds.some((routeId) => routeId !== cloudClaudeRoute))
-		) {
-			throw new Error(
-				`${deploymentId}: Claude on ${providerId} runs on route ${cloudClaudeRoute}, hosted by ${cloudClaudeHostings[providerId].join(' or ')}`
-			);
+		// AWS and Google Cloud serve only Claude, on the routes and hostings that each offers.
+		const cloudRoutes = cloudClaudeRoutes[providerId];
+		for (const routeId of cloudRoutes ? deployment.routeIds : []) {
+			if (
+				model.authorId !== 'anthropic' ||
+				!cloudRoutes[routeId]?.includes(deployment.upstream.hosting)
+			) {
+				throw new Error(
+					`${deploymentId}: ${providerId} serves Claude on ${Object.entries(cloudRoutes)
+						.map(([id, hostings]) => `${id}, hosted by ${hostings.join(' or ')}`)
+						.join('; ')}`
+				);
+			}
 		}
 		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
 		if (

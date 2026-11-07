@@ -8,7 +8,6 @@ deployments:
   upstream:
     model: claude-opus-4-7
     hosting: anthropic
-    serviceTier: batch
     inferenceGeo: global
   overrides:
     dataHandling:

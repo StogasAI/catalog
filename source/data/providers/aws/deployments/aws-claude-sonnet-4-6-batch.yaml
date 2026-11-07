@@ -8,7 +8,6 @@ deployments:
     model: global.anthropic.claude-sonnet-4-6
     hosting: aws
     inferenceGeo: global
-    serviceTier: batch
   overrides:
     dataHandling:
       storageLocation: unknown
