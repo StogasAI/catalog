@@ -278,7 +278,7 @@ describe('AWS onboarding contract', () => {
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
 					batch: true,
-					stogasUnsupported: 'The gateway answers each request as it arrives and has no batch API.'
+					stogasUnsupported: 'The gateway has no batch API and serves each request as it arrives.'
 				}
 			],
 			deployments,
