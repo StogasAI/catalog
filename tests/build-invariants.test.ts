@@ -1460,6 +1460,215 @@ describe('catalog source compiler invariants', () => {
 		).toThrow('zero data retention conflicts with data handling');
 	});
 
+	test('records unknown training use as null, which zero data retention cannot claim', () => {
+		const unknown = buildCatalog(
+			changed((source) => {
+				source.graph.providers.openai.dataHandling.trainingUse = null;
+			})
+		);
+		expect(
+			unknown.graph.deployments['openai-gpt-test'].routes['openai-responses'].dataHandling
+				.trainingUse
+		).toBeNull();
+		expect(() =>
+			buildCatalog(
+				changed((source) => {
+					source.graph.providers.openai.dataHandling = {
+						...source.graph.providers.openai.dataHandling,
+						storageLocation: 'none',
+						retentionDays: 0,
+						trainingUse: null,
+						zeroDataRetention: true
+					};
+				})
+			)
+		).toThrow('zero data retention conflicts with data handling');
+	});
+
+	test('rejects end-to-end encryption that does not run in a TEE', () => {
+		expect(() =>
+			buildCatalog(
+				changed((source) => {
+					source.graph.routes['openai-responses'].dataHandling = { endToEndEncrypted: true };
+				})
+			)
+		).toThrow('openai-responses: end-to-end encryption requires TEE processing');
+		expect(() =>
+			buildCatalog(
+				changed((source) => {
+					source.graph.providers.openai.dataHandling.tee = true;
+					source.graph.routes['openai-responses'].dataHandling = { endToEndEncrypted: true };
+					source.graph.deployments['openai-gpt-test'].overrides = {
+						dataHandling: { tee: false }
+					};
+				})
+			)
+		).toThrow('openai-gpt-test on openai-responses: end-to-end encryption requires TEE processing');
+	});
+
+	test('lets a route state its data handling over its provider, and deployments override the route', () => {
+		const route = {
+			endToEndEncrypted: false,
+			processingLocation: 'unknown',
+			storageLocation: 'none',
+			retentionDays: null,
+			trainingUse: null
+		};
+		const source = changed((candidate) => {
+			candidate.graph.routes['openai-responses'].dataHandling = route;
+		});
+		const { graph } = buildCatalog(source);
+		expect(graph.routes['openai-responses'].dataHandling).toEqual({
+			endToEndEncrypted: false,
+			processingLocation: 'unknown',
+			storageLocation: 'none',
+			retentionDays: null,
+			trainingUse: null,
+			zeroDataRetention: false,
+			tee: false,
+			teeVerified: false
+		});
+		expect(
+			graph.deployments['openai-gpt-test'].routes['openai-responses'].dataHandling
+		).toMatchObject(route);
+
+		source.graph.deployments['openai-gpt-test'].overrides = {
+			dataHandling: { retentionDays: 5 }
+		};
+		expect(
+			buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses']
+				.dataHandling.retentionDays
+		).toBe(5);
+	});
+
+	test('rejects a route data handling fact that repeats its provider', () => {
+		expect(() =>
+			buildCatalog(
+				changed((source) => {
+					source.graph.routes['openai-responses'].dataHandling = {
+						endToEndEncrypted: false,
+						retentionDays: 30
+					};
+				})
+			)
+		).toThrow(
+			'openai-responses.dataHandling.retentionDays redundantly repeats its inherited value'
+		);
+	});
+
+	describe('selects Chutes upstreams by the kind of route', () => {
+		const chuteId = '08901219-159f-55a7-87cf-9d0d02744668';
+		const standardHandling = {
+			endToEndEncrypted: false,
+			storageLocation: 'world',
+			retentionDays: 30,
+			zeroDataRetention: false,
+			tee: false
+		};
+
+		function chutesSource(routeId: string, upstream: Record<string, unknown>) {
+			return changed((source) => {
+				source.graph.providers.chutes = {
+					name: 'Chutes',
+					credentialModes: ['managed'],
+					capabilities: structuredClone(capabilities),
+					dataHandling: {
+						processingLocation: 'world',
+						storageLocation: 'none',
+						retentionDays: 0,
+						trainingUse: false,
+						zeroDataRetention: true,
+						tee: true,
+						teeVerified: false
+					}
+				} as never;
+				source.graph.routes['chutes-chat-completions'] = {
+					providerId: 'chutes',
+					endpoint: 'https://api.chutes.ai/e2e/invoke',
+					interfaces: ['chat_completions'],
+					inputModalities: ['text'],
+					documentFormats: { extensions: [], mediaTypes: [] },
+					dataHandling: { endToEndEncrypted: true },
+					hostedTools: []
+				};
+				source.graph.routes['chutes-standard-chat-completions'] = {
+					providerId: 'chutes',
+					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
+					interfaces: ['chat_completions'],
+					inputModalities: ['text'],
+					documentFormats: { extensions: [], mediaTypes: [] },
+					dataHandling: standardHandling,
+					hostedTools: []
+				};
+				source.graph.deployments['chutes-gpt-test'] = {
+					modelId: 'gpt-test',
+					routeIds: [routeId],
+					upstream: { model: 'org/gpt-test', chuteId, ...upstream } as never,
+					pricing: {
+						input_tokens: { per_mill_tokens: '1' },
+						output_tokens: { per_mill_tokens: '2' }
+					}
+				};
+			});
+		}
+
+		test.each([
+			{
+				name: 'an encrypted route takes a GPU count',
+				routeId: 'chutes-chat-completions',
+				upstream: { gpuCount: 8 }
+			},
+			{
+				name: 'a standard route takes the unknown hosting',
+				routeId: 'chutes-standard-chat-completions',
+				upstream: { hosting: 'unknown' }
+			}
+		])('accepts a Chutes deployment when $name', ({ routeId, upstream }) => {
+			const { graph } = buildCatalog(chutesSource(routeId, upstream));
+			expect(graph.deployments['chutes-gpt-test'].upstream).toEqual({
+				model: 'org/gpt-test',
+				chuteId,
+				...upstream,
+				serviceTier: 'standard'
+			});
+		});
+
+		test.each([
+			[
+				'an encrypted route with a hosting',
+				'chutes-chat-completions',
+				{ gpuCount: 8, hosting: 'unknown' }
+			],
+			['an encrypted route without a GPU count', 'chutes-chat-completions', {}],
+			[
+				'a standard route with a GPU count',
+				'chutes-standard-chat-completions',
+				{ gpuCount: 8, hosting: 'unknown' }
+			],
+			['a standard route without a hosting', 'chutes-standard-chat-completions', {}]
+		])('rejects %s', (_name, routeId, upstream) => {
+			expect(() => buildCatalog(chutesSource(routeId, upstream))).toThrow(
+				'chutes-gpt-test: upstream selector does not match provider chutes'
+			);
+		});
+
+		test('rejects a standard deployment whose operator is named', () => {
+			expect(() =>
+				buildCatalog(chutesSource('chutes-standard-chat-completions', { hosting: 'anthropic' }))
+			).toThrow('chutes-gpt-test: a Chutes standard deployment requires hosting unknown');
+		});
+
+		test('rejects a deployment whose routes take different selectors', () => {
+			const source = chutesSource('chutes-chat-completions', { gpuCount: 8 });
+			// Both routes serve chat completions, so the deployment needs a route of another interface.
+			source.graph.routes['chutes-standard-chat-completions'].interfaces = ['responses'];
+			source.graph.deployments['chutes-gpt-test'].routeIds.push('chutes-standard-chat-completions');
+			expect(() => buildCatalog(source)).toThrow(
+				'chutes-gpt-test: upstream selector does not match provider chutes'
+			);
+		});
+	});
+
 	describe('accepts only canonical route endpoints and provider credential modes', () => {
 		test('accepts an omitted endpoint and canonical credential order', () => {
 			const source = changed((candidate) => {

@@ -1,0 +1,14 @@
+deployments:
+  modelId: hy4
+  routeIds: [chutes-standard-chat-completions]
+  upstream:
+    model: tencent/Hy4
+    chuteId: 718e99ae-99ee-5a46-8c1a-5d35a169e61f
+    hosting: unknown
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.525'
+    cached_input_tokens:
+      per_mill_tokens: '0.025'
+    output_tokens:
+      per_mill_tokens: '1.5625'

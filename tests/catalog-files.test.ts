@@ -351,20 +351,10 @@ describe('catalog parts', () => {
 	});
 
 	test('read a root and parts of the previous format as the current format', () => {
-		// The previous format had no records that Stogas does not serve.
-		const catalog = scheduled();
-		for (const nodes of Object.values(catalog.graph))
-			for (const [id, node] of Object.entries(nodes ?? {}))
-				if (node.stogasUnsupported) delete nodes![id];
-		const { root, parts } = files(partitionCatalog(catalog));
-		expect(root.parts.some((part) => part.stogasUnsupported)).toBe(false);
-		// The previous format is the current one without the mark on each part.
-		const previousRoot = {
-			...root,
-			schema: 'stogas.catalog.v10',
-			parts: root.parts.map(({ stogasUnsupported: _, ...part }) => part)
-		};
-		const previousParts = parts.map((part) => ({ ...part, schema: 'stogas.catalog.part.v10' }));
+		const { root, parts } = files(partitionCatalog(scheduled()));
+		// The previous format differs only in its schema names.
+		const previousRoot = { ...root, schema: 'stogas.catalog.v11' };
+		const previousParts = parts.map((part) => ({ ...part, schema: 'stogas.catalog.part.v11' }));
 		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
 		expect(currentRoot).toEqual(root);
 		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
@@ -377,10 +367,9 @@ describe('catalog parts', () => {
 		for (const other of [
 			null,
 			'stogas.catalog.v10',
-			{ ...previousRoot, schema: 'stogas.catalog.v9' },
+			{ ...previousRoot, schema: 'stogas.catalog.v10' },
 			{ ...previousRoot, parts: undefined },
-			{ ...previousRoot, parts: root.parts },
-			{ ...parts[0], schema: 'stogas.catalog.part.v9' }
+			{ ...parts[0], schema: 'stogas.catalog.part.v10' }
 		])
 			expect(currentCatalogFile(other)).toBe(other);
 		expect(currentCatalogFile(root)).toBe(root);
@@ -602,7 +591,7 @@ describe('catalog limits', () => {
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v11',
+				schema: 'stogas.catalog.v12',
 				locations: {},
 				summaries: {},
 				parts,

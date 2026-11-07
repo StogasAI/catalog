@@ -1,0 +1,14 @@
+routes:
+  providerId: chutes
+  endpoint: https://llm.chutes.ai/v1/chat/completions
+  interfaces: [chat_completions]
+  inputModalities: [text]
+  documentFormats:
+    extensions: []
+    mediaTypes: []
+  dataHandling:
+    endToEndEncrypted: false
+    storageLocation: world
+    retentionDays: 30
+    zeroDataRetention: false
+    tee: false

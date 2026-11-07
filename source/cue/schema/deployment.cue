@@ -15,10 +15,14 @@ package catalog
 	inferenceGeo?: "global" | "us"
 })
 
+// An end-to-end encrypted route selects a Chutes instance by its GPU count, and a route that
+// Chutes relays to another operator takes hosting unknown, because Chutes does not name that
+// operator. The build checks which of them each route takes.
 #ChutesUpstream: close({
-	model:    #UpstreamId
-	chuteId:  #Uuid
-	gpuCount: int & >=1 & <=8
+	model:     #UpstreamId
+	chuteId:   #Uuid
+	gpuCount?: int & >=1 & <=8
+	hosting?:  #Hosting
 })
 
 #AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "OpenAI" | "OpenAI-OSS"
@@ -75,8 +79,9 @@ package catalog
 	}
 })
 
-// Who runs the model when a provider resells another operator's service.
-#Hosting: "azure" | "anthropic" | "fireworks" | "aws" | "google"
+// Who runs the model when a provider resells another operator's service. unknown means the
+// provider does not say whose service it resells.
+#Hosting: "unknown" | "azure" | "anthropic" | "fireworks" | "aws" | "google"
 
 #Upstream: close({
 	model:           #UpstreamId

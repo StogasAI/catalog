@@ -1,0 +1,20 @@
+deployments:
+  modelId: glm-5.3
+  routeIds: [chutes-standard-chat-completions]
+  upstream:
+    model: zai-org/GLM-5.3
+    chuteId: 1ebb4c96-21fb-5c6f-b5ab-d4aeaa869603
+    hosting: unknown
+  overrides:
+    maxOutputTokens: 131072
+    # Probed 2026-11-07: replies ignore the json_schema.
+    capabilities:
+      structuredOutputs: false
+    reasoningEfforts: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1.225'
+    cached_input_tokens:
+      per_mill_tokens: '0.245'
+    output_tokens:
+      per_mill_tokens: '3.85'

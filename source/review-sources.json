@@ -16,7 +16,14 @@
 			"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16/blob/77df655d5e9f8362164ed14dd8b48f8bce657498/tokenizer.json"
 		],
 		"openai": ["https://developers.openai.com/api/docs/models"],
-		"qwen": ["https://huggingface.co/Qwen"],
+		"qwen": [
+			"https://huggingface.co/Qwen",
+			"https://www.alibabacloud.com/help/en/model-studio/qwen3-8-max"
+		],
+		"tencent": [
+			"https://huggingface.co/tencent/Hy4",
+			"https://github.com/TencentCloud/octop-harness/pull/225"
+		],
 		"z-ai": ["https://huggingface.co/zai-org"]
 	},
 	"providers": {
@@ -46,11 +53,12 @@
 		],
 		"chutes": [
 			"https://llm.chutes.ai/v1/models",
-			"https://api.chutes.ai/chutes/761ccdab-2e3d-5268-ab03-55f8ba94a80c",
-			"https://docs.mistral.ai/models/mistral-nemo-12b-24-07",
+			"https://api.chutes.ai/chutes/08901219-159f-55a7-87cf-9d0d02744668",
+			"https://api.chutes.ai/chutes/3200d3cc-6583-535b-b104-1f87c2397698",
 			"https://chutes.ai/docs/guides/starter-guide",
 			"https://chutes.ai/pricing",
-			"https://chutes.ai/privacy"
+			"https://chutes.ai/privacy",
+			"https://chutes.ai/terms"
 		],
 		"google-cloud": [
 			"https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed",

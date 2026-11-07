@@ -1,0 +1,19 @@
+deployments:
+  modelId: deepseek-v4.1-flash-1017
+  routeIds: [chutes-standard-chat-completions]
+  upstream:
+    model: deepseek-ai/DeepSeek-V4.1-Flash-1017
+    chuteId: 34c7b79d-854b-5e32-981a-774d322062b0
+    hosting: unknown
+  overrides:
+    # Probed 2026-11-07: json_schema output returns 400.
+    capabilities:
+      structuredOutputs: false
+    reasoningEfforts: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.3'
+    cached_input_tokens:
+      per_mill_tokens: '0.03'
+    output_tokens:
+      per_mill_tokens: '1.2'

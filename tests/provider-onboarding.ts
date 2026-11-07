@@ -15,7 +15,7 @@ export type DataHandlingContract = {
 	storageLocation: string;
 	endToEndEncrypted: boolean;
 	retentionDays: number | null;
-	trainingUse: boolean;
+	trainingUse: boolean | null;
 	zeroDataRetention: boolean;
 	tee: boolean;
 	teeVerified: boolean;
@@ -51,6 +51,8 @@ export type ProviderDeploymentContract = {
 	id: string;
 	// The model's input modalities; each route keeps those it carries.
 	inputModalities: string[];
+	// Omitted when the input ceiling is the context window.
+	maxInputTokens?: number;
 	maxOutputTokens: number;
 	modelContextWindowTokens?: number;
 	modelId: string;
@@ -198,7 +200,7 @@ export function assertProviderOnboardingContract(
 		const deployment = {
 			approvalRequired: expected.approvalRequired ?? false,
 			contextWindowTokens: expected.contextWindowTokens,
-			maxInputTokens: expected.contextWindowTokens,
+			maxInputTokens: expected.maxInputTokens ?? expected.contextWindowTokens,
 			maxOutputTokens: expected.maxOutputTokens,
 			modelId: expected.modelId,
 			outputModalities: expected.outputModalities,

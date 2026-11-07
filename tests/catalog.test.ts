@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 10, models: 46, providers: 6, routes: 14, deployments: 461 });
+		).toEqual({ authors: 11, models: 53, providers: 6, routes: 15, deployments: 469 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -897,7 +897,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v11');
+		expect(catalog.schema).toBe('stogas.catalog.v12');
 		expect(catalog.schedule).toEqual([]);
 	});
 

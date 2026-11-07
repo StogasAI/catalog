@@ -232,7 +232,108 @@ const deployments: ProviderDeploymentContract[] = [
 			{ maxOutputTokens: 1048576 }
 		),
 		reasoningEfforts: ['high', 'max']
-	}
+	},
+	standard(
+		'chutes-deepseek-v4.1-flash-1017',
+		'deepseek-v4.1-flash-1017',
+		'deepseek',
+		'deepseek-ai/DeepSeek-V4.1-Flash-1017',
+		'34c7b79d-854b-5e32-981a-774d322062b0',
+		{ contextWindowTokens: 1048576, maxOutputTokens: 1048576 },
+		{
+			inputModalities: ['text', 'image'],
+			reasoning: 'optional',
+			reasoningEfforts: ['low', 'high', 'max']
+		},
+		['0.3', '0.03', '1.2'],
+		{ structuredOutputs: false }
+	),
+	standard(
+		'chutes-deepseek-v4-pro-0813',
+		'deepseek-v4-pro-0813',
+		'deepseek',
+		'deepseek-ai/DeepSeek-V4-Pro-0813',
+		'b990f27b-59b1-526e-adfd-e3ad9ea8920d',
+		{ contextWindowTokens: 1048576, maxOutputTokens: 384000 },
+		{ inputModalities: ['text'], reasoning: 'optional', reasoningEfforts: ['low', 'high', 'max'] },
+		['0.85', '0.15', '2.65']
+	),
+	standard(
+		'chutes-glm-5.3',
+		'glm-5.3',
+		'z-ai',
+		'zai-org/GLM-5.3',
+		'1ebb4c96-21fb-5c6f-b5ab-d4aeaa869603',
+		{ contextWindowTokens: 1048576, maxOutputTokens: 131072 },
+		{
+			inputModalities: ['text'],
+			maxOutputTokens: 1048576,
+			reasoning: 'required',
+			reasoningEfforts: ['low', 'high', 'max']
+		},
+		['1.225', '0.245', '3.85'],
+		{ structuredOutputs: false }
+	),
+	standard(
+		'chutes-glm-5.2-fast',
+		'glm-5.2',
+		'z-ai',
+		'zai-org/GLM-5.2-Fast',
+		'3200d3cc-6583-535b-b104-1f87c2397698',
+		{ contextWindowTokens: 1048576, maxOutputTokens: 131072 },
+		{
+			inputModalities: ['text'],
+			maxOutputTokens: 1048576,
+			reasoning: 'optional',
+			reasoningEfforts: ['high', 'max']
+		},
+		['2.45', '0.49', '7.7']
+	),
+	standard(
+		'chutes-kimi-k2.7-code',
+		'kimi-k2.7-code',
+		'moonshot-ai',
+		'moonshotai/Kimi-K2.7-Code',
+		'36e54170-0e13-59b7-8aab-8ed348dabd49',
+		{ contextWindowTokens: 262144, maxOutputTokens: 262144 },
+		{ inputModalities: ['text', 'image', 'video'], reasoning: 'required' },
+		['0.832', '0.167', '3.5']
+	),
+	standard(
+		'chutes-qwen3.8-2.4t-a95b',
+		'qwen3.8-2.4t-a95b',
+		'qwen',
+		'Qwen/Qwen3.8-2.4T-A95B',
+		'd86bda6f-f327-538c-9e23-44f7372e1cb8',
+		{ contextWindowTokens: 1010000, maxOutputTokens: 1010000 },
+		{
+			inputModalities: ['text'],
+			reasoning: 'required',
+			reasoningEfforts: ['low', 'medium', 'xhigh']
+		},
+		['2', '0.25', '6'],
+		{ structuredOutputs: false, toolChoice: false }
+	),
+	standard(
+		'chutes-qwen3.8-max-0902',
+		'qwen3.8-max-0902',
+		'qwen',
+		'Qwen/Qwen3.8-Max-0902',
+		'cb177979-3b79-5508-bcbe-5e7f3f5cec75',
+		{ contextWindowTokens: 1000000, maxInputTokens: 991808, maxOutputTokens: 393216 },
+		{ inputModalities: ['text', 'image', 'video'], reasoning: 'optional' },
+		['2', '0.25', '6']
+	),
+	standard(
+		'chutes-hy4',
+		'hy4',
+		'tencent',
+		'tencent/Hy4',
+		'718e99ae-99ee-5a46-8c1a-5d35a169e61f',
+		{ contextWindowTokens: 1024000, maxInputTokens: 960000, maxOutputTokens: 64000 },
+		{ inputModalities: ['text', 'image'], reasoning: 'optional' },
+		['0.525', '0.025', '1.5625']
+	)
 ];
 
 describe('Chutes provider onboarding contract', () => {
@@ -251,6 +352,20 @@ describe('Chutes provider onboarding contract', () => {
 				{
 					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					id: 'chutes-chat-completions',
+					documentFormats: { extensions: [], mediaTypes: [] },
+					inputModalities: ['text'],
+					interfaces: ['chat_completions']
+				},
+				{
+					dataHandling: {
+						endToEndEncrypted: false,
+						storageLocation: 'world',
+						retentionDays: 30,
+						zeroDataRetention: false,
+						tee: false
+					},
+					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
+					id: 'chutes-standard-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
 					interfaces: ['chat_completions']
@@ -303,5 +418,48 @@ function deployment(
 		routeIds: ['chutes-chat-completions'],
 		upstream: { chuteId, gpuCount, model: upstreamModel, serviceTier: 'standard' },
 		weightPrecision
+	};
+}
+
+// A Standard chute: Chutes relays it to an operator that it does not name, so no reasoning
+// control reaches it and only the capabilities probed on it apply.
+function standard(
+	id: string,
+	modelId: string,
+	authorId: string,
+	upstreamModel: string,
+	chuteId: string,
+	limits: { contextWindowTokens: number; maxInputTokens?: number; maxOutputTokens: number },
+	model: {
+		inputModalities: string[];
+		maxOutputTokens?: number;
+		reasoning: 'optional' | 'required';
+		reasoningEfforts?: string[];
+	},
+	[input, cachedInput, output]: [string, string, string],
+	unsupported: Record<string, false> = {}
+): ProviderDeploymentContract {
+	return {
+		authorId,
+		capabilities: { ...capabilities, ...unsupported },
+		contextWindowTokens: limits.contextWindowTokens,
+		id,
+		inputModalities: model.inputModalities,
+		maxInputTokens: limits.maxInputTokens,
+		maxOutputTokens: limits.maxOutputTokens,
+		modelId,
+		modelMaxOutputTokens: model.maxOutputTokens,
+		modelReasoning: model.reasoning,
+		modelReasoningEfforts: model.reasoningEfforts ?? [],
+		outputModalities: ['text'],
+		pricing: {
+			cached_input_tokens: { per_mill_tokens: cachedInput },
+			input_tokens: { per_mill_tokens: input },
+			output_tokens: { per_mill_tokens: output }
+		},
+		reasoningEfforts: [],
+		retirementDate: null,
+		routeIds: ['chutes-standard-chat-completions'],
+		upstream: { chuteId, hosting: 'unknown', model: upstreamModel, serviceTier: 'standard' }
 	};
 }

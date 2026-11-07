@@ -25,33 +25,23 @@
  * format as the current one, so that a reader without a catalog of its own, such as the website,
  * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v11';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v11';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v10';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v10';
+export const CATALOG_SCHEMA = 'stogas.catalog.v12';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v12';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v11';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v11';
 
 /**
- * A root or part of the previous format as one of the current format, which differs only in that
- * the root marks each part that holds what Stogas does not serve: the previous format lists none.
- * Any other value comes back as it is, for the reader to check.
+ * A root or part of the previous format as one of the current format. The formats differ only in
+ * their schema names, so the previous format's facts keep their meaning. Any other value comes back
+ * as it is, for the reader to check.
  */
 export function currentCatalogFile(value) {
 	if (!isObject(value)) return value;
 	if (value.schema === PREVIOUS_CATALOG_PART_SCHEMA)
 		return { ...value, schema: CATALOG_PART_SCHEMA };
-	if (
-		value.schema !== PREVIOUS_CATALOG_SCHEMA ||
-		!Array.isArray(value.parts) ||
-		value.parts.some((part) => isObject(part) && Object.hasOwn(part, 'stogasUnsupported'))
-	)
-		return value;
-	return {
-		...value,
-		schema: CATALOG_SCHEMA,
-		parts: value.parts.map((part) =>
-			isObject(part) ? { ...part, stogasUnsupported: false } : part
-		)
-	};
+	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
+		return { ...value, schema: CATALOG_SCHEMA };
+	return value;
 }
 
 export const CATALOG_KINDS = Object.freeze([

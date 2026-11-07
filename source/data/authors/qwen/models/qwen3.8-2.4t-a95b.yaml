@@ -1,0 +1,12 @@
+models:
+  authorId: qwen
+  name: Qwen3.8 2.4T A95B
+  groupIds: [qwen3.8]
+  # 262,144 tokens natively, which the model card extends to 1,010,000.
+  contextWindowTokens: 1010000
+  maxOutputTokens: 1010000
+  inputModalities: [text]
+  outputModalities: [text]
+  reasoning: required
+  reasoningEfforts: [low, medium, xhigh]
+  releaseDate: 2026-08-13

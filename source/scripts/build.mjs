@@ -90,6 +90,12 @@ const cloudClaudeHostings = {
 };
 // The hosting that is the provider itself; a deployment ID names any other host.
 const providerHostings = { aws: 'aws', azure: 'azure', 'google-cloud': 'google' };
+// An end-to-end encrypted Chutes route selects an instance by its GPU count, which the encrypted
+// transport attests. A route that Chutes relays to another operator takes hosting unknown, because
+// Chutes does not name that operator.
+function chutesSelectorKeys(endToEndEncrypted) {
+	return endToEndEncrypted ? ['chuteId', 'gpuCount', 'model'] : ['chuteId', 'hosting', 'model'];
+}
 const nodeIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFileSizeLimit = 1024 * 1024;
 const processOutputLimit = 128 * 1024 * 1024;
@@ -455,7 +461,8 @@ function mergeFacts(base, override) {
 }
 
 function rejectRedundantOverride(base, override, owner) {
-	if (override === undefined) return;
+	// A fact that the base does not state has nothing to repeat.
+	if (override === undefined || base === undefined) return;
 	if (!isPlainObject(base) || !isPlainObject(override)) {
 		if (same(base, override)) throw new Error(`${owner} redundantly repeats its inherited value`);
 		return;
@@ -545,9 +552,13 @@ function validateDataHandling(owner, value, places) {
 	if (value.teeVerified && !value.tee) {
 		throw new Error(`${owner}: verified TEE handling requires TEE processing`);
 	}
+	// Encryption that ends at an ordinary operator's server does not keep content from it.
+	if (value.endToEndEncrypted && !value.tee) {
+		throw new Error(`${owner}: end-to-end encryption requires TEE processing`);
+	}
 	if (
 		value.zeroDataRetention &&
-		(value.storageLocation !== 'none' || value.retentionDays !== 0 || value.trainingUse)
+		(value.storageLocation !== 'none' || value.retentionDays !== 0 || value.trainingUse !== false)
 	) {
 		throw new Error(`${owner}: zero data retention conflicts with data handling`);
 	}
@@ -1090,6 +1101,11 @@ function compileGraph(source, places) {
 					`${routeId}.overrides.capabilities`
 				);
 				const capabilities = mergeFacts(provider.capabilities, overrides.capabilities ?? {});
+				rejectRedundantOverride(
+					provider.dataHandling,
+					route.dataHandling,
+					`${routeId}.dataHandling`
+				);
 				const dataHandling = mergeFacts(provider.dataHandling, route.dataHandling);
 				for (const field of dataHandlingFields) {
 					if (!(field in dataHandling)) {
@@ -1357,7 +1373,11 @@ function compileGraph(source, places) {
 				selectorKeys.includes('model') &&
 				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key))) ||
 			(providerId === 'chutes' &&
-				JSON.stringify(selectorKeys) === JSON.stringify(['chuteId', 'gpuCount', 'model'])) ||
+				deployment.routeIds.every(
+					(routeId) =>
+						JSON.stringify(selectorKeys) ===
+						JSON.stringify(chutesSelectorKeys(graph.routes[routeId].dataHandling.endToEndEncrypted))
+				)) ||
 			(providerId === 'azure' &&
 				selectorKeys.includes('deploymentType') &&
 				selectorKeys.includes('hosting') &&
@@ -1384,6 +1404,16 @@ function compileGraph(source, places) {
 				));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
+		}
+		// Chutes does not name the operator that serves a standard deployment.
+		if (
+			providerId === 'chutes' &&
+			deployment.routeIds.some(
+				(routeId) => !graph.routes[routeId].dataHandling.endToEndEncrypted
+			) &&
+			deployment.upstream.hosting !== 'unknown'
+		) {
+			throw new Error(`${deploymentId}: a Chutes standard deployment requires hosting unknown`);
 		}
 		// Azure sells OpenAI tiers as request modes of one deployment, and Claude Fast as its own model.
 		if (

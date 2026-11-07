@@ -1,11 +1,11 @@
 import type { Locations } from './locations.mjs';
 
-export const CATALOG_SCHEMA: 'stogas.catalog.v11';
-export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v11';
+export const CATALOG_SCHEMA: 'stogas.catalog.v12';
+export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v12';
 /**
- * A root or part of the previous format as one of the current format, which differs only in that
- * the root marks each part that holds what Stogas does not serve: the previous format lists none.
- * Any other value comes back as it is, for the reader to check.
+ * A root or part of the previous format as one of the current format. The formats differ only in
+ * their schema names, so the previous format's facts keep their meaning. Any other value comes back
+ * as it is, for the reader to check.
  */
 export function currentCatalogFile(value: unknown): unknown;
 export const CATALOG_KINDS: readonly [

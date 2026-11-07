@@ -1,0 +1,14 @@
+models:
+  authorId: qwen
+  name: Qwen3.8 Max 0902
+  groupIds: [qwen3.8]
+  # Alibaba Cloud Model Studio: 991,808 input tokens, and 131,072 output tokens after up to
+  # 262,144 tokens of chain of thought, which count as output too.
+  contextWindowTokens: 1000000
+  maxInputTokens: 991808
+  maxOutputTokens: 393216
+  inputModalities: [text, image, video]
+  outputModalities: [text]
+  reasoning: optional
+  snapshot: 2026-09-02
+  releaseDate: 2026-09-02

@@ -1,0 +1,12 @@
+models:
+  authorId: tencent
+  name: Hy4
+  groupIds: [hy]
+  # Tencent Cloud TokenHub, which Tencent runs: 1,024,000 tokens in all, 960,000 input and 64,000 output.
+  contextWindowTokens: 1024000
+  maxInputTokens: 960000
+  maxOutputTokens: 64000
+  inputModalities: [text, image]
+  outputModalities: [text]
+  reasoning: optional
+  releaseDate: 2026-11-04

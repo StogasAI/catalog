@@ -1,13 +1,13 @@
 package catalog
 
-#DataHandling: close({
+#ProviderDataHandling: close({
 	processingLocation: #ProcessingLocation
 	storageLocation:    #StorageLocation
-	endToEndEncrypted: bool
 	// Maximum retention of stored prompts and responses; null means unknown.
 	// Temporary in-memory prompt caching is excluded.
-	retentionDays:     null | (int & >=0)
-	trainingUse:       bool
+	retentionDays: null | (int & >=0)
+	// Whether the provider trains on prompts and responses; null means unknown.
+	trainingUse: null | bool
 	// No persistent retention of prompts or responses for this offering.
 	// Temporary in-memory prompt caching is compatible with ZDR.
 	zeroDataRetention: bool
@@ -18,17 +18,10 @@ package catalog
 	teeVerified: bool
 })
 
-#ProviderDataHandling: close({
-	processingLocation: #ProcessingLocation
-	storageLocation:    #StorageLocation
-	retentionDays:     null | (int & >=0)
-	trainingUse:       bool
-	zeroDataRetention: bool
-	tee:               bool
-	teeVerified:       bool
-})
-
+// A route states only what differs from its provider. It may state any fact of a deployment's
+// override, such as a Chutes route that relays requests to operators outside a TEE.
 #RouteDataHandling: close({
+	#DeploymentDataHandlingOverride
 	endToEndEncrypted: bool
 })
 
@@ -36,7 +29,7 @@ package catalog
 	processingLocation?: #ProcessingLocation
 	storageLocation?:    #StorageLocation
 	retentionDays?:     null | (int & >=0)
-	trainingUse?:       bool
+	trainingUse?:       null | bool
 	zeroDataRetention?: bool
 	tee?:               bool
 	teeVerified?:       bool
