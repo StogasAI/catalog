@@ -141,8 +141,8 @@ function deployment(
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
-		// Fable needs AWS review and Mythos needs provider data sharing, under which AWS keeps
-		// prompts and completions for 30 days.
+		// Fable needs the aws_review data retention mode and Mythos needs provider_data_share. Under
+		// either, AWS keeps prompts and completions inside AWS for up to 30 days.
 		const kept = /^claude-(fable|mythos)-/.test(model);
 		// Bedrock serves Mythos only to accounts that Anthropic's trusted access programs approve.
 		const gated = model.startsWith('claude-mythos') ? { approvalRequired: true } : {};

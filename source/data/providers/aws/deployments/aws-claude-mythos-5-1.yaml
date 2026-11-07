@@ -1,7 +1,8 @@
 # Bedrock's global inference profile, which routes across every Region with capacity. Bedrock
 # serves Mythos only to accounts that Anthropic's trusted access programs approve and whose data
-# retention mode is provider_data_share, under which AWS keeps prompts and completions inside AWS
-# for 30 days for abuse detection.
+# retention mode is provider_data_share. AWS calls that mode legacy and shares nothing with model
+# providers under it today: AWS keeps prompts and completions inside AWS for up to 30 days and may
+# review them.
 # Prices from the AWS Price List (AmazonBedrockFoundationModels, "Standard, Global"), reviewed 2026-11-07:
 # https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
 # Access and retention reviewed 2026-11-07: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-1.html
