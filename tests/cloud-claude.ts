@@ -34,15 +34,20 @@ export const claudeModels = {
 export type ClaudeModelId = keyof typeof claudeModels;
 
 /**
- * The deployments that Anthropic runs on a cloud: each model at Standard and through the Message
- * Batches API, globally and, from Claude 4.6, with US-only inference.
+ * The deployments that Anthropic runs on a cloud: each model at Standard, at Fast for the models
+ * in `fast`, and through the Message Batches API, globally and, from Claude 4.6, with US-only
+ * inference.
  */
-export function anthropicHosted(providerId: string, models: readonly ClaudeModelId[]) {
+export function anthropicHosted(
+	providerId: string,
+	models: readonly ClaudeModelId[],
+	fast: readonly ClaudeModelId[] = []
+) {
 	const usOnly = new Set(['claude-opus-4-5', 'claude-haiku-4-5']);
 	return models.flatMap((model) =>
-		['', '-batch'].flatMap((batch) =>
+		['', ...(fast.includes(model) ? ['-fast'] : []), '-batch'].flatMap((variant) =>
 			['', ...(usOnly.has(model) ? [] : ['-us'])].map(
-				(geo) => `${providerId}-${model}-anthropic-hosted${batch}${geo}`
+				(geo) => `${providerId}-${model}-anthropic-hosted${variant}${geo}`
 			)
 		)
 	);

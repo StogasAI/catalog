@@ -208,7 +208,8 @@ describe('Google Cloud onboarding contract', () => {
 				}
 			],
 			deployments,
-			anthropicHosted: anthropicHosted('google-cloud', platformModels)
+			// Anthropic's Fast mode page names Google Cloud for Opus 5.5 alone.
+			anthropicHosted: anthropicHosted('google-cloud', platformModels, ['claude-opus-5-5'])
 		});
 	});
 });

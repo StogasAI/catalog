@@ -1408,11 +1408,14 @@ function compileGraph(source, places) {
 						'serviceTier'
 					].includes(key)
 				)) ||
-			// Anthropic takes no inference geography for models before Claude 4.6.
+			// Anthropic takes no inference geography for models before Claude 4.6. The schema allows a
+			// tier only where Anthropic runs Claude on Google Cloud.
 			((providerId === 'aws' || providerId === 'google-cloud') &&
 				['hosting', 'model'].every((key) => selectorKeys.includes(key)) &&
 				(selectorKeys.includes('inferenceGeo') || deployment.upstream.hosting === 'anthropic') &&
-				selectorKeys.every((key) => ['hosting', 'inferenceGeo', 'model'].includes(key)));
+				selectorKeys.every((key) =>
+					['hosting', 'inferenceGeo', 'model', 'serviceTier'].includes(key)
+				));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}

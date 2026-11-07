@@ -59,13 +59,18 @@ package catalog
 // through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
 // location, global or the us or eu multi-region, or Anthropic's inference
 // geography, which has no eu and which models before Claude 4.6 do not take;
-// the build requires it for Agent Platform.
+// the build requires it for Agent Platform. fast is Anthropic's Fast mode,
+// which only Anthropic's hosting offers.
 #GoogleCloudUpstream: close({
 	model:         #UpstreamId
 	hosting:       "google" | "anthropic"
 	inferenceGeo?: "global" | "us" | "eu"
 	if hosting == "anthropic" {
 		inferenceGeo?: "global" | "us"
+	}
+	serviceTier?: "fast"
+	if serviceTier != _|_ {
+		hosting: "anthropic"
 	}
 })
 
