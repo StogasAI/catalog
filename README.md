@@ -40,7 +40,7 @@ A record serves until its date ends everywhere on Earth, at 12:00 UTC the next d
 
 The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment states why in `stogasUnsupported`, one sentence, and the reason passes down the same way a retirement date does: a provider's reason goes to its routes, and a route's reason to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
 
-OpenAI's Batch API, Anthropic's Message Batches API and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier.
+OpenAI's Batch API, Anthropic's Message Batches API and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema requires a reason on every batch route.
 
 Unserved records sit in their own parts, which the root marks with `stogasUnsupported: true`. The gateway never reads those parts, so it never routes to these records. A request that names one fails with the reason.
 

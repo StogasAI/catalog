@@ -47,8 +47,13 @@ package catalog
 	interfaces: [#Interface, ...#Interface]
 	// The route is a provider's batch API, which runs a file of requests within
 	// a window at its batch prices. Its deployments serve no other route and
-	// name no service tier.
+	// name no service tier. The gateway has no batch API, so Stogas serves no
+	// batch route.
 	batch?: true
+	if batch != _|_ {
+		stogasUnsupported: #UnsupportedReason
+	}
+
 	// Content the route carries to the provider. A deployment accepts the
 	// modalities that both its model and the route accept.
 	inputModalities: [#Modality, ...#Modality]
