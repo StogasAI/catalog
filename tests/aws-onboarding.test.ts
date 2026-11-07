@@ -53,6 +53,12 @@ offer(
 	tokenPrices('11', '1.1', '13.75', '22', '55')
 );
 offer(
+	'claude-mythos-5-1',
+	'anthropic.claude-mythos-5-1',
+	tokenPrices('10', '0.25', '12.5', '20', '50'),
+	tokenPrices('11', '0.275', '13.75', '22', '55')
+);
+offer(
 	'claude-opus-5-5',
 	'anthropic.claude-opus-5-5',
 	tokenPrices('4', '0.2', '5', '8', '20'),
@@ -135,26 +141,35 @@ function deployment(
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
-		// Fable needs AWS review, under which AWS keeps prompts and completions for 30 days.
-		const kept = model.startsWith('claude-fable');
+		// Fable needs AWS review and Mythos needs provider data sharing, under which AWS keeps
+		// prompts and completions for 30 days.
+		const kept = /^claude-(fable|mythos)-/.test(model);
+		// Bedrock serves Mythos only to accounts that Anthropic's trusted access programs approve.
+		const gated = model.startsWith('claude-mythos') ? { approvalRequired: true } : {};
 		return [
-			deployment(
-				`aws-${model}`,
-				model,
-				{ hosting: 'aws', inferenceGeo: 'global', model: `global.${profile}` },
-				kept ? { retentionDays: 30, storageLocation: 'world' } : {},
-				global
-			),
-			deployment(
-				`aws-${model}-us`,
-				model,
-				{ hosting: 'aws', inferenceGeo: 'us', model: `us.${profile}` },
-				{
-					processingLocation: 'US',
-					...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
-				},
-				us
-			),
+			{
+				...deployment(
+					`aws-${model}`,
+					model,
+					{ hosting: 'aws', inferenceGeo: 'global', model: `global.${profile}` },
+					kept ? { retentionDays: 30, storageLocation: 'world' } : {},
+					global
+				),
+				...gated
+			},
+			{
+				...deployment(
+					`aws-${model}-us`,
+					model,
+					{ hosting: 'aws', inferenceGeo: 'us', model: `us.${profile}` },
+					{
+						processingLocation: 'US',
+						...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
+					},
+					us
+				),
+				...gated
+			},
 			...(geographies[model] ?? []).map((geo) =>
 				deployment(
 					`aws-${model}-${geo}`,
@@ -205,7 +220,9 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 }
 // Claude Platform on AWS is Anthropic's own API, so each of its deployments serves what Anthropic's
 // does. It offers every model of the Claude API but Mythos, without Fast mode.
-const platformModels = Object.keys(claudeModels) as ClaudeModelId[];
+const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
+	(model) => !model.startsWith('claude-mythos')
+);
 
 // Only Claude Platform on AWS runs web search and web fetch, on both routes.
 const cloudHostedTools: ProviderRouteContract['hostedTools'] = [

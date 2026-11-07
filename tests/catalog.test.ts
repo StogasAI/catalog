@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 53, providers: 6, routes: 15, deployments: 471 });
+		).toEqual({ authors: 11, models: 53, providers: 6, routes: 15, deployments: 473 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -580,6 +580,8 @@ describe('compiled catalog', () => {
 			'anthropic-claude-mythos-5-us',
 			'anthropic-claude-opus-5-fast',
 			'anthropic-claude-opus-5-fast-us',
+			'aws-claude-mythos-5-1',
+			'aws-claude-mythos-5-1-us',
 			'azure-claude-mythos-5-1-anthropic-hosted',
 			'azure-claude-mythos-5-anthropic-hosted',
 			'openai-gpt-5.6-cyber'

@@ -133,7 +133,9 @@ const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 );
 // Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
 // serves what Anthropic's does. Mythos and Fast mode are not listed yet.
-const platformModels = Object.keys(claudeModels) as ClaudeModelId[];
+const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
+	(model) => !model.startsWith('claude-mythos')
+);
 
 describe('Google Cloud onboarding contract', () => {
 	test('pins the Claude route and every deployment', () => {
