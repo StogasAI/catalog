@@ -1583,7 +1583,7 @@ describe('catalog source compiler invariants', () => {
 		const standardHandling = {
 			endToEndEncrypted: false,
 			storageLocation: 'world',
-			retentionDays: 30,
+			retentionDays: null,
 			zeroDataRetention: false,
 			tee: false
 		};
