@@ -12,6 +12,7 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: US
+      storageLocation: US
       retentionDays: 29
   pricing:
     input_tokens:

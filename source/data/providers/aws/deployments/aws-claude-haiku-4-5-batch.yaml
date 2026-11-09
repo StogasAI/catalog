@@ -8,10 +8,6 @@ deployments:
     model: global.anthropic.claude-haiku-4-5-20251001-v1:0
     hosting: aws
     inferenceGeo: global
-  overrides:
-    dataHandling:
-      storageLocation: unknown
-      retentionDays: null
   pricing:
     input_tokens:
       per_mill_tokens: '0.5'

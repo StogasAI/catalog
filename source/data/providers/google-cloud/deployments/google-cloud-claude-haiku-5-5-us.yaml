@@ -6,7 +6,7 @@ deployments:
   routeIds: [google-cloud-messages]
   upstream:
     model: claude-haiku-5-5
-    hosting: google
+    hosting: google-cloud
     inferenceGeo: us
   overrides:
     dataHandling:

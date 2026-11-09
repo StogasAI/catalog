@@ -73,5 +73,6 @@ package catalog
 	retirementDate?: #Date
 	// Stogas does not serve this route, so none of its deployments either.
 	stogasUnsupported?: #UnsupportedReason
+	notes?:             #Note
 	periods?: [#Period, ...#Period]
 })

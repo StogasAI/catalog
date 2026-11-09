@@ -2,8 +2,11 @@ models:
   authorId: z-ai
   name: GLM-5.1
   groupIds: [glm-5]
+  # Z.ai states a 200K context, which the model's config gives as 202,752, and 128K output.
+  # Reviewed 2026-11-09: https://docs.z.ai/guides/llm/glm-5.1 and
+  # https://huggingface.co/zai-org/GLM-5.1/blob/main/config.json
   contextWindowTokens: 202752
-  maxOutputTokens: 202752
+  maxOutputTokens: 131072
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional

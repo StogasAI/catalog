@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-chat-completions, openai-responses]
   upstream:
     model: gpt-6-astra
+    hosting: openai
   pricing:
     input_tokens:
       per_mill_tokens: '10'

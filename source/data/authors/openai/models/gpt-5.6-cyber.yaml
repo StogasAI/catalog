@@ -8,6 +8,5 @@ models:
   inputModalities: [text, image]
   outputModalities: [text]
   reasoning: optional
-  reasoningEfforts: [low, medium, high, xhigh, max]
   releaseDate: 2026-08-07
   knowledgeCutoff: 2026-02-16

@@ -34,6 +34,7 @@ export type ProviderRouteContract = {
 	hostedTools?: HostedToolContract[];
 	/** Why Stogas does not serve the route, which its deployments carry. */
 	stogasUnsupported?: string;
+	notes?: string;
 };
 
 type HostedToolContract = {
@@ -62,6 +63,7 @@ export type ProviderDeploymentContract = {
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
+	notes?: string;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
 	reasoningEfforts?: string[];
@@ -79,7 +81,7 @@ export type ProviderOnboardingContract = {
 		capabilities: Record<string, boolean>;
 		credentialModes: Array<'managed' | 'byok'>;
 		dataHandling: DataHandlingContract;
-		headquarteredCountry?: string;
+		headquarteredCountry: string;
 		id: string;
 		name: string;
 	};
@@ -87,9 +89,10 @@ export type ProviderOnboardingContract = {
 	/**
 	 * Deployments that Anthropic runs on the provider's cloud. Each serves what Anthropic's own
 	 * deployment of the same upstream model, tier and inference geography serves, on a batch route
-	 * when it is on one.
+	 * when it is on one, with the data handling that the cloud changes.
 	 */
 	anthropicHosted?: string[];
+	anthropicHostedDataHandling?: Partial<DataHandlingContract>;
 	routes: ProviderRouteContract[];
 };
 
@@ -108,9 +111,7 @@ export function assertProviderOnboardingContract(
 		aliases: contract.provider.aliases,
 		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
-		...(contract.provider.headquarteredCountry
-			? { headquarteredCountry: contract.provider.headquarteredCountry }
-			: {})
+		headquarteredCountry: contract.provider.headquarteredCountry
 	};
 	expect(graph.providers[providerId]).toEqual(provider);
 
@@ -124,13 +125,15 @@ export function assertProviderOnboardingContract(
 			capabilities: { ...contract.provider.capabilities, ...route.capabilities },
 			dataHandling: routeHandling(route),
 			documentFormats: route.documentFormats,
-			...(route.endpoint ? { endpoint: route.endpoint } : {}),
+			endpoint: route.endpoint ?? null,
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
-			...(route.batch ? { batch: true } : {}),
-			hostedTools: route.hostedTools ?? [],
+			batch: route.batch === true,
+			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),
 			providerId,
-			...(route.stogasUnsupported ? { stogasUnsupported: route.stogasUnsupported } : {})
+			retirementDate: null,
+			stogasUnsupported: route.stogasUnsupported ?? null,
+			notes: route.notes ?? null
 		});
 	}
 
@@ -150,11 +153,12 @@ export function assertProviderOnboardingContract(
 			routes: Record<string, { chainHash: string }>;
 			upstream: Record<string, string>;
 		};
-		const { hosting, ...upstream } = copy.upstream;
-		expect(hosting).toBe('anthropic');
+		expect(copy.upstream.hosting).toBe('anthropic');
+		const sorted = (upstream: unknown) =>
+			JSON.stringify(Object.entries(upstream as object).sort(([a], [b]) => a.localeCompare(b)));
 		const sources = Object.entries(graph.deployments).filter(
 			([, deployment]) =>
-				JSON.stringify(deployment.upstream) === JSON.stringify(upstream) &&
+				sorted(deployment.upstream) === sorted(copy.upstream) &&
 				batch(deployment) === batch(copy) &&
 				Object.keys(deployment.routes).every(
 					(routeId) => graph.routes[routeId]?.providerId === 'anthropic'
@@ -162,13 +166,19 @@ export function assertProviderOnboardingContract(
 		);
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
-		// Route IDs and chain hashes name the provider; everything that the routes serve matches.
-		const served = (deployment: typeof copy) => ({
+		// Route IDs and chain hashes name the provider; everything that the routes serve matches,
+		// except the data handling that the cloud changes.
+		const served = (deployment: typeof copy, dataHandling = {}) => ({
 			...deployment,
-			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => route),
+			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
+				...route,
+				dataHandling: { ...(route as { dataHandling: object }).dataHandling, ...dataHandling }
+			})),
 			upstream: undefined
 		});
-		expect(served(copy)).toEqual(served(source as typeof copy));
+		expect(served(copy)).toEqual(
+			served(source as typeof copy, contract.anthropicHostedDataHandling)
+		);
 	}
 
 	for (const expected of contract.deployments) {
@@ -218,12 +228,10 @@ export function assertProviderOnboardingContract(
 					: (expected.modelReasoningMaxTokens ?? null),
 			retirementDate: expected.retirementDate,
 			routes: servedRoutes,
-			...Object.fromEntries(
-				expected.routeIds.flatMap((routeId) => {
-					const reason = routes.get(routeId)?.stogasUnsupported;
-					return reason ? [['stogasUnsupported', reason]] : [];
-				})
-			),
+			stogasUnsupported:
+				expected.routeIds.map((routeId) => routes.get(routeId)?.stogasUnsupported).find(Boolean) ??
+				null,
+			notes: expected.notes ?? null,
 			upstream: expected.upstream,
 			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};

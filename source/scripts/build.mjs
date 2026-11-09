@@ -87,17 +87,17 @@ const maxAliasesPerNode = 8;
 const cloudClaudeRoutes = {
 	aws: { 'aws-messages': ['anthropic', 'aws'], 'aws-batch-messages': ['anthropic', 'aws'] },
 	'google-cloud': {
-		'google-cloud-messages': ['anthropic', 'google'],
+		'google-cloud-messages': ['anthropic', 'google-cloud'],
 		'google-cloud-batch-messages': ['anthropic']
 	}
 };
-// The hosting that is the provider itself; a deployment ID names any other host.
-const providerHostings = { aws: 'aws', azure: 'azure', 'google-cloud': 'google' };
-// An end-to-end encrypted Chutes route selects an instance by its GPU count, which the encrypted
-// transport attests. A route that Chutes relays to another operator takes hosting unknown, because
-// Chutes does not name that operator.
+// Chutes runs the models of an end-to-end encrypted route itself and selects an instance by the
+// GPU count that the encrypted transport attests. It forwards the models of other routes to
+// operators that it does not name.
 function chutesSelectorKeys(endToEndEncrypted) {
-	return endToEndEncrypted ? ['chuteId', 'gpuCount', 'model'] : ['chuteId', 'hosting', 'model'];
+	return endToEndEncrypted
+		? ['chuteId', 'gpuCount', 'hosting', 'model']
+		: ['chuteId', 'hosting', 'model'];
 }
 const nodeIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFileSizeLimit = 1024 * 1024;
@@ -589,33 +589,6 @@ function validateRouteEndpoint(routeId, endpoint) {
 	}
 }
 
-function validateModelDerivation(models) {
-	const states = new Map();
-	for (const startId of Object.keys(models)) {
-		if (states.get(startId) === 'done') continue;
-		const stack = [{ id: startId, exit: false }];
-		while (stack.length) {
-			const item = stack.pop();
-			if (item.exit) {
-				states.set(item.id, 'done');
-				continue;
-			}
-			if (states.get(item.id) === 'done') continue;
-			if (states.get(item.id) === 'visiting') {
-				throw new Error(`${startId}: derivedFrom contains a cycle through ${item.id}`);
-			}
-			states.set(item.id, 'visiting');
-			stack.push({ id: item.id, exit: true });
-			for (const parentId of [...(models[item.id].derivedFrom ?? [])].reverse()) {
-				if (states.get(parentId) === 'visiting') {
-					throw new Error(`${startId}: derivedFrom contains a cycle through ${parentId}`);
-				}
-				if (states.get(parentId) !== 'done') stack.push({ id: parentId, exit: false });
-			}
-		}
-	}
-}
-
 function providerForDeployment(graph, deploymentId, deployment) {
 	const providers = deployment.routeIds.map(
 		(routeId) => requireNode(graph.routes, routeId, deploymentId).providerId
@@ -709,7 +682,7 @@ function compileHostedTools(routeId, source, places) {
 				throw new Error(`${owner}: ${offer.tool} has no call meter ${meter}`);
 			}
 		}
-		const { processingLocation, storageLocation } = offer.dataHandling;
+		const { processingLocation, storageLocation } = offer.dataHandling ?? {};
 		for (const location of [processingLocation, storageLocation]) {
 			if (location !== undefined && !isLocation(places, location)) {
 				throw new Error(`${owner}: dataHandling names a place that locations does not list`);
@@ -719,7 +692,7 @@ function compileHostedTools(routeId, source, places) {
 			tool: offer.tool,
 			...(offer.hostings && { hostings: [...offer.hostings].sort() }),
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
-			dataHandling: structuredClone(offer.dataHandling)
+			dataHandling: structuredClone(offer.dataHandling ?? {})
 		};
 	});
 	const firstHosting = (offer) => offer.hostings?.[0] ?? '';
@@ -1121,9 +1094,9 @@ function compileGraph(source, places) {
 					routeId,
 					{
 						providerId: route.providerId,
-						...(route.endpoint && { endpoint: route.endpoint }),
+						endpoint: route.endpoint ?? null,
 						interfaces: [...route.interfaces],
-						...(route.batch && { batch: true }),
+						batch: route.batch === true,
 						inputModalities: [...route.inputModalities],
 						documentFormats: structuredClone(route.documentFormats),
 						capabilities: Object.fromEntries(
@@ -1133,8 +1106,9 @@ function compileGraph(source, places) {
 							dataHandlingFields.map((field) => [field, dataHandling[field]])
 						),
 						hostedTools,
-						...(retirementDate !== null && { retirementDate }),
-						...(stogasUnsupported !== undefined && { stogasUnsupported })
+						retirementDate,
+						stogasUnsupported: stogasUnsupported ?? null,
+						notes: route.notes ?? null
 					}
 				];
 			})
@@ -1143,41 +1117,6 @@ function compileGraph(source, places) {
 	const selectors = new Map();
 	const groupSelectors = new Map();
 	const deployments = {};
-	const baseByModelRoute = new Map();
-	const deploymentsByModelRoute = new Map();
-	for (const [deploymentId, deployment] of Object.entries(graph.deployments)) {
-		for (const routeId of deployment.routeIds) {
-			const key = `${deployment.modelId}\0${routeId}`;
-			const deploymentIds = deploymentsByModelRoute.get(key) ?? [];
-			deploymentIds.push(deploymentId);
-			deploymentsByModelRoute.set(key, deploymentIds);
-		}
-	}
-	for (const [key, deploymentIds] of deploymentsByModelRoute) {
-		if (deploymentIds.length === 1) {
-			baseByModelRoute.set(key, deploymentIds[0]);
-			continue;
-		}
-		const [modelId, routeId] = key.split('\0');
-		const { batch, providerId } = requireNode(graph.routes, routeId, modelId);
-		// A batch route names its base after the batch API, and a route whose deployments of the model
-		// all share one tier, or one host other than the provider, after them.
-		const shared = (field, fallback) => {
-			const values = new Set(
-				deploymentIds.map((id) => graph.deployments[id].upstream[field] ?? fallback)
-			);
-			return values.size === 1 ? [...values][0] : fallback;
-		};
-		const tier = batch ? 'batch' : shared('serviceTier', 'standard');
-		const host = shared('hosting', providerHostings[providerId]);
-		const baseId = `${providerId}-${modelId}${host === providerHostings[providerId] ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`;
-		if (!deploymentIds.includes(baseId)) {
-			throw new Error(
-				`${key.replace('\0', '/')}: multiple deployments require canonical base ${baseId}`
-			);
-		}
-		baseByModelRoute.set(key, baseId);
-	}
 
 	function validateQualifierAliases(nodes, kind) {
 		const qualifiers = new Map();
@@ -1220,7 +1159,7 @@ function compileGraph(source, places) {
 		['provider', graph.providers]
 	])
 		for (const [id, { headquarteredCountry: country }] of Object.entries(nodes))
-			if (country !== undefined && !(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
+			if (!(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
 				throw new Error(
 					`${kind} ${id}: headquarteredCountry names a country that locations does not list`
 				);
@@ -1246,11 +1185,6 @@ function compileGraph(source, places) {
 	for (const [modelId, model] of Object.entries(graph.models)) {
 		validateAliasCount(model.aliases, 'model', modelId);
 		requireNode(graph.authors, model.authorId, modelId);
-		const parents = model.derivedFrom ?? [];
-		if (new Set(parents).size !== parents.length) {
-			throw new Error(`${modelId}: derivedFrom must not repeat`);
-		}
-		for (const parentId of parents) requireNode(graph.models, parentId, modelId);
 		if (model.maxInputTokens > model.contextWindowTokens) {
 			throw new Error(`${modelId}: input limit must fit inside the context window`);
 		}
@@ -1327,7 +1261,6 @@ function compileGraph(source, places) {
 			addSelector(selectors, alias, 'model', modelId);
 		}
 	}
-	validateModelDerivation(graph.models);
 	for (const groupId of Object.keys(graph.groups))
 		addSelector(groupSelectors, groupId, 'group', groupId);
 
@@ -1362,7 +1295,7 @@ function compileGraph(source, places) {
 		const routeReasons = deployment.routeIds.map(
 			(routeId) => graph.routes[routeId].stogasUnsupported
 		);
-		if (new Set(routeReasons.map((reason) => reason === undefined)).size > 1) {
+		if (new Set(routeReasons.map((reason) => reason === null)).size > 1) {
 			throw new Error(
 				`${deploymentId}: split the routes that Stogas serves from those that it does not`
 			);
@@ -1380,11 +1313,15 @@ function compileGraph(source, places) {
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
-				selectorKeys.includes('model') &&
-				selectorKeys.every((key) => ['model', 'reasoningMode', 'serviceTier'].includes(key))) ||
+				['hosting', 'model'].every((key) => selectorKeys.includes(key)) &&
+				selectorKeys.every((key) =>
+					['hosting', 'model', 'reasoningMode', 'serviceTier'].includes(key)
+				)) ||
 			(providerId === 'anthropic' &&
-				selectorKeys.includes('model') &&
-				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key))) ||
+				['hosting', 'model'].every((key) => selectorKeys.includes(key)) &&
+				selectorKeys.every((key) =>
+					['hosting', 'inferenceGeo', 'model', 'serviceTier'].includes(key)
+				)) ||
 			(providerId === 'chutes' &&
 				deployment.routeIds.every(
 					(routeId) =>
@@ -1419,15 +1356,17 @@ function compileGraph(source, places) {
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
-		// Chutes does not name the operator that serves a standard deployment.
-		if (
-			providerId === 'chutes' &&
-			deployment.routeIds.some(
-				(routeId) => !graph.routes[routeId].dataHandling.endToEndEncrypted
-			) &&
-			deployment.upstream.hosting !== 'unknown'
-		) {
-			throw new Error(`${deploymentId}: a Chutes standard deployment requires hosting unknown`);
+		// Chutes runs the models of its end-to-end encrypted route itself and forwards those of its
+		// other routes to operators that it does not name.
+		if (providerId === 'chutes') {
+			const expected = graph.routes[deployment.routeIds[0]].dataHandling.endToEndEncrypted
+				? 'chutes'
+				: 'unknown';
+			if (deployment.upstream.hosting !== expected) {
+				throw new Error(
+					`${deploymentId}: a deployment on ${deployment.routeIds[0]} requires hosting ${expected}`
+				);
+			}
 		}
 		// Azure sells OpenAI tiers as request modes of one deployment, and Claude Fast as its own model.
 		if (
@@ -1523,17 +1462,20 @@ function compileGraph(source, places) {
 				);
 			}
 		}
-		// Microsoft's preview terms drop its data location and retention commitments.
+		// Microsoft's preview terms drop its data location, retention and training commitments.
 		if (
 			providerId === 'azure' &&
 			(deployment.upstream.deploymentType === 'instant' ||
 				deployment.upstream.serviceTier === 'flex') &&
 			dataHandlingValues.some(
-				(value) => value.storageLocation !== 'world' || value.retentionDays !== null
+				(value) =>
+					value.storageLocation !== 'unknown' ||
+					value.retentionDays !== null ||
+					value.trainingUse !== null
 			)
 		) {
 			throw new Error(
-				`${deploymentId}: Azure Instant and Flex previews must keep world storage and unknown retention`
+				`${deploymentId}: Azure Instant and Flex previews must leave storage, retention and training unknown`
 			);
 		}
 		// An upstream inference geo says where inference runs: Anthropic's inference_geo, Bedrock's
@@ -1547,11 +1489,24 @@ function compileGraph(source, places) {
 		) {
 			throw new Error(`${deploymentId}: processingLocation must match upstream inferenceGeo`);
 		}
-		const baseStates = deployment.routeIds.map(
-			(routeId) => baseByModelRoute.get(`${deployment.modelId}\0${routeId}`) === deploymentId
-		);
-		if (new Set(baseStates).size !== 1) {
-			throw new Error(`${deploymentId}: split deployments whose routes have different bases`);
+		// The ID names the provider and model, then each upstream fact that sets the deployment apart
+		// from the provider's own standard one: who runs it when not the provider, its reasoning mode,
+		// its tier or batch API, and the geography or Azure data zone where it runs.
+		const { deploymentType, hosting, inferenceGeo, reasoningMode, serviceTier } =
+			deployment.upstream;
+		const expectedId = [
+			providerId,
+			deployment.modelId,
+			hosting !== providerId && `${hosting}-hosted`,
+			reasoningMode,
+			serviceTier ?? (deploymentType === 'instant' ? 'instant' : batch[0] && 'batch'),
+			inferenceGeo !== 'global' && inferenceGeo,
+			/^data_zone_standard_(.+)$/.exec(deploymentType ?? '')?.[1]
+		]
+			.filter(Boolean)
+			.join('-');
+		if (deploymentId !== expectedId) {
+			throw new Error(`${deploymentId}: the deployment's upstream names it ${expectedId}`);
 		}
 
 		addSelector(selectors, deploymentId, 'deployment', deploymentId);
@@ -1563,7 +1518,8 @@ function compileGraph(source, places) {
 			// Closed models do not disclose how their weights are stored.
 			weightPrecision: deployment.weightPrecision ?? 'unknown',
 			retirementDate,
-			...(stogasUnsupported !== undefined && { stogasUnsupported }),
+			stogasUnsupported,
+			notes: deployment.notes ?? null,
 			...served
 		};
 	}
@@ -1598,22 +1554,19 @@ function compileGraph(source, places) {
 	for (const [deploymentId, fast] of Object.entries(deployments)) {
 		if (fast.upstream.serviceTier !== 'fast') continue;
 		for (const routeId of Object.keys(fast.routes)) {
-			const standards = Object.values(deployments).filter(
+			// Two Standard deployments that match these fields would share an ID, so one at most does.
+			const standard = Object.values(deployments).find(
 				(candidate) =>
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
 					Object.hasOwn(candidate.routes, routeId) &&
 					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field])
 			);
-			if (standards.length > 1) {
-				throw new Error(`${deploymentId}: Fast matches several Standard deployments on ${routeId}`);
-			}
-			const [standard] = standards;
 			if (
 				!standard ||
 				(standard.retirementDate !== null &&
 					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate)) ||
-				(standard.stogasUnsupported !== undefined && fast.stogasUnsupported === undefined)
+				(standard.stogasUnsupported !== null && fast.stogasUnsupported === null)
 			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}

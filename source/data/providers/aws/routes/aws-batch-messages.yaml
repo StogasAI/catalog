@@ -2,7 +2,7 @@
 # Hosting aws is Bedrock's batch inference at https://bedrock.{region}.amazonaws.com/model-invocation-job,
 # through the same inference profiles at about half of the on-demand price. A job reads its requests
 # from, and writes its results to, S3 buckets in the customer's account, so the customer chooses where
-# they are stored and for how long, and each of its deployments states an unknown place and retention.
+# they are stored and for how long, and the place and retention of its deployments stay unknown.
 # The AWS Price List bills only their input and output tokens.
 # Hosting anthropic is Anthropic's Message Batches API on Claude Platform on AWS, at
 # https://aws-external-anthropic.{region}.api.aws/v1/messages/batches, at half of every token price.

@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-batch-responses]
   upstream:
     model: gpt-6-astra
+    hosting: openai
     reasoningMode: pro
   overrides:
     dataHandling:

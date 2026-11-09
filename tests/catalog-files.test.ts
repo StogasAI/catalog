@@ -352,9 +352,16 @@ describe('catalog parts', () => {
 
 	test('read a root and parts of the previous format as the current format', () => {
 		const { root, parts } = files(partitionCatalog(scheduled()));
-		// The previous format differs only in its schema names.
-		const previousRoot = { ...root, schema: 'stogas.catalog.v11' };
-		const previousParts = parts.map((part) => ({ ...part, schema: 'stogas.catalog.part.v11' }));
+		// The previous format differs in its schema names and in the hosting of Google Cloud's own
+		// deployments.
+		const previousRoot = { ...root, schema: 'stogas.catalog.v12' };
+		const previousParts = parts.map((part) => ({
+			...(JSON.parse(
+				JSON.stringify(part).replaceAll('"hosting":"google-cloud"', '"hosting":"google"')
+			) as CatalogPart),
+			schema: 'stogas.catalog.part.v12'
+		}));
+		expect(JSON.stringify(previousParts)).toContain('"hosting":"google"');
 		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
 		expect(currentRoot).toEqual(root);
 		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
@@ -591,7 +598,7 @@ describe('catalog limits', () => {
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v12',
+				schema: 'stogas.catalog.v13',
 				locations: {},
 				summaries: {},
 				parts,

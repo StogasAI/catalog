@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-chat-completions]
   upstream:
     model: gpt-5-search-api-2025-10-14
+    hosting: openai
   pricing:
     input_tokens:
       per_mill_tokens: '1.25'

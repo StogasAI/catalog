@@ -1,0 +1,19 @@
+deployments:
+  modelId: qwen3.5-27b
+  routeIds: [chutes-chat-completions]
+  upstream:
+    model: Qwen/Qwen3.5-27B-TEE
+    chuteId: d24fc0ce-25e3-5377-8e8a-af99ee9bb70d
+    hosting: chutes
+    gpuCount: 1
+  weightPrecision: fp8
+  overrides:
+    contextWindowTokens: 262144
+    maxOutputTokens: 262144
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.2'
+    cached_input_tokens:
+      per_mill_tokens: '0.02'
+    output_tokens:
+      per_mill_tokens: '1.75'

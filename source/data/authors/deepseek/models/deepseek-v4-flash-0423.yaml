@@ -3,10 +3,11 @@ models:
   name: DeepSeek V4 Flash 0423
   groupIds: [deepseek-v4-flash]
   contextWindowTokens: 1048576
-  maxOutputTokens: 384000
+  # DeepSeek's API reference caps output at 384K (393216). Reviewed 2026-11-09:
+  # https://api-docs.deepseek.com/quick_start/pricing
+  maxOutputTokens: 393216
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
   reasoningEfforts: [high, max]
-  snapshot: 2026-04-23
   releaseDate: 2026-04-24

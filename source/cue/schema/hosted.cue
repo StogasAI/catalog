@@ -24,6 +24,7 @@ package catalog
 	// The hostings that run the tool; omitted, every deployment of the route
 	// offers it. Each hosting has at most one offer of a tool.
 	hostings?: [#Hosting, ...#Hosting]
-	pricing?:     #HostedToolPricing
-	dataHandling: #HostedToolDataHandling
+	pricing?: #HostedToolPricing
+	// Omitted when the tool's processing changes none of the deployment's facts.
+	dataHandling?: #HostedToolDataHandling
 })

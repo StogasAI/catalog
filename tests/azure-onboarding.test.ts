@@ -185,30 +185,6 @@ otherTargets.push(
 			modelVersion: '2026-04-23'
 		}
 	})),
-	{
-		id: 'azure-deepseek-v4-pro-fireworks-hosted-us',
-		modelId: 'deepseek-v4-pro',
-		routeIds: ['azure-chat-completions'],
-		upstream: {
-			deploymentType: 'data_zone_standard_us',
-			hosting: 'fireworks',
-			model: 'FW-DeepSeek-V4-Pro',
-			modelFormat: 'Fireworks',
-			modelVersion: '1'
-		}
-	},
-	{
-		id: 'azure-glm-5.2',
-		modelId: 'glm-5.2',
-		routeIds: ['azure-chat-completions'],
-		upstream: {
-			deploymentType: 'data_zone_standard_us',
-			hosting: 'fireworks',
-			model: 'FW-GLM-5.2',
-			modelFormat: 'Fireworks',
-			modelVersion: '1'
-		}
-	},
 	...(['global', 'us'] as const).map((location) => ({
 		id: `azure-gpt-oss-120b${location === 'global' ? '' : '-us'}`,
 		modelId: 'gpt-oss-120b',
@@ -222,7 +198,7 @@ otherTargets.push(
 		}
 	})),
 	{
-		id: 'azure-minimax-m3',
+		id: 'azure-minimax-m3-fireworks-hosted-us',
 		modelId: 'minimax-m3',
 		routeIds: ['azure-chat-completions'],
 		upstream: {
@@ -476,18 +452,15 @@ describe('Azure provider onboarding contract', () => {
 					longPromptMultiplier: deployment.modelId === 'claude-haiku-5-5' ? 5n : undefined
 				})
 			);
-			const handling = route.dataHandling;
-			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
-			expect(handling.retentionDays).toBe(fableOrMythos ? 30 : 0);
+			// Anthropic keeps what it runs for 30 days. Microsoft states no retention for what it runs.
+			expect(route.dataHandling.retentionDays).toBe(
+				deployment.upstream.hosting === 'anthropic' ? 30 : null
+			);
 			// Foundry offers no max effort for Claude Fable and Mythos.
+			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
 			expect(route.reasoningEfforts.includes('max')).toBe(
 				!fableOrMythos && catalog.graph.models[deployment.modelId].reasoningEfforts.includes('max')
 			);
-			if (fableOrMythos) {
-				expect(handling.storageLocation).toBe('unknown');
-			} else if (deployment.upstream.hosting === 'anthropic') {
-				expect(handling.storageLocation).toBe('none');
-			}
 		}
 	});
 
@@ -497,10 +470,8 @@ describe('Azure provider onboarding contract', () => {
 			'azure-deepseek-v4-flash-0423-eu': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-flash-0423-us': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-pro': ['1.74', '0.145', '3.48'],
-			'azure-deepseek-v4-pro-fireworks-hosted-us': ['1.925', '0.165', '3.828'],
 			'azure-deepseek-v4-pro-us': ['1.91', '0.16', '3.83'],
-			'azure-glm-5.2': ['1.54', '0.15', '4.84'],
-			'azure-minimax-m3': ['0.33', '0.066', '1.32']
+			'azure-minimax-m3-fireworks-hosted-us': ['0.33', '0.066', '1.32']
 		} as const;
 		const deployments = catalog.graph.deployments;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
@@ -541,8 +512,10 @@ describe('Azure provider onboarding contract', () => {
 				}
 				if (deployment.upstream.hosting === 'fireworks') {
 					expect(handling).toMatchObject({
-						processingLocation: 'unknown',
-						storageLocation: 'unknown'
+						processingLocation: 'US',
+						retentionDays: null,
+						storageLocation: 'unknown',
+						trainingUse: null
 					});
 				}
 			}

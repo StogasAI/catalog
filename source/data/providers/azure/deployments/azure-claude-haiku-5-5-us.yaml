@@ -12,6 +12,7 @@ deployments:
     dataHandling:
       processingLocation: US
       storageLocation: US
+      retentionDays: null
   pricing:
     input_tokens:
       per_mill_tokens: '0.11'

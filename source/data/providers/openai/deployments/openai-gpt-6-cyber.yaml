@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-chat-completions, openai-responses]
   upstream:
     model: gpt-6-cyber
+    hosting: openai
   approvalRequired: true
   stogasUnsupported: OpenAI accepts its requests only from IP addresses that your project allowlists, and the gateway's address is not public.
   pricing:

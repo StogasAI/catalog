@@ -8,11 +8,12 @@ deployments:
   routeIds: [google-cloud-messages]
   upstream:
     model: claude-fable-5
-    hosting: google
+    hosting: google-cloud
     inferenceGeo: eu
   overrides:
     dataHandling:
       processingLocation: eu
+      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '11'

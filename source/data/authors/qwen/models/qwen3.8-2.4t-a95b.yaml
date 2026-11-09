@@ -9,4 +9,4 @@ models:
   outputModalities: [text]
   reasoning: required
   reasoningEfforts: [low, medium, xhigh]
-  releaseDate: 2026-08-13
+  releaseDate: 2026-08-12

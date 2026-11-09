@@ -102,13 +102,16 @@ function deployment(
 	};
 }
 
+// Google keeps Fable's prompts and responses for up to 30 days to monitor abuse.
+const kept = (model: ClaudeModelId) =>
+	model.startsWith('claude-fable-') ? { retentionDays: 30 } : {};
 const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 	({ model, global, regional }) => [
 		deployment(
 			`google-cloud-${model}`,
 			model,
-			{ hosting: 'google', inferenceGeo: 'global' },
-			{},
+			{ hosting: 'google-cloud', inferenceGeo: 'global' },
+			kept(model),
 			global
 		),
 		...(regional
@@ -116,15 +119,15 @@ const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 					deployment(
 						`google-cloud-${model}-eu`,
 						model,
-						{ hosting: 'google', inferenceGeo: 'eu' },
-						{ processingLocation: 'eu' },
+						{ hosting: 'google-cloud', inferenceGeo: 'eu' },
+						{ processingLocation: 'eu', ...kept(model) },
 						regional
 					),
 					deployment(
 						`google-cloud-${model}-us`,
 						model,
-						{ hosting: 'google', inferenceGeo: 'us' },
-						{ processingLocation: 'US' },
+						{ hosting: 'google-cloud', inferenceGeo: 'us' },
+						{ processingLocation: 'US', ...kept(model) },
 						regional
 					)
 				]
@@ -211,7 +214,9 @@ describe('Google Cloud onboarding contract', () => {
 			],
 			deployments,
 			// Anthropic's Fast mode page names Google Cloud for Opus 5.5 alone.
-			anthropicHosted: anthropicHosted('google-cloud', platformModels, ['claude-opus-5-5'])
+			anthropicHosted: anthropicHosted('google-cloud', platformModels, ['claude-opus-5-5']),
+			// Claude Platform on Google Cloud stores data in the US.
+			anthropicHostedDataHandling: { storageLocation: 'US' }
 		});
 	});
 });

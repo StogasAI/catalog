@@ -18,12 +18,13 @@ const capabilities = {
 	systemMessages: true,
 	toolChoice: true
 };
-// Bedrock neither stores nor logs prompts unless the account turns on invocation logging.
+// In Bedrock's default data retention mode, AWS may keep data for safety and abuse prevention for
+// a period that it does not state.
 const providerHandling: DataHandlingContract = {
 	endToEndEncrypted: false,
 	processingLocation: 'world',
-	retentionDays: 0,
-	storageLocation: 'none',
+	retentionDays: null,
+	storageLocation: 'unknown',
 	tee: false,
 	teeVerified: false,
 	trainingUse: false,

@@ -4,8 +4,9 @@ deployments:
   upstream:
     model: zai-org/GLM-5.2-TEE
     chuteId: 08901219-159f-55a7-87cf-9d0d02744668
+    hosting: chutes
     gpuCount: 8
-  weightPrecision: nvfp4
+  weightPrecision: fp4
   overrides:
     maxOutputTokens: 65535
   pricing:

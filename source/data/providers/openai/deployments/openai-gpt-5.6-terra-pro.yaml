@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-responses]
   upstream:
     model: gpt-5.6-terra
+    hosting: openai
     reasoningMode: pro
   pricing:
     input_tokens:

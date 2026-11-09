@@ -2,8 +2,8 @@ models:
   authorId: deepseek
   name: DeepSeek V3.2
   groupIds: [deepseek-v3]
-  contextWindowTokens: 163840
-  maxOutputTokens: 163840
+  contextWindowTokens: 131072
+  maxOutputTokens: 131072
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional

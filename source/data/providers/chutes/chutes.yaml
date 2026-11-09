@@ -1,6 +1,7 @@
 providers:
   name: Chutes
   credentialModes: [managed, byok]
+  headquarteredCountry: US
   capabilities:
     streaming: true
     functionCalling: true
@@ -10,11 +11,15 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+  # Chutes' terms let it, its network operators and its model providers host, process and cache
+  # content for as long as processing needs it, and name no place or period. Chutes does not
+  # train on content.
+  # Reviewed 2026-11-09: https://chutes.ai/terms and https://chutes.ai/privacy
   dataHandling:
     processingLocation: world
-    storageLocation: none
-    retentionDays: 0
+    storageLocation: unknown
+    retentionDays: null
     trainingUse: false
-    zeroDataRetention: true
+    zeroDataRetention: false
     tee: true
     teeVerified: false

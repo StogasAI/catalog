@@ -11,6 +11,7 @@ deployments:
     inferenceGeo: global
   overrides:
     dataHandling:
+      storageLocation: US
       retentionDays: 29
   pricing:
     input_tokens:

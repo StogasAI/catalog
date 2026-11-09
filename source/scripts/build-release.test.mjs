@@ -43,7 +43,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-const root = { schema: 'stogas.catalog.v12', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
+const root = { schema: 'stogas.catalog.v13', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
 mkdirSync('generated', { recursive: true });
 writeFileSync('generated/catalog.json', JSON.stringify(root));
 const part = ${JSON.stringify(part)};
@@ -144,7 +144,7 @@ helper.unref();
 			readFileSync(join(source.root, 'generated/catalog.json'), 'utf8')
 		);
 		assert.deepEqual(root, {
-			schema: 'stogas.catalog.v12',
+			schema: 'stogas.catalog.v13',
 			locations: {},
 			summaries: {},
 			parts: source.parts

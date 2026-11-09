@@ -7,7 +7,8 @@ models:
   inputModalities: [text, image, audio, video]
   outputModalities: [text]
   reasoning: optional
+  # NVIDIA's endpoint takes a reasoning budget of up to 32,768 tokens.
   reasoningMaxTokens:
     minimum: 1
-    maximum: 262143
+    maximum: 32768
   releaseDate: 2026-04-28

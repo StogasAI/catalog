@@ -3,11 +3,11 @@ deployments:
   routeIds: [anthropic-message-batches]
   upstream:
     model: claude-opus-4-6
+    hosting: anthropic
     inferenceGeo: us
   overrides:
     dataHandling:
       processingLocation: US
-      storageLocation: unknown
       retentionDays: 29
   pricing:
     input_tokens:

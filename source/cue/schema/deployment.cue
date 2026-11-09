@@ -3,24 +3,31 @@ package catalog
 // serviceTier names a provider-neutral tier; the compiler records an omitted tier as standard.
 #OpenAIUpstream: close({
 	model:          #UpstreamId
+	hosting:        "openai"
 	reasoningMode?: "pro"
 	serviceTier?:   "flex" | "fast" | "ultrafast"
 })
 
 #AnthropicUpstream: close({
 	model:         #UpstreamId
+	hosting:       "anthropic"
 	serviceTier?:  "fast"
 	inferenceGeo?: "global" | "us"
 })
 
-// An end-to-end encrypted route selects a Chutes instance by its GPU count, and a route that
-// Chutes relays to another operator takes hosting unknown, because Chutes does not name that
-// operator. The build checks which of them each route takes.
+// Chutes runs the models of its end-to-end encrypted route itself, in a TEE, and selects an
+// instance by the GPU count that the encrypted transport attests. It forwards the models of its
+// Standard route to inference platforms that it does not name. The build checks which hosting
+// each route takes.
 #ChutesUpstream: close({
-	model:     #UpstreamId
-	chuteId:   #Uuid
-	gpuCount?: int & >=1 & <=8
-	hosting?:  #Hosting
+	model:    #UpstreamId
+	chuteId:  #Uuid
+	hosting:  "chutes"
+	gpuCount: int & >=1 & <=8
+}) | close({
+	model:   #UpstreamId
+	chuteId: #Uuid
+	hosting: "unknown"
 })
 
 #AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "OpenAI" | "OpenAI-OSS"
@@ -55,7 +62,7 @@ package catalog
 #InferenceGeography: "global" | "us" | "eu" | "jp" | "au" | "in" | "ca"
 
 // Google Cloud serves Claude two ways: Google runs it on Agent Platform,
-// formerly Vertex AI (hosting google), and Anthropic runs it itself, billed
+// formerly Vertex AI (hosting google-cloud), and Anthropic runs it itself, billed
 // through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
 // location, global or the us or eu multi-region, or Anthropic's inference
 // geography, which has no eu and which models before Claude 4.6 do not take;
@@ -63,7 +70,7 @@ package catalog
 // which only Anthropic's hosting offers.
 #GoogleCloudUpstream: close({
 	model:         #UpstreamId
-	hosting:       "google" | "anthropic"
+	hosting:       "google-cloud" | "anthropic"
 	inferenceGeo?: "global" | "us" | "eu"
 	if hosting == "anthropic" {
 		inferenceGeo?: "global" | "us"
@@ -74,9 +81,10 @@ package catalog
 	}
 })
 
-// Who runs the model when a provider resells another operator's service. unknown means the
-// provider does not say whose service it resells.
-#Hosting: "unknown" | "azure" | "anthropic" | "fireworks" | "aws" | "google"
+// Who runs the model: the provider's own ID when it runs the model itself, the ID of the company
+// whose service it resells, or unknown when it forwards requests to a company that it does not
+// name. The deployment ID names any hosting other than the provider.
+#Hosting: "anthropic" | "aws" | "azure" | "chutes" | "fireworks" | "google-cloud" | "openai" | "unknown"
 
 #Upstream: close({
 	model:           #UpstreamId
@@ -85,7 +93,7 @@ package catalog
 	serviceTier?:    "flex" | "fast" | "ultrafast"
 	inferenceGeo?:   #InferenceGeography
 	reasoningMode?:  "pro"
-	hosting?:        #Hosting
+	hosting:         #Hosting
 	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
 	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
@@ -97,6 +105,7 @@ package catalog
 	upstream: #Upstream
 	// The provider serves this deployment only to accounts it has approved.
 	approvalRequired?: true
+	// Omitted when the provider does not state it; the compiler writes unknown.
 	weightPrecision?: #WeightPrecision
 	// The date that the provider names for the deployment's shutdown or
 	// retirement, as it names it. Readers keep routing to the deployment until
@@ -107,6 +116,7 @@ package catalog
 	// Stogas does not serve this deployment. A deployment that Stogas serves on one route serves
 	// on all of them, so a deployment on a route that Stogas does not serve is not served either.
 	stogasUnsupported?: #UnsupportedReason
+	notes?:             #Note
 	// Narrower facts than the deployment inherits from its model and routes.
 	overrides?: close({
 		contextWindowTokens?: int & >0

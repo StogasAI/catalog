@@ -18,11 +18,12 @@ const capabilities = {
 const chuteIds: Record<string, string> = {
 	'chutes-deepseek-v3.2': '398651e1-5f85-5e50-a513-7c5324e8e839',
 	'chutes-deepseek-v4-flash-0731': 'b4d58772-e72b-55d1-9d73-d30dff6d2ed8',
-	'chutes-gemma-4-31b-turbo': '42ee92ba-a537-5a73-8741-876067750db7',
+	'chutes-gemma-4-31b': '42ee92ba-a537-5a73-8741-876067750db7',
 	'chutes-glm-5.1': 'b048fe26-0352-5c46-acf7-335e527e7f3d',
 	'chutes-glm-5.2': '08901219-159f-55a7-87cf-9d0d02744668',
 	'chutes-kimi-k2.6': 'aac09863-35b4-5d9b-9b67-6e6a9d54273a',
 	'chutes-kimi-k3': '0bb5d4c2-b5da-587d-b88e-62b4839028ec',
+	'chutes-qwen3.5-27b': 'd24fc0ce-25e3-5377-8e8a-af99ee9bb70d',
 	'chutes-qwen3.5-397b-a17b': '51a4284a-a5a0-5e44-a9cc-6af5a2abfbcf',
 	'chutes-qwen3.6-27b': '7aa5e899-c0ba-5482-af48-d3f31d635c9f',
 	'chutes-qwen3.8-27b': '9ecb73cc-909b-5334-9cd8-74985945cff5'
@@ -30,26 +31,45 @@ const chuteIds: Record<string, string> = {
 const gpuCounts: Record<string, number> = {
 	'chutes-deepseek-v3.2': 8,
 	'chutes-deepseek-v4-flash-0731': 8,
-	'chutes-gemma-4-31b-turbo': 1,
+	'chutes-gemma-4-31b': 1,
 	'chutes-glm-5.1': 8,
 	'chutes-glm-5.2': 8,
 	'chutes-kimi-k2.6': 8,
 	'chutes-kimi-k3': 8,
+	'chutes-qwen3.5-27b': 1,
 	'chutes-qwen3.5-397b-a17b': 8,
 	'chutes-qwen3.6-27b': 1,
 	'chutes-qwen3.8-27b': 1
 };
 const dataHandling = {
 	processingLocation: 'world',
-	storageLocation: 'none',
+	storageLocation: 'unknown',
 	endToEndEncrypted: true,
-	retentionDays: 0,
+	retentionDays: null,
 	trainingUse: false,
-	zeroDataRetention: true,
+	zeroDataRetention: false,
 	tee: true,
 	teeVerified: false
 };
 const deployments: ProviderDeploymentContract[] = [
+	deployment(
+		'chutes-qwen3.5-27b',
+		'qwen3.5-27b',
+		'qwen',
+		'Qwen/Qwen3.5-27B-TEE',
+		262144,
+		262144,
+		'fp8',
+		'0.2',
+		'0.02',
+		'1.75',
+		true,
+		['text', 'image', 'video'],
+		'optional',
+		[],
+		null,
+		{ contextWindowTokens: 1_010_000, maxOutputTokens: 1_010_000 }
+	),
 	deployment(
 		'chutes-qwen3.5-397b-a17b',
 		'qwen3.5-397b-a17b',
@@ -69,13 +89,13 @@ const deployments: ProviderDeploymentContract[] = [
 		{ contextWindowTokens: 1_010_000, maxOutputTokens: 1_010_000 }
 	),
 	deployment(
-		'chutes-gemma-4-31b-turbo',
+		'chutes-gemma-4-31b',
 		'gemma-4-31b',
 		'google',
 		'google/gemma-4-31B-turbo-TEE',
 		131072,
 		65536,
-		'nvfp4',
+		'fp4',
 		'0.12',
 		'0.012',
 		'0.37',
@@ -102,7 +122,7 @@ const deployments: ProviderDeploymentContract[] = [
 		'optional',
 		[],
 		null,
-		{ maxOutputTokens: 202752 }
+		{ maxOutputTokens: 131072 }
 	),
 	deployment(
 		'chutes-deepseek-v3.2',
@@ -120,7 +140,7 @@ const deployments: ProviderDeploymentContract[] = [
 		'optional',
 		[],
 		null,
-		{ contextWindowTokens: 163840, maxOutputTokens: 163840 }
+		{ contextWindowTokens: 131072, maxOutputTokens: 131072 }
 	),
 	deployment(
 		'chutes-glm-5.2',
@@ -129,7 +149,7 @@ const deployments: ProviderDeploymentContract[] = [
 		'zai-org/GLM-5.2-TEE',
 		1048576,
 		65535,
-		'nvfp4',
+		'fp4',
 		'1.25',
 		'0.125',
 		'3.95',
@@ -234,14 +254,15 @@ const deployments: ProviderDeploymentContract[] = [
 		reasoningEfforts: ['high', 'max']
 	},
 	standard(
-		'chutes-deepseek-v4.1-flash-1017',
+		'chutes-deepseek-v4.1-flash-1017-unknown-hosted',
 		'deepseek-v4.1-flash-1017',
 		'deepseek',
 		'deepseek-ai/DeepSeek-V4.1-Flash-1017',
 		'34c7b79d-854b-5e32-981a-774d322062b0',
-		{ contextWindowTokens: 1048576, maxOutputTokens: 1048576 },
+		{ contextWindowTokens: 1048576, maxOutputTokens: 393216 },
 		{
 			inputModalities: ['text', 'image'],
+			maxOutputTokens: 393216,
 			reasoning: 'optional',
 			reasoningEfforts: ['low', 'high', 'max']
 		},
@@ -249,17 +270,22 @@ const deployments: ProviderDeploymentContract[] = [
 		{ structuredOutputs: false }
 	),
 	standard(
-		'chutes-deepseek-v4-pro-0813',
+		'chutes-deepseek-v4-pro-0813-unknown-hosted',
 		'deepseek-v4-pro-0813',
 		'deepseek',
 		'deepseek-ai/DeepSeek-V4-Pro-0813',
 		'b990f27b-59b1-526e-adfd-e3ad9ea8920d',
-		{ contextWindowTokens: 1048576, maxOutputTokens: 384000 },
-		{ inputModalities: ['text'], reasoning: 'optional', reasoningEfforts: ['low', 'high', 'max'] },
+		{ contextWindowTokens: 1048576, maxOutputTokens: 393216 },
+		{
+			inputModalities: ['text'],
+			maxOutputTokens: 393216,
+			reasoning: 'optional',
+			reasoningEfforts: ['low', 'high', 'max']
+		},
 		['0.85', '0.15', '2.65']
 	),
 	standard(
-		'chutes-glm-5.3',
+		'chutes-glm-5.3-unknown-hosted',
 		'glm-5.3',
 		'z-ai',
 		'zai-org/GLM-5.3',
@@ -275,7 +301,7 @@ const deployments: ProviderDeploymentContract[] = [
 		{ structuredOutputs: false }
 	),
 	standard(
-		'chutes-glm-5.2-fast',
+		'chutes-glm-5.2-unknown-hosted',
 		'glm-5.2',
 		'z-ai',
 		'zai-org/GLM-5.2-Fast',
@@ -290,7 +316,7 @@ const deployments: ProviderDeploymentContract[] = [
 		['2.45', '0.49', '7.7']
 	),
 	standard(
-		'chutes-kimi-k2.7-code',
+		'chutes-kimi-k2.7-code-unknown-hosted',
 		'kimi-k2.7-code',
 		'moonshot-ai',
 		'moonshotai/Kimi-K2.7-Code',
@@ -300,7 +326,7 @@ const deployments: ProviderDeploymentContract[] = [
 		['0.832', '0.167', '3.5']
 	),
 	standard(
-		'chutes-qwen3.8-2.4t-a95b',
+		'chutes-qwen3.8-2.4t-a95b-unknown-hosted',
 		'qwen3.8-2.4t-a95b',
 		'qwen',
 		'Qwen/Qwen3.8-2.4T-A95B',
@@ -315,17 +341,17 @@ const deployments: ProviderDeploymentContract[] = [
 		{ structuredOutputs: false, toolChoice: false }
 	),
 	standard(
-		'chutes-qwen3.8-max-0902',
+		'chutes-qwen3.8-max-0902-unknown-hosted',
 		'qwen3.8-max-0902',
 		'qwen',
 		'Qwen/Qwen3.8-Max-0902',
 		'cb177979-3b79-5508-bcbe-5e7f3f5cec75',
-		{ contextWindowTokens: 1000000, maxInputTokens: 991808, maxOutputTokens: 393216 },
+		{ contextWindowTokens: 1000000, maxInputTokens: 991808, maxOutputTokens: 131072 },
 		{ inputModalities: ['text', 'image', 'video'], reasoning: 'optional' },
 		['2', '0.25', '6']
 	),
 	standard(
-		'chutes-hy4',
+		'chutes-hy4-unknown-hosted',
 		'hy4',
 		'tencent',
 		'tencent/Hy4',
@@ -345,6 +371,7 @@ describe('Chutes provider onboarding contract', () => {
 				capabilities,
 				credentialModes: ['managed', 'byok'],
 				dataHandling,
+				headquarteredCountry: 'US',
 				id: 'chutes',
 				name: 'Chutes'
 			},
@@ -354,21 +381,19 @@ describe('Chutes provider onboarding contract', () => {
 					id: 'chutes-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
-					interfaces: ['chat_completions']
+					interfaces: ['chat_completions'],
+					notes:
+						'Independent network operators supply the GPUs, and Chutes runs each model in a TEE that is designed to keep request content from them.'
 				},
 				{
-					dataHandling: {
-						endToEndEncrypted: false,
-						storageLocation: 'world',
-						retentionDays: null,
-						zeroDataRetention: false,
-						tee: false
-					},
+					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },
 					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
 					id: 'chutes-standard-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
-					interfaces: ['chat_completions']
+					interfaces: ['chat_completions'],
+					notes:
+						'Chutes forwards these requests to third-party inference platforms that it does not name, whose own staff and systems can access content while they process it.'
 				}
 			]
 		});
@@ -416,7 +441,13 @@ function deployment(
 		},
 		retirementDate: null,
 		routeIds: ['chutes-chat-completions'],
-		upstream: { chuteId, gpuCount, model: upstreamModel, serviceTier: 'standard' },
+		upstream: {
+			chuteId,
+			gpuCount,
+			hosting: 'chutes',
+			model: upstreamModel,
+			serviceTier: 'standard'
+		},
 		weightPrecision
 	};
 }

@@ -6,7 +6,7 @@ deployments:
   routeIds: [google-cloud-messages]
   upstream:
     model: claude-opus-4-8
-    hosting: google
+    hosting: google-cloud
     inferenceGeo: global
   pricing:
     input_tokens:

@@ -4,10 +4,10 @@ deployments:
   upstream:
     model: deepseek-ai/DeepSeek-V3.2-TEE
     chuteId: 398651e1-5f85-5e50-a513-7c5324e8e839
+    hosting: chutes
     gpuCount: 8
   weightPrecision: fp8
   overrides:
-    contextWindowTokens: 131072
     maxOutputTokens: 65536
   pricing:
     input_tokens:

@@ -8,7 +8,6 @@ const nodeKinds = ['authors', 'groups', 'models', 'providers', 'routes', 'deploy
 const structuralFields = new Set([
 	'aliases',
 	'authorId',
-	'derivedFrom',
 	'groupIds',
 	'modelId',
 	'parentIds',

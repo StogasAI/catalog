@@ -8,3 +8,4 @@ routes:
     mediaTypes: []
   dataHandling:
     endToEndEncrypted: true
+  notes: Independent network operators supply the GPUs, and Chutes runs each model in a TEE that is designed to keep request content from them.

@@ -11,10 +11,15 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+  # Anthropic deletes API inputs and outputs within 30 days, names no place where it stores them,
+  # and keeps content that its safety systems flag for up to 2 years. Its API retention page also
+  # says that content is not retained by default, so 30 days is the most that either page allows.
+  # Reviewed 2026-11-09: https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data
+  # and https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   dataHandling:
     processingLocation: world
-    storageLocation: none
-    retentionDays: 0
+    storageLocation: unknown
+    retentionDays: 30
     trainingUse: false
     zeroDataRetention: false
     tee: false

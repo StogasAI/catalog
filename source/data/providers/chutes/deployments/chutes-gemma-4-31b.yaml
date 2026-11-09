@@ -4,8 +4,9 @@ deployments:
   upstream:
     model: google/gemma-4-31B-turbo-TEE
     chuteId: 42ee92ba-a537-5a73-8741-876067750db7
+    hosting: chutes
     gpuCount: 1
-  weightPrecision: nvfp4
+  weightPrecision: fp4
   overrides:
     contextWindowTokens: 131072
     maxOutputTokens: 65536

@@ -9,6 +9,9 @@ deployments:
     deploymentType: global_standard
     serviceTier: fast
   retirementDate: 2027-01-15
+  overrides:
+    dataHandling:
+      retentionDays: null
   pricing:
     input_tokens:
       per_mill_tokens: '8'

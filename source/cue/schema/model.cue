@@ -5,7 +5,6 @@ package catalog
 	name:     string & !=""
 	aliases?: [...#Slug]
 	groupIds?: [...#Id]
-	derivedFrom?: [...#Id]
 	// Maximum active sequence for one generation: provider-counted input plus output.
 	contextWindowTokens: int & >0
 	// Independent input ceiling; omitted when no narrower ceiling is documented.
@@ -25,10 +24,12 @@ package catalog
 	reasoningEffortsByInterface?: close({[#Interface]: [#ReasoningEffort, ...#ReasoningEffort]})
 	// Omitted when the model accepts no reasoning token budget.
 	reasoningMaxTokens?: #ReasoningMaxTokens
-	// Present only when the model owner exposes an immutable checkpoint ID.
+	// The date of the immutable checkpoint that the model's ID pins, which the owner states or
+	// writes into a dated ID whose date it documents as the snapshot's. Omitted otherwise.
 	snapshot?:    #Date
 	releaseDate:  #Date
-	// Omitted when the model owner has not disclosed it.
+	// Omitted when the model owner has not disclosed it. When the owner states several, the one for
+	// the data that gives the model its general knowledge, such as the pretraining cutoff.
 	knowledgeCutoff?: #Date
 	periods?: [#Period, ...#Period]
 })

@@ -8,6 +8,9 @@ deployments:
     model: claude-opus-4-7
     hosting: anthropic
     inferenceGeo: global
+  overrides:
+    dataHandling:
+      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '5'

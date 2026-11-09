@@ -7,13 +7,19 @@ deployments:
     modelVersion: '1'
     hosting: fireworks
     deploymentType: data_zone_standard_us
+  # Microsoft's US Data Zone processes requests only in the US. Reviewed 2026-11-09:
+  # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types and
+  # https://learn.microsoft.com/en-us/azure/foundry/how-to/fireworks/enable-fireworks-models
+  notes: Microsoft shares request data with Fireworks, which runs this model under its own compliance and data handling rules.
   overrides:
     capabilities:
       parallelFunctionCalling: false
       explicitPromptCaching: false
       structuredOutputs: false
     dataHandling:
-      processingLocation: unknown
+      processingLocation: US
+      retentionDays: null
+      trainingUse: null
   pricing:
     input_tokens:
       per_mill_tokens: '0.33'

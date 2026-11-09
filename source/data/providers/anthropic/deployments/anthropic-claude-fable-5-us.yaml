@@ -3,12 +3,11 @@ deployments:
   routeIds: [anthropic-messages]
   upstream:
     model: claude-fable-5
+    hosting: anthropic
     inferenceGeo: us
   overrides:
     dataHandling:
       processingLocation: US
-      storageLocation: unknown
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '11'

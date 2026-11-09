@@ -149,7 +149,10 @@ describe('catalog build process boundaries', () => {
 	test('quotes valid file-owned IDs that YAML could otherwise interpret as scalars or syntax', () => {
 		const root = catalogCopy();
 		for (const id of ['null', 'true', '123', '1e3']) {
-			writeFileSync(join(root, `source/data/${id}.yaml`), 'authors:\n  name: Quoted identifier\n');
+			writeFileSync(
+				join(root, `source/data/${id}.yaml`),
+				'authors:\n  name: Quoted identifier\n  headquarteredCountry: US\n'
+			);
 		}
 		expectBuildSuccess(runBuild(root, ['--validate-only']));
 	});

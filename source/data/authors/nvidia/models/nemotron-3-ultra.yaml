@@ -8,3 +8,5 @@ models:
   outputModalities: [text]
   reasoning: optional
   releaseDate: 2026-06-04
+  # The model card's pre-training cutoff; post-training data runs to May 2026.
+  knowledgeCutoff: 2025-09-01

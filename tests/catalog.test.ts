@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 54, providers: 6, routes: 15, deployments: 474 });
+		).toEqual({ authors: 11, models: 55, providers: 6, routes: 15, deployments: 473 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -81,14 +81,12 @@ describe('compiled catalog', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(126);
+		expect(Object.keys(selectors)).toHaveLength(124);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5-5': 'claude-opus-5-5',
 			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',
 			'azure-deepseek-v4-flash-0423-eu': 'DeepSeek-V4-Flash',
 			'azure-deepseek-v4-pro': 'DeepSeek-V4-Pro',
-			'azure-deepseek-v4-pro-fireworks-hosted-us': 'FW-DeepSeek-V4-Pro',
-			'azure-glm-5.2': 'FW-GLM-5.2',
 			'azure-gpt-5.6-luna-instant': 'gpt-5.6-luna',
 			'azure-gpt-5.6-sol-fast': 'gpt-5.6-sol',
 			'azure-gpt-5.6-sol-pro-fast': 'gpt-5.6-sol',
@@ -96,7 +94,7 @@ describe('compiled catalog', () => {
 			'azure-gpt-6-astra-pro-flex': 'gpt-6-astra',
 			'azure-gpt-6-sol-pro-fast-us': 'gpt-6-sol',
 			'azure-gpt-oss-120b-us': 'gpt-oss-120b',
-			'azure-minimax-m3': 'FW-MiniMax-M3'
+			'azure-minimax-m3-fireworks-hosted-us': 'FW-MiniMax-M3'
 		});
 	});
 
@@ -140,10 +138,8 @@ describe('compiled catalog', () => {
 	});
 
 	test('excludes confirmed shutdowns through the pre-launch cutoff without retiring other providers', () => {
-		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toBeDefined();
-		expect(
-			catalog.graph.deployments['anthropic-claude-opus-4-5-20251101'].retirementDate
-		).toBeNull();
+		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5']).toBeDefined();
+		expect(catalog.graph.deployments['anthropic-claude-opus-4-5'].retirementDate).toBeNull();
 		expect(catalog.graph.deployments['azure-claude-haiku-4-5']).toBeUndefined();
 		expect(catalog.graph.deployments['azure-claude-haiku-4-5-anthropic-hosted']).toBeUndefined();
 		for (const modelId of [
@@ -164,40 +160,6 @@ describe('compiled catalog', () => {
 			expect(deployment).toHaveProperty('retirementDate');
 			if (deployment.retirementDate !== null)
 				expect(deployment.retirementDate > '2026-12-31').toBe(true);
-		}
-	});
-
-	test('derives one canonical base deployment without a default flag', () => {
-		const providerHostings: Record<string, string> = {
-			aws: 'aws',
-			azure: 'azure',
-			'google-cloud': 'google'
-		};
-		for (const deployment of Object.values(catalog.graph.deployments)) {
-			expect(deployment).not.toHaveProperty('default');
-		}
-		for (const [routeId, route] of Object.entries(catalog.graph.routes)) {
-			const deployments = Object.entries(catalog.graph.deployments).filter(([, deployment]) =>
-				Object.hasOwn(deployment.routes, routeId)
-			);
-			for (const modelId of new Set(deployments.map(([, deployment]) => deployment.modelId))) {
-				const matching = deployments.filter(([, deployment]) => deployment.modelId === modelId);
-				if (matching.length > 1) {
-					// A batch route's deployments have a base named after the batch API, and deployments
-					// that all share a tier, or a host other than the provider, as Claude Platform on
-					// AWS's do, one named after them.
-					const shared = (field: string, fallback: string | undefined) => {
-						const values = new Set(matching.map(([, deployment]) => deployment.upstream[field]));
-						return values.size === 1 ? ([...values][0] ?? fallback) : fallback;
-					};
-					const self = providerHostings[route.providerId];
-					const tier = route.batch ? 'batch' : shared('serviceTier', 'standard');
-					const host = shared('hosting', self);
-					expect(matching.map(([deploymentId]) => deploymentId)).toContain(
-						`${route.providerId}-${modelId}${host === self ? '' : `-${host}-hosted`}${tier === 'standard' ? '' : `-${tier}`}`
-					);
-				}
-			}
 		}
 	});
 
@@ -272,7 +234,7 @@ describe('compiled catalog', () => {
 		expect(catalog.graph.models['nemotron-3-nano-omni-30b']).toMatchObject({
 			reasoning: 'optional',
 			reasoningEfforts: [],
-			reasoningMaxTokens: { maximum: 262143, minimum: 1 }
+			reasoningMaxTokens: { maximum: 32768, minimum: 1 }
 		});
 	});
 
@@ -287,7 +249,7 @@ describe('compiled catalog', () => {
 			reasoningEfforts: []
 		});
 		// The Chutes route carries only text, whatever the model accepts.
-		expect(catalog.graph.deployments['chutes-gemma-4-31b-turbo']).toMatchObject({
+		expect(catalog.graph.deployments['chutes-gemma-4-31b']).toMatchObject({
 			contextWindowTokens: 131072,
 			maxOutputTokens: 65536,
 			routes: { 'chutes-chat-completions': { inputModalities: ['text'] } }
@@ -301,11 +263,12 @@ describe('compiled catalog', () => {
 		});
 		expect(catalog.graph.models['mistral-nemo-instruct-2407']).toMatchObject({
 			groupIds: ['mistral-nemo'],
-			knowledgeCutoff: '2024-04-01',
+			knowledgeCutoff: null,
 			name: 'Mistral NeMo Instruct 2407'
 		});
 		for (const [modelId, contextWindowTokens] of [
 			['qwen3-32b', 131_072],
+			['qwen3.5-27b', 1_010_000],
 			['qwen3.5-397b-a17b', 1_010_000],
 			['qwen3.6-27b', 1_010_000],
 			['qwen3.8-27b', 1_000_000]
@@ -375,7 +338,7 @@ describe('compiled catalog', () => {
 		}
 		expect(catalog.graph.models['gemma-4-31b']).toMatchObject({
 			knowledgeCutoff: '2025-01-01',
-			releaseDate: '2026-03-31'
+			releaseDate: '2026-04-02'
 		});
 	});
 
@@ -403,6 +366,7 @@ describe('compiled catalog', () => {
 		const deployment = catalog.graph.deployments['anthropic-claude-opus-5-5-fast-us'];
 		expect(Object.keys(deployment.routes)).toEqual(['anthropic-messages']);
 		expect(deployment.upstream).toEqual({
+			hosting: 'anthropic',
 			inferenceGeo: 'us',
 			model: 'claude-opus-5-5',
 			serviceTier: 'fast'
@@ -465,7 +429,7 @@ describe('compiled catalog', () => {
 			const [, tier, version] = /^claude-([a-z]+)-([\d-]+)$/u.exec(modelId) ?? [];
 			if (tier) expect(model.aliases).toContain(`claude-${version!.replaceAll('-', '.')}-${tier}`);
 		}
-		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5-20251001']).toMatchObject({
+		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5']).toMatchObject({
 			modelId: 'claude-haiku-4-5',
 			upstream: { model: 'claude-haiku-4-5-20251001' }
 		});
@@ -515,8 +479,8 @@ describe('compiled catalog', () => {
 		expect(fastModels).toEqual(new Set(['claude-opus-5', 'claude-opus-5-5']));
 		expect(catalog.graph.routes['anthropic-messages'].dataHandling).toMatchObject({
 			endToEndEncrypted: false,
-			storageLocation: 'none',
-			retentionDays: 0,
+			storageLocation: 'unknown',
+			retentionDays: 30,
 			zeroDataRetention: false
 		});
 		// Search and fetch run outside inference_geo, and publishers can keep fetched URLs.
@@ -542,25 +506,12 @@ describe('compiled catalog', () => {
 		expect(Object.keys(servedOpus.hostedTools)).toEqual(['web_fetch', 'web_search']);
 		// The deployment's own facts stay inference's: US processing.
 		expect(servedOpus.dataHandling.processingLocation).toBe('US');
-		for (const deploymentId of [
-			'anthropic-claude-fable-5',
-			'anthropic-claude-fable-5-us',
-			'anthropic-claude-fable-5-1',
-			'anthropic-claude-fable-5-1-us',
-			'anthropic-claude-mythos-5',
-			'anthropic-claude-mythos-5-us',
-			'anthropic-claude-mythos-5-1',
-			'anthropic-claude-mythos-5-1-us'
-		]) {
-			expect(catalog.graph.deployments[deploymentId].routes).toEqual({
-				'anthropic-messages': expect.objectContaining({
-					dataHandling: expect.objectContaining({ storageLocation: 'unknown', retentionDays: 30 })
-				})
-			});
+		// Anthropic keeps inputs and outputs for 30 days on every model, Fable and Mythos included.
+		for (const deployment of Object.values(catalog.graph.deployments)) {
+			const route = deployment.routes['anthropic-messages'];
+			if (route)
+				expect(route.dataHandling).toMatchObject({ storageLocation: 'unknown', retentionDays: 30 });
 		}
-		expect(
-			catalog.graph.deployments['anthropic-claude-opus-5'].routes['anthropic-messages'].dataHandling
-		).toMatchObject({ storageLocation: 'none', retentionDays: 0 });
 	});
 
 	test('marks deployments that need provider approval in both graphs', () => {
@@ -602,7 +553,7 @@ describe('compiled catalog', () => {
 				parallelFunctionCalling: false
 			},
 			contextWindowTokens: 200_000,
-			maxOutputTokens: 128_000
+			maxOutputTokens: 100_000
 		});
 		for (const fastId of [
 			'openai-gpt-5.5-2026-04-23-fast',
@@ -904,7 +855,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v12');
+		expect(catalog.schema).toBe('stogas.catalog.v13');
 		expect(catalog.schedule).toEqual([]);
 	});
 

@@ -3,6 +3,7 @@ deployments:
   routeIds: [anthropic-messages]
   upstream:
     model: claude-haiku-5-5
+    hosting: anthropic
     inferenceGeo: global
   pricing:
     input_tokens:

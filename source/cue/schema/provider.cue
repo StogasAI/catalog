@@ -4,7 +4,7 @@ package catalog
 	name: string & !=""
 	aliases?: [...#Slug]
 	credentialModes: [#CredentialMode, ...#CredentialMode]
-	headquarteredCountry?: #CountryCode
+	headquarteredCountry: #CountryCode
 	// The places where an account's resources can keep data, for providers whose accounts choose
 	// one. A credential narrows the storage of the deployments that it serves to its resource's
 	// place, so each place must be listed even when no deployment names it.

@@ -12,8 +12,6 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: US
-      storageLocation: unknown
-      retentionDays: null
   pricing:
     input_tokens:
       per_mill_tokens: '1.65'

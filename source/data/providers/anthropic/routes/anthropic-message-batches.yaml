@@ -3,7 +3,7 @@
 # (https://platform.claude.com/docs/en/build-with-claude/batch-processing and
 # https://platform.claude.com/docs/en/about-claude/pricing#batch-processing). Batch requests
 # cannot stream or use Fast mode. Results stay available for 29 days, outside zero data
-# retention, so each batch deployment keeps them for at least 29 days in an unknown place.
+# retention, so each batch deployment keeps them for 29 days.
 routes:
   providerId: anthropic
   endpoint: https://api.anthropic.com/v1/messages/batches

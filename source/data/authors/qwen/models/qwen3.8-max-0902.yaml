@@ -6,7 +6,7 @@ models:
   # 262,144 tokens of chain of thought, which count as output too.
   contextWindowTokens: 1000000
   maxInputTokens: 991808
-  maxOutputTokens: 393216
+  maxOutputTokens: 131072
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: optional

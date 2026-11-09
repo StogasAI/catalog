@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-chat-completions, openai-responses]
   upstream:
     model: gpt-6.1-sol
+    hosting: openai
     serviceTier: flex
   pricing:
     input_tokens:

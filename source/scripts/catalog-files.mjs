@@ -25,23 +25,44 @@
  * format as the current one, so that a reader without a catalog of its own, such as the website,
  * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v12';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v12';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v11';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v11';
+export const CATALOG_SCHEMA = 'stogas.catalog.v13';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v13';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v12';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v12';
 
 /**
- * A root or part of the previous format as one of the current format. The formats differ only in
- * their schema names, so the previous format's facts keep their meaning. Any other value comes back
- * as it is, for the reader to check.
+ * A root or part of the previous format as one of the current format. The current format names
+ * the hosting of Google Cloud's own deployments `google-cloud`, where the previous one named it
+ * `google`; the previous format's other facts keep their meaning. Any other value comes back as it
+ * is, for the reader to check.
  */
 export function currentCatalogFile(value) {
 	if (!isObject(value)) return value;
-	if (value.schema === PREVIOUS_CATALOG_PART_SCHEMA)
-		return { ...value, schema: CATALOG_PART_SCHEMA };
+	if (value.schema === PREVIOUS_CATALOG_PART_SCHEMA && Array.isArray(value.schedule))
+		return {
+			...value,
+			schema: CATALOG_PART_SCHEMA,
+			graph: currentGraph(value.graph),
+			schedule: value.schedule.map((entry) =>
+				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph) } : entry
+			)
+		};
 	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
 		return { ...value, schema: CATALOG_SCHEMA };
 	return value;
+}
+
+function currentGraph(graph) {
+	if (!isObject(graph) || !isObject(graph.deployments)) return graph;
+	const deployments = Object.fromEntries(
+		Object.entries(graph.deployments).map(([id, deployment]) => [
+			id,
+			deployment?.upstream?.hosting === 'google'
+				? { ...deployment, upstream: { ...deployment.upstream, hosting: 'google-cloud' } }
+				: deployment
+		])
+	);
+	return { ...graph, deployments };
 }
 
 export const CATALOG_KINDS = Object.freeze([
@@ -56,7 +77,7 @@ export const CATALOG_KINDS = Object.freeze([
 export const WHOLE_KINDS = Object.freeze(['authors', 'groups', 'providers']);
 /** The kinds whose records parts hold, and the record fields that their summaries repeat. */
 export const PART_KINDS = Object.freeze({
-	models: Object.freeze(['aliases', 'authorId', 'derivedFrom', 'groupIds', 'name', 'releaseDate']),
+	models: Object.freeze(['aliases', 'authorId', 'groupIds', 'name', 'releaseDate']),
 	routes: Object.freeze(['interfaces', 'providerId']),
 	deployments: Object.freeze(['modelId', 'retirementDate'])
 });

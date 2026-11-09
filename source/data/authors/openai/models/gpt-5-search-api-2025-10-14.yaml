@@ -4,8 +4,9 @@ models:
   aliases: [gpt-5-search-api]
   groupIds: [gpt-5-search-api]
   contextWindowTokens: 200000
-  maxOutputTokens: 128000
-  inputModalities: [text, image]
+  # OpenAI's API refuses a request for more than 100,000 completion tokens. Probed 2026-11-09.
+  maxOutputTokens: 100000
+  inputModalities: [text]
   outputModalities: [text]
   capabilities:
     functionCalling: false
@@ -14,4 +15,3 @@ models:
   reasoning: unsupported
   snapshot: 2025-10-14
   releaseDate: 2025-10-14
-  knowledgeCutoff: 2024-09-30

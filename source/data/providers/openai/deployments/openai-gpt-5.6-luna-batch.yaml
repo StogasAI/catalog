@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-batch-chat-completions, openai-batch-responses]
   upstream:
     model: gpt-5.6-luna
+    hosting: openai
   overrides:
     dataHandling:
       retentionDays: null

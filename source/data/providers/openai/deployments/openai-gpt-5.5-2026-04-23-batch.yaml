@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-batch-chat-completions, openai-batch-responses]
   upstream:
     model: gpt-5.5-2026-04-23
+    hosting: openai
   overrides:
     dataHandling:
       retentionDays: null

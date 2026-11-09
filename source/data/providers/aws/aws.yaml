@@ -11,12 +11,15 @@ providers:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
-  # Bedrock neither stores nor logs prompts and completions unless the account turns on invocation logging.
-  # Reviewed 2026-10-31: https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html
+  # In Bedrock's default data retention mode, retention depends on the model's terms and AWS may keep
+  # data for safety and abuse prevention, in the Region where the account uses Bedrock. Zero
+  # retention is an account setting, not the default.
+  # Reviewed 2026-11-09: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
+  # and https://aws.amazon.com/bedrock/faqs/
   dataHandling:
     processingLocation: world
-    storageLocation: none
-    retentionDays: 0
+    storageLocation: unknown
+    retentionDays: null
     trainingUse: false
     zeroDataRetention: false
     tee: false

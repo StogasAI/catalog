@@ -3,6 +3,7 @@ deployments:
   routeIds: [openai-responses]
   upstream:
     model: gpt-6-sol
+    hosting: openai
     reasoningMode: pro
   pricing:
     input_tokens:
