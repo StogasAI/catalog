@@ -441,10 +441,10 @@ function deployment(
 		},
 		retirementDate: null,
 		routeIds: ['chutes-chat-completions'],
+		hosting: 'chutes',
 		upstream: {
 			chuteId,
 			gpuCount,
-			hosting: 'chutes',
 			model: upstreamModel,
 			serviceTier: 'standard'
 		},
@@ -491,6 +491,7 @@ function standard(
 		reasoningEfforts: [],
 		retirementDate: null,
 		routeIds: ['chutes-standard-chat-completions'],
-		upstream: { chuteId, hosting: 'unknown', model: upstreamModel, serviceTier: 'standard' }
+		hosting: 'unknown',
+		upstream: { chuteId, model: upstreamModel, serviceTier: 'standard' }
 	};
 }

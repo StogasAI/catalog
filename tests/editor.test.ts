@@ -27,7 +27,7 @@ const summaries = Object.fromEntries(
 describe('catalog editor graph', () => {
 	test('keeps a nested group diamond as real edges and one execution choice', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.v13',
+			schema: 'stogas.catalog.v14',
 			summaries,
 			graph: {
 				authors: { author: { name: 'Author' } },
@@ -75,7 +75,7 @@ describe('catalog editor graph', () => {
 	});
 	test('marks each record that has retired by the date that the root gives it', () => {
 		const fixture = parseCatalog({
-			schema: 'stogas.catalog.v13',
+			schema: 'stogas.catalog.v14',
 			summaries: {
 				...summaries,
 				models: { model: { retirementDate: '2027-01-01' } },
@@ -105,17 +105,17 @@ describe('catalog editor graph', () => {
 		expect(() => parseCatalog({ graph: {}, summaries, schema: 'wrong' })).toThrow(
 			'generated catalog is invalid'
 		);
-		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.v13' })).toThrow(
+		expect(() => parseCatalog({ graph: {}, schema: 'stogas.catalog.v14' })).toThrow(
 			'generated catalog is invalid'
 		);
 		expect(() =>
-			parseCatalog({ graph: { groups: {} }, summaries, schema: 'stogas.catalog.v13' })
+			parseCatalog({ graph: { groups: {} }, summaries, schema: 'stogas.catalog.v14' })
 		).toThrow('authors collection');
 		expect(() =>
 			parseCatalog({
 				graph: { authors: [], groups: {}, deployments: {}, models: {}, providers: {}, routes: {} },
 				summaries,
-				schema: 'stogas.catalog.v13'
+				schema: 'stogas.catalog.v14'
 			})
 		).toThrow('authors collection');
 		expect(() =>
@@ -129,7 +129,7 @@ describe('catalog editor graph', () => {
 					routes: {}
 				},
 				summaries,
-				schema: 'stogas.catalog.v13'
+				schema: 'stogas.catalog.v14'
 			})
 		).toThrow('authors.bad entry');
 	});

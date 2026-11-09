@@ -42,6 +42,38 @@ function source(): Source {
 	});
 }
 
+/**
+ * A root or part as the previous format wrote it: the hosting in the upstream, no companies between
+ * the provider and the hosting, each route record with the deployment's prices and its hosted
+ * tools' call prices, and notes only on routes and deployments.
+ */
+function previousFile<File extends CatalogRoot | CatalogPart>(file: File, schema: string): File {
+	const previous = structuredClone(file) as File & {
+		graph?: Record<string, Nodes>;
+		summaries?: Record<string, Nodes>;
+		schedule: { graph?: Record<string, Nodes>; summaries?: Record<string, Nodes> }[];
+	};
+	for (const graph of [previous, ...previous.schedule].map(
+		(state) => state.graph ?? state.summaries
+	)) {
+		for (const kind of ['authors', 'groups', 'providers', 'models'])
+			for (const record of Object.values(graph?.[kind] ?? {})) delete record.notes;
+		for (const deployment of Object.values(graph?.deployments ?? {})) {
+			if (!deployment.upstream) continue;
+			deployment.upstream.hosting = deployment.hosting;
+			for (const route of Object.values<Nodes[string]>(deployment.routes)) {
+				route.pricing = { ...deployment.pricing };
+				for (const offer of Object.values<Nodes[string]>(route.hostedTools)) {
+					Object.assign(route.pricing, offer.pricing);
+					delete offer.pricing;
+				}
+			}
+			for (const field of ['hosting', 'via', 'pricing']) delete deployment[field];
+		}
+	}
+	return { ...previous, schema };
+}
+
 /** The checkout's catalog with `copies` providers in place of each of its own. */
 function scaled(copies: number): Source {
 	const catalog = source();
@@ -306,7 +338,7 @@ describe('catalog parts', () => {
 	const [deploymentId, deployment] = Object.entries(built.graph.deployments!)[0]!;
 	const renamed = { ...model, name: 'Renamed' };
 	const repriced = structuredClone(deployment);
-	(Object.values(repriced.routes)[0] as { pricing: object }).pricing = {};
+	(repriced as { pricing: object }).pricing = {};
 	/** The checkout's catalog, with a renamed model and a repriced deployment from December. */
 	function scheduled() {
 		const catalog = source();
@@ -352,16 +384,9 @@ describe('catalog parts', () => {
 
 	test('read a root and parts of the previous format as the current format', () => {
 		const { root, parts } = files(partitionCatalog(scheduled()));
-		// The previous format differs in its schema names and in the hosting of Google Cloud's own
-		// deployments.
-		const previousRoot = { ...root, schema: 'stogas.catalog.v12' };
-		const previousParts = parts.map((part) => ({
-			...(JSON.parse(
-				JSON.stringify(part).replaceAll('"hosting":"google-cloud"', '"hosting":"google"')
-			) as CatalogPart),
-			schema: 'stogas.catalog.part.v12'
-		}));
-		expect(JSON.stringify(previousParts)).toContain('"hosting":"google"');
+		const previousRoot = previousFile(root, 'stogas.catalog.v13');
+		const previousParts = parts.map((part) => previousFile(part, 'stogas.catalog.part.v13'));
+		expect(JSON.stringify(previousParts)).toContain('"hosting":"google-cloud"}');
 		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
 		expect(currentRoot).toEqual(root);
 		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
@@ -598,7 +623,7 @@ describe('catalog limits', () => {
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v13',
+				schema: 'stogas.catalog.v14',
 				locations: {},
 				summaries: {},
 				parts,

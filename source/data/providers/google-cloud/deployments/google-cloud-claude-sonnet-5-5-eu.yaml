@@ -4,9 +4,9 @@
 deployments:
   modelId: claude-sonnet-5-5
   routeIds: [google-cloud-messages]
+  hosting: google-cloud
   upstream:
     model: claude-sonnet-5-5
-    hosting: google-cloud
     inferenceGeo: eu
   overrides:
     dataHandling:

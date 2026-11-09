@@ -7,9 +7,9 @@
 deployments:
   modelId: claude-sonnet-4-6
   routeIds: [aws-messages]
+  hosting: aws
   upstream:
     model: global.anthropic.claude-sonnet-4-6
-    hosting: aws
     inferenceGeo: global
   pricing:
     input_tokens:

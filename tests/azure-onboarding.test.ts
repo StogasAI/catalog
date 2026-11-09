@@ -5,6 +5,7 @@ type AzureTarget = {
 	id: string;
 	modelId: string;
 	routeIds: string[];
+	hosting: string;
 	upstream: Record<string, string>;
 };
 
@@ -15,14 +16,6 @@ function azureDeployments() {
 	return Object.entries(catalog.graph.deployments).filter(([, deployment]) =>
 		Object.keys(deployment.routes).some((routeId) => routeId.startsWith('azure-'))
 	);
-}
-
-// Every route of a deployment charges its token prices.
-function expectRoutePricing(
-	deployment: { routes: Record<string, { pricing: unknown }> },
-	pricing: unknown
-) {
-	for (const route of Object.values(deployment.routes)) expect(route.pricing).toEqual(pricing);
 }
 
 type AzureLocation = 'global' | 'apac' | 'eu' | 'instant' | 'us';
@@ -44,7 +37,6 @@ function gptTargets(
 					: location === 'instant'
 						? 'instant'
 						: `data_zone_standard_${location}`,
-			hosting: 'azure',
 			model,
 			modelFormat: 'OpenAI',
 			modelVersion,
@@ -54,6 +46,7 @@ function gptTargets(
 			id: `azure-${modelId}${suffix}`,
 			modelId,
 			routeIds: ['azure-chat-completions', 'azure-responses'],
+			hosting: 'azure',
 			upstream
 		};
 		return pro
@@ -63,6 +56,7 @@ function gptTargets(
 						id: `azure-${modelId}-pro${suffix}`,
 						modelId,
 						routeIds: ['azure-responses'],
+						hosting: 'azure',
 						upstream: { ...upstream, reasoningMode: 'pro' }
 					}
 				]
@@ -137,9 +131,9 @@ const otherTargets: AzureTarget[] = [
 	id,
 	modelId,
 	routeIds: ['azure-anthropic-messages'],
+	hosting,
 	upstream: {
 		deploymentType,
-		hosting,
 		model: modelId,
 		modelFormat: 'Anthropic',
 		modelVersion
@@ -152,9 +146,9 @@ otherTargets.push(
 		id: `azure-claude-opus-5-5-fast${location === 'global' ? '' : '-us'}`,
 		modelId: 'claude-opus-5-5',
 		routeIds: ['azure-anthropic-messages'],
+		hosting: 'azure',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
-			hosting: 'azure',
 			model: 'claude-opus-5-5-fast',
 			modelFormat: 'Anthropic',
 			modelVersion: '2',
@@ -165,9 +159,9 @@ otherTargets.push(
 		id: `azure-deepseek-v4-flash-0423${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-flash-0423',
 		routeIds: ['azure-chat-completions'],
+		hosting: 'azure',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : `data_zone_standard_${location}`,
-			hosting: 'azure',
 			model: 'DeepSeek-V4-Flash',
 			modelFormat: 'DeepSeek',
 			modelVersion: '2026-04-23'
@@ -177,9 +171,9 @@ otherTargets.push(
 		id: `azure-deepseek-v4-pro${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-pro',
 		routeIds: ['azure-chat-completions'],
+		hosting: 'azure',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
-			hosting: 'azure',
 			model: 'DeepSeek-V4-Pro',
 			modelFormat: 'DeepSeek',
 			modelVersion: '2026-04-23'
@@ -189,9 +183,9 @@ otherTargets.push(
 		id: `azure-gpt-oss-120b${location === 'global' ? '' : '-us'}`,
 		modelId: 'gpt-oss-120b',
 		routeIds: ['azure-chat-completions'],
+		hosting: 'azure',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
-			hosting: 'azure',
 			model: 'gpt-oss-120b',
 			modelFormat: 'OpenAI-OSS',
 			modelVersion: '1'
@@ -201,9 +195,9 @@ otherTargets.push(
 		id: 'azure-minimax-m3-fireworks-hosted-us',
 		modelId: 'minimax-m3',
 		routeIds: ['azure-chat-completions'],
+		hosting: 'fireworks',
 		upstream: {
 			deploymentType: 'data_zone_standard_us',
-			hosting: 'fireworks',
 			model: 'FW-MiniMax-M3',
 			modelFormat: 'Fireworks',
 			modelVersion: '1'
@@ -260,7 +254,6 @@ function claudePricing(
 					per_mill_tokens: value
 				};
 	return {
-		anthropic_web_search_calls: { per_1k_calls: '10' },
 		cache_write_1h_input_tokens: rate(scaled(adjustedInput, 2n)),
 		cache_write_5m_input_tokens: rate(scaled(adjustedInput, 5n, 4n)),
 		cached_input_tokens: rate(scaled(adjustedInput, 1n, options.cacheReadDivisor)),
@@ -313,6 +306,7 @@ describe('Azure provider onboarding contract', () => {
 				id,
 				modelId: deployment.modelId,
 				routeIds: Object.keys(deployment.routes).sort(),
+				hosting: deployment.hosting,
 				upstream: deployment.upstream
 			}))
 			.sort((left, right) => left.id.localeCompare(right.id));
@@ -332,7 +326,8 @@ describe('Azure provider onboarding contract', () => {
 			aliases: [],
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
-			name: 'Azure'
+			name: 'Azure',
+			notes: null
 		});
 		expect(
 			Object.entries(catalog.graph.routes)
@@ -369,8 +364,7 @@ describe('Azure provider onboarding contract', () => {
 						: 10n;
 			const [tierNumerator, tierDenominator] =
 				serviceTier === 'fast' ? [2n, 1n] : serviceTier === 'flex' ? [1n, 2n] : [1n, 1n];
-			expectRoutePricing(
-				deployment,
+			expect(deployment.pricing).toEqual(
 				gptPricing(rates, regionTenths * tierNumerator, 10n * tierDenominator)
 			);
 			expect(deployment.retirementDate).toBe(retirement);
@@ -406,7 +400,7 @@ describe('Azure provider onboarding contract', () => {
 				const rate = (value: string) => ({
 					per_mill_tokens: scaled(value, zoneTenths * 25n, 100n)
 				});
-				expectRoutePricing(deployment, {
+				expect(deployment.pricing).toEqual({
 					cached_input_tokens: rate('0.5'),
 					input_tokens: rate('5'),
 					output_tokens: rate('30')
@@ -418,7 +412,7 @@ describe('Azure provider onboarding contract', () => {
 					zoneTenths,
 					10n
 				);
-				expectRoutePricing(deployment, { cached_input_tokens, input_tokens, output_tokens });
+				expect(deployment.pricing).toEqual({ cached_input_tokens, input_tokens, output_tokens });
 				expect(deployment.contextWindowTokens).toBe(922_000);
 			}
 			expect(deployment.retirementDate).toBe('2027-10-26');
@@ -444,7 +438,10 @@ describe('Azure provider onboarding contract', () => {
 			const fast = deployment.upstream.serviceTier === 'fast';
 			expect(fast).toBe(deployment.upstream.model === 'claude-opus-5-5-fast');
 			const route = deployment.routes['azure-anthropic-messages'];
-			expect(route.pricing).toEqual(
+			expect(route.hostedTools.web_search.pricing).toEqual({
+				anthropic_web_search_calls: { per_1k_calls: '10' }
+			});
+			expect(deployment.pricing).toEqual(
 				claudePricing(fast ? scaled(input, 2n) : input, fast ? scaled(output, 2n) : output, {
 					dataZone: deployment.upstream.deploymentType === 'data_zone_standard_us',
 					cacheReadDivisor,
@@ -453,9 +450,7 @@ describe('Azure provider onboarding contract', () => {
 				})
 			);
 			// Anthropic keeps what it runs for 30 days. Microsoft states no retention for what it runs.
-			expect(route.dataHandling.retentionDays).toBe(
-				deployment.upstream.hosting === 'anthropic' ? 30 : null
-			);
+			expect(route.dataHandling.retentionDays).toBe(deployment.hosting === 'anthropic' ? 30 : null);
 			// Foundry offers no max effort for Claude Fable and Mythos.
 			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
 			expect(route.reasoningEfforts.includes('max')).toBe(
@@ -475,18 +470,18 @@ describe('Azure provider onboarding contract', () => {
 		} as const;
 		const deployments = catalog.graph.deployments;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
-			expectRoutePricing(deployments[id as keyof typeof deployments], {
+			expect(deployments[id as keyof typeof deployments].pricing).toEqual({
 				cached_input_tokens: { per_mill_tokens: cached },
 				input_tokens: { per_mill_tokens: input },
 				output_tokens: { per_mill_tokens: output }
 			});
 		}
 		// Azure publishes no cached input meter for gpt-oss-120b.
-		expectRoutePricing(deployments['azure-gpt-oss-120b'], {
+		expect(deployments['azure-gpt-oss-120b'].pricing).toEqual({
 			input_tokens: { per_mill_tokens: '0.15' },
 			output_tokens: { per_mill_tokens: '0.6' }
 		});
-		expectRoutePricing(deployments['azure-gpt-oss-120b-us'], {
+		expect(deployments['azure-gpt-oss-120b-us'].pricing).toEqual({
 			input_tokens: { per_mill_tokens: '0.165' },
 			output_tokens: { per_mill_tokens: '0.66' }
 		});
@@ -496,13 +491,13 @@ describe('Azure provider onboarding contract', () => {
 		for (const [, deployment] of azureDeployments()) {
 			for (const { dataHandling: handling } of Object.values(deployment.routes)) {
 				if (
-					deployment.upstream.hosting === 'azure' &&
+					deployment.hosting === 'azure' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_us'
 				) {
 					expect(handling).toMatchObject({ processingLocation: 'US', storageLocation: 'US' });
 				}
 				if (
-					deployment.upstream.hosting === 'azure' &&
+					deployment.hosting === 'azure' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_eu'
 				) {
 					expect(handling).toMatchObject({
@@ -510,7 +505,7 @@ describe('Azure provider onboarding contract', () => {
 						storageLocation: 'europe'
 					});
 				}
-				if (deployment.upstream.hosting === 'fireworks') {
+				if (deployment.hosting === 'fireworks') {
 					expect(handling).toMatchObject({
 						processingLocation: 'US',
 						retentionDays: null,

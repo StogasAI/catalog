@@ -4,9 +4,9 @@
 deployments:
   modelId: claude-opus-4-8
   routeIds: [google-cloud-messages]
+  hosting: google-cloud
   upstream:
     model: claude-opus-4-8
-    hosting: google-cloud
     inferenceGeo: us
   overrides:
     dataHandling:

@@ -23,7 +23,7 @@ package catalog
 	tool: #HostedToolId
 	// The hostings that run the tool; omitted, every deployment of the route
 	// offers it. Each hosting has at most one offer of a tool.
-	hostings?: [#Hosting, ...#Hosting]
+	hostings?: [#Company, ...#Company]
 	pricing?: #HostedToolPricing
 	// Omitted when the tool's processing changes none of the deployment's facts.
 	dataHandling?: #HostedToolDataHandling

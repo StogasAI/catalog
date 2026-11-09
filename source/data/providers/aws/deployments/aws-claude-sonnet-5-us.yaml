@@ -6,9 +6,9 @@
 deployments:
   modelId: claude-sonnet-5
   routeIds: [aws-messages]
+  hosting: aws
   upstream:
     model: us.anthropic.claude-sonnet-5
-    hosting: aws
     inferenceGeo: us
   overrides:
     dataHandling:

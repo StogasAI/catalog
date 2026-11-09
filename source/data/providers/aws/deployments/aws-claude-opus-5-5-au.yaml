@@ -6,9 +6,9 @@
 deployments:
   modelId: claude-opus-5-5
   routeIds: [aws-messages]
+  hosting: aws
   upstream:
     model: au.anthropic.claude-opus-5-5
-    hosting: aws
     inferenceGeo: au
   overrides:
     dataHandling:

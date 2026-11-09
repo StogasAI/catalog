@@ -16,5 +16,6 @@ package catalog
 	retirementDate?: #Date
 	// Stogas serves none of its routes; each of them takes this reason.
 	stogasUnsupported?: #UnsupportedReason
+	notes?: #Note
 	periods?: [#Period, ...#Period]
 })

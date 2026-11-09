@@ -136,9 +136,13 @@ function deployment(
 		pricing,
 		retirementDate: null,
 		routeIds: ['aws-messages'],
+		hosting: 'aws',
 		upstream: { ...upstream, serviceTier: 'standard' }
 	};
 }
+
+const awsNotes =
+	"Amazon Bedrock runs Claude on AWS. Claude Platform on AWS is Anthropic's own API, which Anthropic runs and AWS bills.";
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
@@ -152,7 +156,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 				...deployment(
 					`aws-${model}`,
 					model,
-					{ hosting: 'aws', inferenceGeo: 'global', model: `global.${profile}` },
+					{ inferenceGeo: 'global', model: `global.${profile}` },
 					kept ? { retentionDays: 30, storageLocation: 'world' } : {},
 					global
 				),
@@ -162,7 +166,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 				...deployment(
 					`aws-${model}-us`,
 					model,
-					{ hosting: 'aws', inferenceGeo: 'us', model: `us.${profile}` },
+					{ inferenceGeo: 'us', model: `us.${profile}` },
 					{
 						processingLocation: 'US',
 						...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
@@ -175,7 +179,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 				deployment(
 					`aws-${model}-${geo}`,
 					model,
-					{ hosting: 'aws', inferenceGeo: geo, model: `${geo}.${profile}` },
+					{ inferenceGeo: geo, model: `${geo}.${profile}` },
 					{ processingLocation: GEOGRAPHY_PLACES[geo] },
 					us
 				)
@@ -206,7 +210,7 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 			...deployment(
 				`aws-${model}-batch${geo === 'global' ? '' : `-${geo}`}`,
 				model,
-				{ hosting: 'aws', inferenceGeo: geo, model: `${geo}.${profile}` },
+				{ inferenceGeo: geo, model: `${geo}.${profile}` },
 				{
 					...(place ? { processingLocation: place } : {}),
 					retentionDays: null,
@@ -266,7 +270,8 @@ describe('AWS onboarding contract', () => {
 					hostedTools: cloudHostedTools,
 					id: 'aws-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses'],
+					notes: awsNotes
 				},
 				{
 					capabilities: { streaming: false },
@@ -278,6 +283,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					notes: awsNotes,
 					batch: true,
 					stogasUnsupported: 'The gateway has no batch API and serves each request as it arrives.'
 				}

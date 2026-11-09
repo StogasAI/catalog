@@ -2,7 +2,8 @@ package catalog
 
 // A request's model field separates terms with spaces and kinds with ':', and reads the text
 // before a '/' as an author, so IDs and aliases use none of them.
-#Id:          string & =~"^[a-z0-9][a-z0-9._-]*$"
+// unknown is the value of a fact that no source states, so no node takes it as its ID.
+#Id:          string & =~"^[a-z0-9][a-z0-9._-]*$" & !="unknown"
 #Slug:        string & =~"^[a-z0-9][a-z0-9._+-]*$"
 #UpstreamId:  string & !=""
 #Date:        string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
@@ -20,9 +21,8 @@ package catalog
 // Why Stogas does not serve a provider, route or deployment. The catalog lists what the market
 // offers; the gateway never routes to a record that Stogas does not serve.
 #UnsupportedReason: #Sentences
-// What a reader needs to know about a route or deployment that its fields cannot say, such as
-// how a provider relays requests. Policies never read it, so it never holds a fact that a field
-// can hold.
+// What a reader needs to know about a node that its fields cannot say, such as how a provider
+// relays requests. Policies never read it, so it never holds a fact that a field can hold.
 #Note: #Sentences
 
 #Modality:        "text" | "image" | "audio" | "video"

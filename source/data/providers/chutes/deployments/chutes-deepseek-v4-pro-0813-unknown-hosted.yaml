@@ -1,10 +1,10 @@
 deployments:
   modelId: deepseek-v4-pro-0813
   routeIds: [chutes-standard-chat-completions]
+  hosting: unknown
   upstream:
     model: deepseek-ai/DeepSeek-V4-Pro-0813
     chuteId: b990f27b-59b1-526e-adfd-e3ad9ea8920d
-    hosting: unknown
   overrides:
     reasoningEfforts: []
   pricing:

@@ -5,9 +5,9 @@
 deployments:
   modelId: claude-haiku-4-5
   routeIds: [aws-batch-messages]
+  hosting: aws
   upstream:
     model: in.anthropic.claude-haiku-4-5-20251001-v1:0
-    hosting: aws
     inferenceGeo: in
   overrides:
     dataHandling:

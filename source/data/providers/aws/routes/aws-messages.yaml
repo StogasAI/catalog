@@ -16,6 +16,7 @@ routes:
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false
+  notes: Amazon Bedrock runs Claude on AWS. Claude Platform on AWS is Anthropic's own API, which Anthropic runs and AWS bills.
   # Only Claude Platform on AWS runs web search and web fetch, at Anthropic's prices.
   # Data handling reviewed 2026-11-03: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   # and https://platform.claude.com/docs/en/manage-claude/data-residency. inference_geo covers model inference

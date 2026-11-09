@@ -1,9 +1,9 @@
 deployments:
   modelId: gpt-6.1-terra
   routeIds: [openai-responses]
+  hosting: openai
   upstream:
     model: gpt-6.1-terra
-    hosting: openai
     reasoningMode: pro
     serviceTier: flex
   pricing:

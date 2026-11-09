@@ -1,10 +1,10 @@
 deployments:
   modelId: qwen3.8-2.4t-a95b
   routeIds: [chutes-standard-chat-completions]
+  hosting: unknown
   upstream:
     model: Qwen/Qwen3.8-2.4T-A95B
     chuteId: d86bda6f-f327-538c-9e23-44f7372e1cb8
-    hosting: unknown
   overrides:
     # Probed 2026-11-07: replies ignore the json_schema, and tool_choice required or a named
     # function returns 400 while the model reasons, which it always does.

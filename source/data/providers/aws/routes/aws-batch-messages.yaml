@@ -23,6 +23,7 @@ routes:
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false
+  notes: Amazon Bedrock runs Claude on AWS. Claude Platform on AWS is Anthropic's own API, which Anthropic runs and AWS bills.
   # Only Claude Platform on AWS runs web search and web fetch, at Anthropic's prices, as on its
   # Messages route.
   hostedTools:

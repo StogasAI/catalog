@@ -365,8 +365,8 @@ describe('compiled catalog', () => {
 	test('keeps Anthropic selection literal and its guarantee normalized', () => {
 		const deployment = catalog.graph.deployments['anthropic-claude-opus-5-5-fast-us'];
 		expect(Object.keys(deployment.routes)).toEqual(['anthropic-messages']);
+		expect(deployment.hosting).toBe('anthropic');
 		expect(deployment.upstream).toEqual({
-			hosting: 'anthropic',
 			inferenceGeo: 'us',
 			model: 'claude-opus-5-5',
 			serviceTier: 'fast'
@@ -502,7 +502,7 @@ describe('compiled catalog', () => {
 		]);
 		const servedOpus =
 			catalog.graph.deployments['anthropic-claude-opus-5-us'].routes['anthropic-messages'];
-		expect(servedOpus.pricing).toHaveProperty('anthropic_web_search_calls');
+		expect(servedOpus.hostedTools.web_search.pricing).toHaveProperty('anthropic_web_search_calls');
 		expect(Object.keys(servedOpus.hostedTools)).toEqual(['web_fetch', 'web_search']);
 		// The deployment's own facts stay inference's: US processing.
 		expect(servedOpus.dataHandling.processingLocation).toBe('US');
@@ -544,9 +544,7 @@ describe('compiled catalog', () => {
 
 	test('publishes OpenAI Fast naming and current GPT-5.6 prices', () => {
 		const deployments = catalog.graph.deployments;
-		// Token prices belong to the deployment, so every route has them.
-		const prices = (deploymentId: keyof typeof deployments) =>
-			deployments[deploymentId].routes['openai-responses'].pricing;
+		const prices = (deploymentId: keyof typeof deployments) => deployments[deploymentId].pricing;
 		expect(catalog.graph.models['gpt-5-search-api-2025-10-14']).toMatchObject({
 			capabilities: {
 				functionCalling: false,
@@ -759,9 +757,7 @@ describe('compiled catalog', () => {
 					upstream: { model: modelId, reasoningMode: 'pro', serviceTier }
 				});
 				expect(Object.keys(pro.routes)).toEqual(['openai-responses']);
-				expect(pro.routes['openai-responses'].pricing).toEqual(
-					peer.routes['openai-responses'].pricing
-				);
+				expect(pro.pricing).toEqual(peer.pricing);
 				expect(pro.contextWindowTokens).toBe(peer.contextWindowTokens);
 				expect(catalog.graph.deployments[deploymentId]).toBeDefined();
 			}
@@ -813,17 +809,10 @@ describe('compiled catalog', () => {
 				['cache_write_input_tokens', (input * 5n) / 4n, (input * 5n) / 2n],
 				['output_tokens', output, (output * 3n) / 2n]
 			] as const) {
-				for (const route of Object.values(deployment.routes)) {
-					const rates = route.pricing[meter];
-					expect(Object.keys(rates).sort()).toEqual([
-						'per_mill_context_gt_272k',
-						'per_mill_tokens'
-					]);
-					expect(coefficient(rates.per_mill_tokens)).toBe((short * numerator) / denominator);
-					expect(coefficient(rates.per_mill_context_gt_272k)).toBe(
-						(long * numerator) / denominator
-					);
-				}
+				const rates = deployment.pricing[meter];
+				expect(Object.keys(rates).sort()).toEqual(['per_mill_context_gt_272k', 'per_mill_tokens']);
+				expect(coefficient(rates.per_mill_tokens)).toBe((short * numerator) / denominator);
+				expect(coefficient(rates.per_mill_context_gt_272k)).toBe((long * numerator) / denominator);
 			}
 			const chat = (deployment.routes as Record<string, { reasoningEfforts: string[] }>)[
 				'openai-chat-completions'
@@ -855,7 +844,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v13');
+		expect(catalog.schema).toBe('stogas.catalog.v14');
 		expect(catalog.schedule).toEqual([]);
 	});
 

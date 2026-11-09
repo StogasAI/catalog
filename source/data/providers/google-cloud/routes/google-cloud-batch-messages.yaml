@@ -16,6 +16,7 @@ routes:
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false
+  notes: Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills.
   # Only Anthropic's own offering runs web search and web fetch, at Anthropic's prices, as on its
   # Messages route.
   hostedTools:

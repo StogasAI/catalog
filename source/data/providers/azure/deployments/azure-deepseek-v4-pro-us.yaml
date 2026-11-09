@@ -1,11 +1,11 @@
 deployments:
   modelId: deepseek-v4-pro
   routeIds: [azure-chat-completions]
+  hosting: azure
   upstream:
     model: DeepSeek-V4-Pro
     modelFormat: DeepSeek
     modelVersion: '2026-04-23'
-    hosting: azure
     deploymentType: data_zone_standard_us
   # Microsoft lists the retirement date, 1,000,000 input tokens and 384,000 output tokens.
   # Reviewed 2026-11-09: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#deepseek-models-sold-by-azure

@@ -1,9 +1,9 @@
 deployments:
   modelId: gpt-5.6-sol
   routeIds: [openai-batch-responses]
+  hosting: openai
   upstream:
     model: gpt-5.6-sol
-    hosting: openai
     reasoningMode: pro
   overrides:
     dataHandling:

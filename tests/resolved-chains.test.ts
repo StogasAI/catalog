@@ -67,10 +67,10 @@ test('a chain shows each fact once, as the path runs it', () => {
 	]);
 	expect(chain.model.data).not.toHaveProperty('maxOutputTokens');
 	expect(chain.model.data).toMatchObject({ authorId: 'anthropic', name: 'Claude Fable 5' });
-	// The route's prices and the deployment's merge into one block.
-	expect(chain.deployment.data.pricing).toMatchObject({
-		anthropic_web_search_calls: { per_1k_calls: '10' },
-		input_tokens: { per_mill_tokens: '10' }
+	// The deployment's prices hold on the route, which prices the tools that it runs.
+	expect(chain.deployment.data.pricing).toMatchObject({ input_tokens: { per_mill_tokens: '10' } });
+	expect(chain.deployment.data.hostedTools.web_search.pricing).toEqual({
+		anthropic_web_search_calls: { per_1k_calls: '10' }
 	});
 });
 

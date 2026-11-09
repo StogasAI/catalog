@@ -1,9 +1,9 @@
 deployments:
   modelId: gpt-6.1-sol
   routeIds: [openai-batch-chat-completions, openai-batch-responses]
+  hosting: openai
   upstream:
     model: gpt-6.1-sol
-    hosting: openai
   overrides:
     dataHandling:
       retentionDays: null

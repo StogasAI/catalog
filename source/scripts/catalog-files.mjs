@@ -25,16 +25,24 @@
  * format as the current one, so that a reader without a catalog of its own, such as the website,
  * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v13';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v13';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v12';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v12';
+export const CATALOG_SCHEMA = 'stogas.catalog.v14';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v14';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v13';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v13';
+// The call meters of web search, the only hosted tool that the previous format priced.
+const PREVIOUS_WEB_SEARCH_METERS = [
+	'anthropic_web_search_calls',
+	'openai_responses_web_search_calls',
+	'openai_responses_web_search_preview_calls',
+	'openai_responses_web_search_preview_non_reasoning_calls'
+];
 
 /**
- * A root or part of the previous format as one of the current format. The current format names
- * the hosting of Google Cloud's own deployments `google-cloud`, where the previous one named it
- * `google`; the previous format's other facts keep their meaning. Any other value comes back as it
- * is, for the reader to check.
+ * A root or part of the previous format as one of the current format. The previous format kept a
+ * deployment's hosting in its upstream, listed no companies between the provider and the hosting,
+ * gave each route record the deployment's prices merged with its hosted tools' call prices, and
+ * had notes only on routes and deployments. Chain hashes stay those of the previous format. Any
+ * other value comes back as it is, for the reader to check.
  */
 export function currentCatalogFile(value) {
 	if (!isObject(value)) return value;
@@ -48,21 +56,79 @@ export function currentCatalogFile(value) {
 			)
 		};
 	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
-		return { ...value, schema: CATALOG_SCHEMA };
+		return {
+			...value,
+			schema: CATALOG_SCHEMA,
+			summaries: currentGraph(value.summaries),
+			schedule: Array.isArray(value.schedule)
+				? value.schedule.map((entry) =>
+						isObject(entry) ? { ...entry, summaries: currentGraph(entry.summaries) } : entry
+					)
+				: value.schedule
+		};
 	return value;
 }
 
 function currentGraph(graph) {
-	if (!isObject(graph) || !isObject(graph.deployments)) return graph;
-	const deployments = Object.fromEntries(
-		Object.entries(graph.deployments).map(([id, deployment]) => [
-			id,
-			deployment?.upstream?.hosting === 'google'
-				? { ...deployment, upstream: { ...deployment.upstream, hosting: 'google-cloud' } }
-				: deployment
-		])
+	if (!isObject(graph)) return graph;
+	const current = { ...graph };
+	// The root holds these kinds whole and parts hold models, so each record gains its notes.
+	for (const kind of ['authors', 'groups', 'providers', 'models']) {
+		if (!isObject(graph[kind])) continue;
+		current[kind] = Object.fromEntries(
+			Object.entries(graph[kind]).map(([id, record]) => [
+				id,
+				isObject(record) && (kind !== 'models' || !Object.hasOwn(record, 'part'))
+					? { notes: null, ...record }
+					: record
+			])
+		);
+	}
+	if (isObject(graph.deployments))
+		current.deployments = Object.fromEntries(
+			Object.entries(graph.deployments).map(([id, deployment]) => [
+				id,
+				currentDeployment(deployment)
+			])
+		);
+	return current;
+}
+
+function currentDeployment(deployment) {
+	// Every deployment of the previous format names its hosting in its upstream.
+	if (
+		!isObject(deployment) ||
+		!isObject(deployment.routes) ||
+		!isObject(deployment.upstream) ||
+		!Object.hasOwn(deployment.upstream, 'hosting')
+	)
+		return deployment;
+	const { hosting, ...upstream } = deployment.upstream;
+	let pricing = {};
+	const routes = Object.fromEntries(
+		Object.entries(deployment.routes).map(([routeId, route]) => {
+			if (!isObject(route) || !isObject(route.pricing) || !isObject(route.hostedTools))
+				return [routeId, route];
+			const { pricing: served, ...facts } = route;
+			const calls = Object.fromEntries(
+				PREVIOUS_WEB_SEARCH_METERS.filter((meter) => Object.hasOwn(served, meter)).map((meter) => [
+					meter,
+					served[meter]
+				])
+			);
+			pricing = Object.fromEntries(
+				Object.entries(served).filter(([meter]) => !Object.hasOwn(calls, meter))
+			);
+			const hostedTools = Object.fromEntries(
+				Object.entries(facts.hostedTools).map(([tool, offer]) => [
+					tool,
+					{ ...offer, pricing: tool === 'web_search' ? calls : {} }
+				])
+			);
+			return [routeId, { ...facts, hostedTools }];
+		})
 	);
-	return { ...graph, deployments };
+	return { ...deployment, hosting, via: [], upstream, pricing, routes };
 }
 
 export const CATALOG_KINDS = Object.freeze([

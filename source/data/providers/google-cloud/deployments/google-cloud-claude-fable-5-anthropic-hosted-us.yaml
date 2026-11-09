@@ -5,9 +5,9 @@
 deployments:
   modelId: claude-fable-5
   routeIds: [google-cloud-messages]
+  hosting: anthropic
   upstream:
     model: claude-fable-5
-    hosting: anthropic
     inferenceGeo: us
   overrides:
     dataHandling:

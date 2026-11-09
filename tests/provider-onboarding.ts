@@ -63,6 +63,8 @@ export type ProviderDeploymentContract = {
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
+	/** Who runs the model. */
+	hosting: string;
 	notes?: string;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
@@ -111,7 +113,8 @@ export function assertProviderOnboardingContract(
 		aliases: contract.provider.aliases,
 		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
-		headquarteredCountry: contract.provider.headquarteredCountry
+		headquarteredCountry: contract.provider.headquarteredCountry,
+		notes: null
 	};
 	expect(graph.providers[providerId]).toEqual(provider);
 
@@ -153,7 +156,7 @@ export function assertProviderOnboardingContract(
 			routes: Record<string, { chainHash: string }>;
 			upstream: Record<string, string>;
 		};
-		expect(copy.upstream.hosting).toBe('anthropic');
+		expect(copy.hosting).toBe('anthropic');
 		const sorted = (upstream: unknown) =>
 			JSON.stringify(Object.entries(upstream as object).sort(([a], [b]) => a.localeCompare(b)));
 		const sources = Object.entries(graph.deployments).filter(
@@ -187,7 +190,7 @@ export function assertProviderOnboardingContract(
 				const route = routes.get(routeId);
 				if (!route) throw new Error(`${expected.id}: unknown contract route ${routeId}`);
 				const offers = (route.hostedTools ?? []).filter(
-					(offer) => !offer.hostings || offer.hostings.includes(String(expected.upstream.hosting))
+					(offer) => !offer.hostings || offer.hostings.includes(expected.hosting)
 				);
 				return [
 					routeId,
@@ -198,12 +201,10 @@ export function assertProviderOnboardingContract(
 							route.inputModalities.includes(modality)
 						),
 						hostedTools: Object.fromEntries(
-							offers.map((offer) => [offer.tool, { dataHandling: offer.dataHandling }])
-						),
-						pricing: Object.assign(
-							{},
-							...offers.map((offer) => offer.pricing ?? {}),
-							expected.pricing
+							offers.map((offer) => [
+								offer.tool,
+								{ dataHandling: offer.dataHandling, pricing: offer.pricing ?? {} }
+							])
 						),
 						reasoningEfforts:
 							expected.reasoningEffortsByRoute?.[routeId] ??
@@ -220,7 +221,10 @@ export function assertProviderOnboardingContract(
 			maxInputTokens: expected.maxInputTokens ?? expected.contextWindowTokens,
 			maxOutputTokens: expected.maxOutputTokens,
 			modelId: expected.modelId,
+			hosting: expected.hosting,
+			via: [],
 			outputModalities: expected.outputModalities,
+			pricing: expected.pricing,
 			reasoning: expected.modelReasoning ?? 'unsupported',
 			reasoningMaxTokens:
 				expected.reasoningMaxTokens !== undefined

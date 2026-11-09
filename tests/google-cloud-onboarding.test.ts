@@ -98,6 +98,7 @@ function deployment(
 		pricing,
 		retirementDate: null,
 		routeIds: ['google-cloud-messages'],
+		hosting: 'google-cloud',
 		upstream: { ...upstream, model, serviceTier: 'standard' }
 	};
 }
@@ -107,26 +108,20 @@ const kept = (model: ClaudeModelId) =>
 	model.startsWith('claude-fable-') ? { retentionDays: 30 } : {};
 const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 	({ model, global, regional }) => [
-		deployment(
-			`google-cloud-${model}`,
-			model,
-			{ hosting: 'google-cloud', inferenceGeo: 'global' },
-			kept(model),
-			global
-		),
+		deployment(`google-cloud-${model}`, model, { inferenceGeo: 'global' }, kept(model), global),
 		...(regional
 			? [
 					deployment(
 						`google-cloud-${model}-eu`,
 						model,
-						{ hosting: 'google-cloud', inferenceGeo: 'eu' },
+						{ inferenceGeo: 'eu' },
 						{ processingLocation: 'eu', ...kept(model) },
 						regional
 					),
 					deployment(
 						`google-cloud-${model}-us`,
 						model,
-						{ hosting: 'google-cloud', inferenceGeo: 'us' },
+						{ inferenceGeo: 'us' },
 						{ processingLocation: 'US', ...kept(model) },
 						regional
 					)
@@ -179,7 +174,9 @@ describe('Google Cloud onboarding contract', () => {
 					],
 					id: 'google-cloud-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses'],
+					notes:
+						"Google runs Claude on Agent Platform. Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills."
 				},
 				{
 					capabilities: { streaming: false },
@@ -208,6 +205,8 @@ describe('Google Cloud onboarding contract', () => {
 					id: 'google-cloud-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					notes:
+						"Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills.",
 					batch: true,
 					stogasUnsupported: 'The gateway has no batch API and serves each request as it arrives.'
 				}

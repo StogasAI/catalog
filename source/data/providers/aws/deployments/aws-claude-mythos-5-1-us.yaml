@@ -11,9 +11,9 @@
 deployments:
   modelId: claude-mythos-5-1
   routeIds: [aws-messages]
+  hosting: aws
   upstream:
     model: us.anthropic.claude-mythos-5-1
-    hosting: aws
     inferenceGeo: us
   approvalRequired: true
   overrides:

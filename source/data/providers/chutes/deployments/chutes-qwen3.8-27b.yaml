@@ -1,10 +1,10 @@
 deployments:
   modelId: qwen3.8-27b
   routeIds: [chutes-chat-completions]
+  hosting: chutes
   upstream:
     model: Qwen/Qwen3.8-27B-TEE
     chuteId: 9ecb73cc-909b-5334-9cd8-74985945cff5
-    hosting: chutes
     gpuCount: 1
   weightPrecision: fp8
   overrides:

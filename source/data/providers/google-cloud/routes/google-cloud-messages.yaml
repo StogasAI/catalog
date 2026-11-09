@@ -1,5 +1,5 @@
 # Claude on Google Cloud takes the Messages body two ways; each deployment's hosting picks one.
-# Hosting google is Claude on Agent Platform, formerly Vertex AI (Google managed):
+# Hosting google-cloud is Claude on Agent Platform, formerly Vertex AI (Google managed):
 # https://{host}/v1/projects/{project}/locations/{location}/publishers/anthropic/models/{model}:rawPredict.
 # It has no URL sources, Files API, code execution, web fetch, advisor or fallbacks. Its web search is
 # off until an organization policy allows it, sends queries to Brave outside Google's residency and
@@ -18,6 +18,7 @@ routes:
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
     endToEndEncrypted: false
+  notes: Google runs Claude on Agent Platform. Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills.
   # Only Claude on Google Cloud (Anthropic managed) runs web search and web fetch, at Anthropic's prices.
   # Data handling reviewed 2026-11-03: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   # and https://platform.claude.com/docs/en/manage-claude/data-residency. inference_geo covers model inference

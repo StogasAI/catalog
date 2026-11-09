@@ -5,9 +5,9 @@
 deployments:
   modelId: claude-opus-5
   routeIds: [aws-batch-messages]
+  hosting: aws
   upstream:
     model: in.anthropic.claude-opus-5
-    hosting: aws
     inferenceGeo: in
   overrides:
     dataHandling:

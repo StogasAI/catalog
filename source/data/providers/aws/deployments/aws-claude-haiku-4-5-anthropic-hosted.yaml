@@ -4,9 +4,9 @@
 deployments:
   modelId: claude-haiku-4-5
   routeIds: [aws-messages]
+  hosting: anthropic
   upstream:
     model: claude-haiku-4-5-20251001
-    hosting: anthropic
   overrides:
     dataHandling:
       retentionDays: 30

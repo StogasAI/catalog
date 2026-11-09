@@ -1,7 +1,7 @@
 import type { Locations } from './locations.mjs';
 
-export const CATALOG_SCHEMA: 'stogas.catalog.v13';
-export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v13';
+export const CATALOG_SCHEMA: 'stogas.catalog.v14';
+export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v14';
 /**
  * A root or part of the previous format as one of the current format. The formats differ only in
  * their schema names, so the previous format's facts keep their meaning. Any other value comes back

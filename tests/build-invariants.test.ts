@@ -104,7 +104,9 @@ function sourceFixture() {
 				'openai-gpt-test': {
 					modelId: 'gpt-test',
 					routeIds: ['openai-responses'],
-					upstream: { model: 'gpt-test', hosting: 'openai' } as Record<string, unknown>,
+					hosting: 'openai' as string | undefined,
+					via: undefined as string[] | undefined,
+					upstream: { model: 'gpt-test' } as Record<string, unknown>,
 					pricing: {
 						input_tokens: { per_mill_tokens: '1' },
 						output_tokens: { per_mill_tokens: '2' }
@@ -157,11 +159,11 @@ function asAzure(source: Source) {
 	source.graph.deployments['azure-gpt-test'] = {
 		...source.graph.deployments['openai-gpt-test'],
 		routeIds: ['azure-responses'],
+		hosting: 'azure',
 		upstream: {
 			model: 'gpt-test',
 			modelFormat: 'OpenAI',
 			modelVersion: '1',
-			hosting: 'azure',
 			deploymentType: 'global_standard'
 		}
 	};
@@ -179,7 +181,8 @@ function asAnthropic(source: Source) {
 	source.graph.deployments['anthropic-gpt-test'] = {
 		...source.graph.deployments['openai-gpt-test'],
 		routeIds: ['anthropic-messages'],
-		upstream: { model: 'gpt-test', hosting: 'anthropic', inferenceGeo: 'us' }
+		hosting: 'anthropic',
+		upstream: { model: 'gpt-test', inferenceGeo: 'us' }
 	};
 	delete source.graph.deployments['openai-gpt-test'];
 }
@@ -206,7 +209,9 @@ describe('catalog source compiler invariants', () => {
 				'kind:id',
 				'__proto__',
 				'trailing\n',
-				'a: injected'
+				'a: injected',
+				// The value of a fact that no source states.
+				'unknown'
 			]) {
 				const source = sourceFixture();
 				source.graph[kind] = { ...source.graph[kind], [id]: { unvalidated: true } };
@@ -276,8 +281,8 @@ describe('catalog source compiler invariants', () => {
 			const source = sourceFixture();
 			source.graph.deployments['openai-gpt-test'].pricing.output_tokens.per_mill_tokens = rate;
 			expect(
-				buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses'].pricing
-					.output_tokens.per_mill_tokens
+				buildCatalog(source).graph.deployments['openai-gpt-test'].pricing.output_tokens
+					.per_mill_tokens
 			).toBe(rate);
 		}
 	);
@@ -293,8 +298,25 @@ describe('catalog source compiler invariants', () => {
 			aliases: [],
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
-			name: 'OpenAI'
+			name: 'OpenAI',
+			notes: null
 		});
+	});
+
+	test('keeps the notes of every kind of node, and null without them', () => {
+		const source = sourceFixture();
+		const notes = 'Readers need this sentence.';
+		const { graph } = source as unknown as {
+			graph: Record<string, Record<string, { notes?: string }>>;
+		};
+		for (const kind of ['authors', 'models', 'providers', 'routes', 'deployments'])
+			for (const node of Object.values(graph[kind])) node.notes = notes;
+		const compiled = buildCatalog(source).graph as unknown as typeof graph;
+		const plain = buildCatalog(sourceFixture()).graph as unknown as typeof graph;
+		for (const kind of ['authors', 'models', 'providers', 'routes', 'deployments']) {
+			expect(Object.values(compiled[kind]).map((node) => node.notes)).toEqual([notes]);
+			expect(Object.values(plain[kind]).map((node) => node.notes)).toEqual([null]);
+		}
 	});
 
 	test('accepts aliases that move a word across the version, add or remove the snapshot date, or name a group', () => {
@@ -711,7 +733,8 @@ describe('catalog source compiler invariants', () => {
 			...structuredClone(deployments['openai-gpt-test']),
 			modelId: 'gpt-only',
 			routeIds: ['openai-chat-completions'],
-			upstream: { model: 'gpt-only', hosting: 'openai' }
+			hosting: 'openai',
+			upstream: { model: 'gpt-only' }
 		};
 		Object.assign(routes['openai-chat-completions'], { retirementDate: '2026-08-01' });
 		let catalog = buildCatalog(source);
@@ -751,7 +774,8 @@ describe('catalog source compiler invariants', () => {
 			...structuredClone(deployments['openai-gpt-test']),
 			modelId: 'gpt-batch',
 			routeIds: ['openai-chat-completions'],
-			upstream: { model: 'gpt-batch', hosting: 'openai' }
+			hosting: 'openai',
+			upstream: { model: 'gpt-batch' }
 		};
 		const batch = 'The gateway has no batch API.';
 		Object.assign(routes['openai-chat-completions'], { stogasUnsupported: batch });
@@ -906,7 +930,7 @@ describe('catalog source compiler invariants', () => {
 		expect(Object.keys(promotion.graph)).toEqual(['deployments']);
 		const route = (deployment: { routes: Record<string, Record<string, unknown>> }) =>
 			deployment.routes['openai-responses'];
-		expect(route(promotion.graph.deployments['openai-gpt-test']).pricing).toEqual({
+		expect(promotion.graph.deployments['openai-gpt-test'].pricing).toEqual({
 			input_tokens: { per_mill_tokens: '1' },
 			output_tokens: { per_mill_tokens: '1' }
 		});
@@ -919,15 +943,11 @@ describe('catalog source compiler invariants', () => {
 		});
 		expect(limited.graph.deployments['openai-gpt-test']).toMatchObject({
 			maxOutputTokens: 100,
-			routes: {
-				'openai-responses': {
-					reasoningEfforts: [],
-					pricing: { output_tokens: { per_mill_tokens: '1' } }
-				}
-			}
+			pricing: { output_tokens: { per_mill_tokens: '1' } },
+			routes: { 'openai-responses': { reasoningEfforts: [] } }
 		});
 		expect(promotionAgain.graph).toEqual(promotion.graph);
-		expect(route(raised.graph.deployments['openai-gpt-test']).pricing).toEqual({
+		expect(raised.graph.deployments['openai-gpt-test'].pricing).toEqual({
 			input_tokens: { per_mill_tokens: '0.5' },
 			output_tokens: { per_mill_tokens: '2' }
 		});
@@ -935,12 +955,9 @@ describe('catalog source compiler invariants', () => {
 		const promoted = promotion.graph.deployments['openai-gpt-test'];
 		expect({
 			...promoted,
+			pricing: baseDeployment.pricing,
 			routes: {
-				'openai-responses': {
-					...route(promoted),
-					chainHash: route(baseDeployment).chainHash,
-					pricing: route(baseDeployment).pricing
-				}
+				'openai-responses': { ...route(promoted), chainHash: route(baseDeployment).chainHash }
 			}
 		}).toEqual(baseDeployment);
 
@@ -989,7 +1006,7 @@ describe('catalog source compiler invariants', () => {
 			promotion.graph.deployments['openai-gpt-test']
 		);
 		expect(at('2026-11-19T23:59:59Z').models['gpt-test'].maxOutputTokens).toBe(100);
-		expect(route(at('2027-01-01T00:00:00Z').deployments['openai-gpt-test']).pricing).toMatchObject({
+		expect(at('2027-01-01T00:00:00Z').deployments['openai-gpt-test'].pricing).toMatchObject({
 			input_tokens: { per_mill_tokens: '0.5' }
 		});
 	});
@@ -1026,13 +1043,15 @@ describe('catalog source compiler invariants', () => {
 		models['gpt-listed'] = { ...models['gpt-test'], name: 'GPT Listed' };
 		deployments['openai-gpt-test-flex'] = {
 			...structuredClone(deployment),
-			upstream: { model: 'gpt-test', hosting: 'openai', serviceTier: 'flex' },
+			hosting: 'openai',
+			upstream: { model: 'gpt-test', serviceTier: 'flex' },
 			retirementDate: '2026-09-01'
 		};
 		deployments['openai-gpt-other'] = {
 			...structuredClone(deployment),
 			modelId: 'gpt-other',
-			upstream: { model: 'gpt-other', hosting: 'openai' },
+			hosting: 'openai',
+			upstream: { model: 'gpt-other' },
 			retirementDate: '2026-05-01'
 		};
 		Object.assign(deployment, { retirementDate: '2026-06-01' });
@@ -1351,20 +1370,17 @@ describe('catalog source compiler invariants', () => {
 			source.graph.routes['openai-chat-completions'].inputModalities = ['text'];
 			source.graph.routes['openai-responses'].hostedTools = [openaiWebSearch('10')];
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
-			const { routes } = buildCatalog(source).graph.deployments['openai-gpt-test'];
+			const { pricing, routes } = buildCatalog(source).graph.deployments['openai-gpt-test'];
 			expect(routes['openai-chat-completions'].capabilities.streaming).toBe(false);
 			expect(routes['openai-responses'].capabilities.streaming).toBe(true);
 			expect(routes['openai-chat-completions'].inputModalities).toEqual(['text']);
 			expect(routes['openai-responses'].inputModalities).toEqual(['text', 'image']);
-			expect(Object.keys(routes['openai-chat-completions'].pricing)).toEqual([
-				'input_tokens',
-				'output_tokens'
-			]);
+			// The deployment's prices hold on both routes, and each route prices the tools that it runs.
+			expect(Object.keys(pricing)).toEqual(['input_tokens', 'output_tokens']);
 			expect(routes['openai-chat-completions'].hostedTools).toEqual({});
-			expect(routes['openai-responses'].pricing.openai_responses_web_search_calls).toEqual({
-				per_1k_calls: '10'
+			expect(routes['openai-responses'].hostedTools).toEqual({
+				web_search: { dataHandling: {}, pricing: openaiWebSearch('10').pricing }
 			});
-			expect(routes['openai-responses'].hostedTools).toEqual({ web_search: { dataHandling: {} } });
 		});
 	});
 
@@ -1547,6 +1563,7 @@ describe('catalog source compiler invariants', () => {
 
 		function chutesSource(
 			routeId: string,
+			hosting: string | undefined,
 			upstream: Record<string, unknown>,
 			id = 'chutes-gpt-test'
 		) {
@@ -1587,6 +1604,7 @@ describe('catalog source compiler invariants', () => {
 				source.graph.deployments[id] = {
 					modelId: 'gpt-test',
 					routeIds: [routeId],
+					hosting,
 					upstream: { model: 'org/gpt-test', chuteId, ...upstream } as never,
 					pricing: {
 						input_tokens: { per_mill_tokens: '1' },
@@ -1600,17 +1618,20 @@ describe('catalog source compiler invariants', () => {
 			{
 				name: 'Chutes runs it on an encrypted route, with a GPU count',
 				routeId: 'chutes-chat-completions',
-				upstream: { hosting: 'chutes', gpuCount: 8 },
+				hosting: 'chutes',
+				upstream: { gpuCount: 8 },
 				id: 'chutes-gpt-test'
 			},
 			{
 				name: 'Chutes forwards it on a standard route to an operator that it does not name',
 				routeId: 'chutes-standard-chat-completions',
-				upstream: { hosting: 'unknown' },
+				hosting: 'unknown',
+				upstream: {},
 				id: 'chutes-gpt-test-unknown-hosted'
 			}
-		])('accepts a deployment that $name', ({ routeId, upstream, id }) => {
-			const { graph } = buildCatalog(chutesSource(routeId, upstream, id));
+		])('accepts a deployment that $name', ({ routeId, hosting, upstream, id }) => {
+			const { graph } = buildCatalog(chutesSource(routeId, hosting, upstream, id));
+			expect(graph.deployments[id].hosting).toBe(hosting);
 			expect(graph.deployments[id].upstream).toEqual({
 				model: 'org/gpt-test',
 				chuteId,
@@ -1620,38 +1641,46 @@ describe('catalog source compiler invariants', () => {
 		});
 
 		test.each([
-			['an encrypted route without a GPU count', 'chutes-chat-completions', { hosting: 'chutes' }],
+			['an encrypted route without a GPU count', 'chutes-chat-completions', 'chutes', {}],
 			[
 				'a standard route with a GPU count',
 				'chutes-standard-chat-completions',
-				{ gpuCount: 8, hosting: 'unknown' }
-			],
-			['a route without a hosting', 'chutes-standard-chat-completions', {}]
-		])('rejects %s', (_name, routeId, upstream) => {
-			expect(() => buildCatalog(chutesSource(routeId, upstream))).toThrow(
+				'unknown',
+				{ gpuCount: 8 }
+			]
+		])('rejects %s', (_name, routeId, hosting, upstream) => {
+			expect(() => buildCatalog(chutesSource(routeId, hosting, upstream))).toThrow(
 				'chutes-gpt-test: upstream selector does not match provider chutes'
 			);
+		});
+
+		test('rejects a deployment without a hosting', () => {
+			expect(() =>
+				buildCatalog(chutesSource('chutes-standard-chat-completions', undefined, {}))
+			).toThrow('chutes-gpt-test: hosting is required');
 		});
 
 		test.each([
 			[
 				'a standard deployment whose operator is named',
 				'chutes-standard-chat-completions',
-				{ hosting: 'anthropic' },
+				'anthropic',
+				{},
 				'requires hosting unknown'
 			],
 			[
 				'an encrypted deployment that another operator runs',
 				'chutes-chat-completions',
-				{ hosting: 'unknown', gpuCount: 8 },
+				'unknown',
+				{ gpuCount: 8 },
 				'requires hosting chutes'
 			]
-		])('rejects %s', (_name, routeId, upstream, message) => {
-			expect(() => buildCatalog(chutesSource(routeId, upstream))).toThrow(message);
+		])('rejects %s', (_name, routeId, hosting, upstream, message) => {
+			expect(() => buildCatalog(chutesSource(routeId, hosting, upstream))).toThrow(message);
 		});
 
 		test('rejects a deployment whose routes take different selectors', () => {
-			const source = chutesSource('chutes-chat-completions', { hosting: 'chutes', gpuCount: 8 });
+			const source = chutesSource('chutes-chat-completions', 'chutes', { gpuCount: 8 });
 			// Both routes serve chat completions, so the deployment needs a route of another interface.
 			source.graph.routes['chutes-standard-chat-completions'].interfaces = ['responses'];
 			source.graph.deployments['chutes-gpt-test'].routeIds.push('chutes-standard-chat-completions');
@@ -1908,18 +1937,18 @@ describe('catalog source compiler invariants', () => {
 				'provider openai: select at most 8 aliases'
 			],
 			[
-				'deployment ID that its upstream does not give',
+				'deployment ID that its facts do not give',
 				(source: Source) => {
 					const deployment = source.graph.deployments['openai-gpt-test'];
 					source.graph.deployments = { 'openai-gpt-test-a': deployment };
 				},
-				"openai-gpt-test-a: the deployment's upstream names it openai-gpt-test"
+				"openai-gpt-test-a: the deployment's facts name it openai-gpt-test"
 			],
 			[
 				'deployment ID without its tier',
 				(source: Source) =>
 					(source.graph.deployments['openai-gpt-test'].upstream.serviceTier = 'flex'),
-				"openai-gpt-test: the deployment's upstream names it openai-gpt-test-flex"
+				"openai-gpt-test: the deployment's facts name it openai-gpt-test-flex"
 			]
 		]);
 	});
@@ -1927,14 +1956,14 @@ describe('catalog source compiler invariants', () => {
 	test('names a deployment by who runs it, its mode, its tier and where it runs', () => {
 		const source = changed(asAzure);
 		const deployment = source.graph.deployments['azure-gpt-test'];
+		deployment.hosting = 'fireworks';
 		Object.assign(deployment.upstream, {
 			modelFormat: 'Fireworks',
-			hosting: 'fireworks',
 			deploymentType: 'data_zone_standard_us'
 		});
 		source.graph.deployments = { 'azure-gpt-test-fireworks-hosted-us': deployment };
 		expect(
-			buildCatalog(source).graph.deployments['azure-gpt-test-fireworks-hosted-us'].upstream.hosting
+			buildCatalog(source).graph.deployments['azure-gpt-test-fireworks-hosted-us'].hosting
 		).toBe('fireworks');
 
 		const pro = changed((candidate) => {
@@ -1945,6 +1974,83 @@ describe('catalog source compiler invariants', () => {
 			};
 		});
 		expect(buildCatalog(pro).graph.deployments['openai-gpt-test-pro-flex']).toBeDefined();
+	});
+
+	describe('names the companies between a provider and the hosting', () => {
+		function relayed(hosting: string, via: string[] | undefined, id: string) {
+			return changed((source) => {
+				asAzure(source);
+				const deployment = source.graph.deployments['azure-gpt-test'];
+				Object.assign(deployment, { hosting, via });
+				source.graph.deployments = { [id]: deployment };
+			});
+		}
+
+		test('lists none for a provider that runs the model or sends requests straight to the hosting', () => {
+			const own = buildCatalog(relayed('azure', undefined, 'azure-gpt-test')).graph;
+			expect(own.deployments['azure-gpt-test']).toMatchObject({ hosting: 'azure', via: [] });
+			const resold = buildCatalog(
+				relayed('anthropic', undefined, 'azure-gpt-test-anthropic-hosted')
+			);
+			expect(resold.graph.deployments['azure-gpt-test-anthropic-hosted'].via).toEqual([]);
+		});
+
+		test.each([
+			[['fireworks'], 'anthropic', 'azure-gpt-test-via-fireworks-anthropic-hosted'],
+			[
+				['fireworks', 'unknown'],
+				'anthropic',
+				'azure-gpt-test-via-fireworks-via-unknown-anthropic-hosted'
+			],
+			[['fireworks'], 'unknown', 'azure-gpt-test-via-fireworks-unknown-hosted']
+		])('keeps %p in request order before %s and names each in the ID', (via, hosting, id) => {
+			const { graph } = buildCatalog(relayed(hosting, via, id));
+			expect(graph.deployments[id]).toMatchObject({ hosting, via });
+		});
+
+		test.each([
+			[
+				'a provider that runs the model itself',
+				'azure',
+				['fireworks'],
+				'azure-gpt-test-via-fireworks'
+			],
+			[
+				'a company named twice',
+				'anthropic',
+				['fireworks', 'fireworks'],
+				'azure-gpt-test-anthropic-hosted'
+			],
+			['the provider', 'anthropic', ['azure'], 'azure-gpt-test-anthropic-hosted'],
+			['the hosting', 'anthropic', ['anthropic'], 'azure-gpt-test-anthropic-hosted'],
+			[
+				'unknown before a hosting of unknown',
+				'unknown',
+				['unknown'],
+				'azure-gpt-test-unknown-hosted'
+			]
+		])('rejects %s', (_name, hosting, via, id) => {
+			expect(() => buildCatalog(relayed(hosting, via, id))).toThrow(
+				`${id}: via names each company between the provider and the hosting once`
+			);
+		});
+
+		test('gives two paths to one hosting their own IDs', () => {
+			const source = relayed(
+				'anthropic',
+				['fireworks'],
+				'azure-gpt-test-via-fireworks-anthropic-hosted'
+			);
+			const direct = structuredClone(
+				source.graph.deployments['azure-gpt-test-via-fireworks-anthropic-hosted']
+			);
+			delete direct.via;
+			source.graph.deployments['azure-gpt-test-anthropic-hosted'] = direct;
+			expect(Object.keys(buildCatalog(source).graph.deployments)).toEqual([
+				'azure-gpt-test-via-fireworks-anthropic-hosted',
+				'azure-gpt-test-anthropic-hosted'
+			]);
+		});
 	});
 
 	test('keeps Azure rules structural instead of model-name allowlists', () => {
@@ -1992,7 +2098,7 @@ describe('catalog source compiler invariants', () => {
 				(source: Source) => {
 					asAzureClaude(source);
 					source.graph.deployments['azure-gpt-test'].upstream.modelFormat = 'OpenAI';
-					source.graph.deployments['azure-gpt-test'].upstream.hosting = 'azure';
+					source.graph.deployments['azure-gpt-test'].hosting = 'azure';
 				},
 				'only Azure Anthropic-format models use the Azure Anthropic Messages route'
 			],
@@ -2064,7 +2170,8 @@ describe('catalog source compiler invariants', () => {
 		function addFast(source: Source) {
 			source.graph.deployments['openai-gpt-test-fast'] = {
 				...structuredClone(source.graph.deployments['openai-gpt-test']),
-				upstream: { model: 'gpt-test', hosting: 'openai', serviceTier: 'fast' }
+				hosting: 'openai',
+				upstream: { model: 'gpt-test', serviceTier: 'fast' }
 			};
 		}
 		testRejections([

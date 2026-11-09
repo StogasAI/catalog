@@ -31,5 +31,6 @@ package catalog
 	// Omitted when the model owner has not disclosed it. When the owner states several, the one for
 	// the data that gives the model its general knowledge, such as the pretraining cutoff.
 	knowledgeCutoff?: #Date
+	notes?: #Note
 	periods?: [#Period, ...#Period]
 })
