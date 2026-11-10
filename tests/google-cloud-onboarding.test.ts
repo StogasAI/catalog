@@ -34,6 +34,11 @@ type Prices = Record<string, Record<string, string>>;
 // multi-regions', which cost 10 percent more. Older models have no multi-region endpoint.
 const agentPlatform: { model: ClaudeModelId; global: Prices; regional?: Prices }[] = [
 	{
+		model: 'claude-fable-5-2',
+		global: tokenPrices('8', '0.2', '10', '16', '40'),
+		regional: tokenPrices('8.8', '0.22', '11', '17.6', '44')
+	},
+	{
 		model: 'claude-fable-5-1',
 		global: tokenPrices('10', '0.25', '12.5', '20', '50'),
 		regional: tokenPrices('11', '0.275', '13.75', '22', '55')
@@ -130,9 +135,9 @@ const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 	]
 );
 // Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
-// serves what Anthropic's does. Mythos and Fast mode are not listed yet.
+// serves what Anthropic's does. Of the Mythos models, Anthropic lists only Mythos 5.2 there.
 const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
-	(model) => !model.startsWith('claude-mythos')
+	(model) => !model.startsWith('claude-mythos') || model === 'claude-mythos-5-2'
 );
 
 describe('Google Cloud onboarding contract', () => {
@@ -213,7 +218,11 @@ describe('Google Cloud onboarding contract', () => {
 			],
 			deployments,
 			// Anthropic's Fast mode page names Google Cloud for Opus 5.5 alone.
-			anthropicHosted: anthropicHosted('google-cloud', platformModels, ['claude-opus-5-5']),
+			anthropicHosted: anthropicHosted('google-cloud', platformModels, [
+				'claude-fable-5-2',
+				'claude-mythos-5-2',
+				'claude-opus-5-5'
+			]),
 			// Claude Platform on Google Cloud stores data in the US.
 			anthropicHostedDataHandling: { storageLocation: 'US' }
 		});

@@ -5,8 +5,10 @@ const budget = (maximum: number) => ({ maximum, minimum: 1024 });
 
 /** The model facts that every cloud deployment of a Claude model shares. */
 export const claudeModels = {
+	'claude-fable-5-2': model(1_000_000, 128_000, 'required', efforts),
 	'claude-fable-5-1': model(1_000_000, 128_000, 'required', efforts),
 	'claude-fable-5': model(1_000_000, 128_000, 'required', efforts),
+	'claude-mythos-5-2': model(1_000_000, 128_000, 'required', efforts),
 	'claude-mythos-5-1': model(1_000_000, 128_000, 'required', efforts),
 	'claude-opus-5-5': model(1_000_000, 128_000, 'required', efforts),
 	'claude-opus-5': model(1_000_000, 128_000, 'optional', efforts),

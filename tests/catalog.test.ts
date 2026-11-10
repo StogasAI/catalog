@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 55, providers: 6, routes: 15, deployments: 473 });
+		).toEqual({ authors: 11, models: 57, providers: 6, routes: 15, deployments: 512 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -81,7 +81,7 @@ describe('compiled catalog', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(124);
+		expect(Object.keys(selectors)).toHaveLength(128);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5-5': 'claude-opus-5-5',
 			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',
@@ -381,10 +381,12 @@ describe('compiled catalog', () => {
 		const expectedActiveModels = [
 			'claude-fable-5',
 			'claude-fable-5-1',
+			'claude-fable-5-2',
 			'claude-haiku-4-5',
 			'claude-haiku-5-5',
 			'claude-mythos-5',
 			'claude-mythos-5-1',
+			'claude-mythos-5-2',
 			'claude-opus-4-5',
 			'claude-opus-4-6',
 			'claude-opus-4-7',
@@ -437,9 +439,11 @@ describe('compiled catalog', () => {
 		const geoModels = new Set([
 			'claude-fable-5',
 			'claude-fable-5-1',
+			'claude-fable-5-2',
 			'claude-haiku-5-5',
 			'claude-mythos-5',
 			'claude-mythos-5-1',
+			'claude-mythos-5-2',
 			'claude-opus-4-6',
 			'claude-opus-4-7',
 			'claude-opus-4-8',
@@ -476,7 +480,9 @@ describe('compiled catalog', () => {
 				)
 				.map((deployment) => deployment.modelId)
 		);
-		expect(fastModels).toEqual(new Set(['claude-opus-5', 'claude-opus-5-5']));
+		expect(fastModels).toEqual(
+			new Set(['claude-fable-5-2', 'claude-mythos-5-2', 'claude-opus-5', 'claude-opus-5-5'])
+		);
 		expect(catalog.graph.routes['anthropic-messages'].dataHandling).toMatchObject({
 			endToEndEncrypted: false,
 			storageLocation: 'unknown',
@@ -526,6 +532,12 @@ describe('compiled catalog', () => {
 			'anthropic-claude-mythos-5-1-batch',
 			'anthropic-claude-mythos-5-1-batch-us',
 			'anthropic-claude-mythos-5-1-us',
+			'anthropic-claude-mythos-5-2',
+			'anthropic-claude-mythos-5-2-batch',
+			'anthropic-claude-mythos-5-2-batch-us',
+			'anthropic-claude-mythos-5-2-fast',
+			'anthropic-claude-mythos-5-2-fast-us',
+			'anthropic-claude-mythos-5-2-us',
 			'anthropic-claude-mythos-5-batch',
 			'anthropic-claude-mythos-5-batch-us',
 			'anthropic-claude-mythos-5-us',
@@ -533,8 +545,18 @@ describe('compiled catalog', () => {
 			'anthropic-claude-opus-5-fast-us',
 			'aws-claude-mythos-5-1',
 			'aws-claude-mythos-5-1-us',
+			'aws-claude-mythos-5-2',
+			'aws-claude-mythos-5-2-us',
 			'azure-claude-mythos-5-1-anthropic-hosted',
+			'azure-claude-mythos-5-2-anthropic-hosted',
+			'azure-claude-mythos-5-2-anthropic-hosted-fast',
 			'azure-claude-mythos-5-anthropic-hosted',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted-batch',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted-batch-us',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast-us',
+			'google-cloud-claude-mythos-5-2-anthropic-hosted-us',
 			'openai-gpt-5.6-cyber',
 			'openai-gpt-6-cyber'
 		];

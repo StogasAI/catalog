@@ -1,0 +1,29 @@
+# Claude Models on Google Cloud (Anthropic managed) offers Fast mode for Claude Mythos 5.2 at
+# Anthropic's Fast prices, and US inference at its multiplier, which applies on top of Fast.
+# Reviewed 2026-11-10: https://platform.claude.com/docs/en/build-with-claude/fast-mode
+# and https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing
+deployments:
+  modelId: claude-mythos-5-2
+  routeIds: [google-cloud-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-mythos-5-2
+    serviceTier: fast
+    inferenceGeo: us
+  approvalRequired: true
+  overrides:
+    dataHandling:
+      processingLocation: US
+      storageLocation: US
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '17.6'
+    cached_input_tokens:
+      per_mill_tokens: '0.44'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '22'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '35.2'
+    output_tokens:
+      per_mill_tokens: '88'

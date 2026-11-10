@@ -41,6 +41,13 @@ type Prices = Record<string, Record<string, string>>;
 function offer(model: ClaudeModelId, profile: string, global: Prices, us: Prices) {
 	bedrock[model] = { model, profile, global, us };
 }
+for (const model of ['claude-fable-5-2', 'claude-mythos-5-2'] as const)
+	offer(
+		model,
+		`anthropic.${model}`,
+		tokenPrices('8', '0.2', '10', '16', '40'),
+		tokenPrices('8.8', '0.22', '11', '17.6', '44')
+	);
 offer(
 	'claude-fable-5-1',
 	'anthropic.claude-fable-5-1',
@@ -146,10 +153,11 @@ const awsNotes =
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
-		// Fable needs the aws_review data retention mode and Mythos needs provider_data_share. Under
-		// either, AWS keeps prompts and completions inside AWS for up to 30 days.
+		// Fable needs the aws_review data retention mode, and Mythos needs provider_data_share or,
+		// from Mythos 5.2, either of the two. Under both, AWS keeps prompts and completions inside AWS
+		// for up to 30 days.
 		const kept = /^claude-(fable|mythos)-/.test(model);
-		// Bedrock serves Mythos only to accounts that Anthropic's trusted access programs approve.
+		// Bedrock serves Mythos only to accounts that Anthropic's verification programs approve.
 		const gated = model.startsWith('claude-mythos') ? { approvalRequired: true } : {};
 		return [
 			{

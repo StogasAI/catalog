@@ -77,6 +77,13 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
+	[
+		'azure-claude-fable-5-2-anthropic-hosted',
+		'claude-fable-5-2',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
 	['azure-claude-haiku-5-5', 'claude-haiku-5-5', '2', 'azure', 'global_standard'],
 	[
 		'azure-claude-haiku-5-5-anthropic-hosted',
@@ -96,6 +103,13 @@ const otherTargets: AzureTarget[] = [
 	[
 		'azure-claude-mythos-5-1-anthropic-hosted',
 		'claude-mythos-5-1',
+		'1',
+		'anthropic',
+		'global_standard'
+	],
+	[
+		'azure-claude-mythos-5-2-anthropic-hosted',
+		'claude-mythos-5-2',
 		'1',
 		'anthropic',
 		'global_standard'
@@ -141,6 +155,20 @@ const otherTargets: AzureTarget[] = [
 }));
 
 otherTargets.push(
+	// Azure sells Fast as its own model: Anthropic runs it for Claude Fable 5.2 and Mythos 5.2.
+	...(['claude-fable-5-2', 'claude-mythos-5-2'] as const).map((modelId) => ({
+		id: `azure-${modelId}-anthropic-hosted-fast`,
+		modelId,
+		routeIds: ['azure-anthropic-messages'],
+		hosting: 'anthropic',
+		upstream: {
+			deploymentType: 'global_standard',
+			model: `${modelId}-fast`,
+			modelFormat: 'Anthropic',
+			modelVersion: '1',
+			serviceTier: 'fast'
+		}
+	})),
 	// Azure sells Claude Opus 5.5 Fast as its own model.
 	...(['global', 'us'] as const).map((location) => ({
 		id: `azure-claude-opus-5-5-fast${location === 'global' ? '' : '-us'}`,
@@ -424,9 +452,11 @@ describe('Azure provider onboarding contract', () => {
 		const prices = {
 			'claude-fable-5': ['10', '50', 10n],
 			'claude-fable-5-1': ['10', '50', 40n],
+			'claude-fable-5-2': ['8', '40', 40n],
 			'claude-haiku-5-5': ['0.1', '0.5', 10n],
 			'claude-mythos-5': ['10', '50', 10n],
 			'claude-mythos-5-1': ['10', '50', 40n],
+			'claude-mythos-5-2': ['8', '40', 40n],
 			'claude-opus-4-8': ['5', '25', 10n],
 			'claude-opus-5-5': ['4', '20', 20n],
 			'claude-sonnet-5-5': ['2', '10', 20n]
@@ -434,9 +464,9 @@ describe('Azure provider onboarding contract', () => {
 		for (const [, deployment] of azureDeployments()) {
 			if (!(deployment.modelId in prices)) continue;
 			const [input, output, cacheReadDivisor] = prices[deployment.modelId as keyof typeof prices];
-			// Only Opus 5.5 has Fast on Azure, at twice its standard rates.
+			// Azure sells Fast as a model whose name ends in -fast, at twice the standard rates.
 			const fast = deployment.upstream.serviceTier === 'fast';
-			expect(fast).toBe(deployment.upstream.model === 'claude-opus-5-5-fast');
+			expect(fast).toBe(deployment.upstream.model === `${deployment.modelId}-fast`);
 			const route = deployment.routes['azure-anthropic-messages'];
 			expect(route.hostedTools.web_search.pricing).toEqual({
 				anthropic_web_search_calls: { per_1k_calls: '10' }

@@ -1,0 +1,24 @@
+# Claude Models on Google Cloud (Anthropic managed) rates usage at Anthropic's standard prices.
+# Reviewed 2026-11-10: https://platform.claude.com/docs/en/about-claude/pricing
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [google-cloud-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-fable-5-2
+    inferenceGeo: global
+  overrides:
+    dataHandling:
+      storageLocation: US
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '8'
+    cached_input_tokens:
+      per_mill_tokens: '0.2'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '10'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '16'
+    output_tokens:
+      per_mill_tokens: '40'

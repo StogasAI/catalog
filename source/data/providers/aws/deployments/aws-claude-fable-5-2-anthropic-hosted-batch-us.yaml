@@ -1,0 +1,25 @@
+# Anthropic's Message Batches API on Claude Platform on AWS, at Anthropic's batch prices.
+# Reviewed 2026-11-10: https://platform.claude.com/docs/en/build-with-claude/claude-platform-on-aws
+# and https://platform.claude.com/docs/en/about-claude/pricing#claude-platform-on-aws-pricing
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [aws-batch-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-fable-5-2
+    inferenceGeo: us
+  overrides:
+    dataHandling:
+      processingLocation: US
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4.4'
+    cached_input_tokens:
+      per_mill_tokens: '0.11'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '5.5'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '8.8'
+    output_tokens:
+      per_mill_tokens: '22'

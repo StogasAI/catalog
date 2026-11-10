@@ -1,0 +1,27 @@
+# Claude Models on Google Cloud (Anthropic managed) offers Fast mode for Claude Fable 5.2 at
+# Anthropic's Fast prices. Reviewed 2026-11-10:
+# https://platform.claude.com/docs/en/build-with-claude/fast-mode
+# and https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [google-cloud-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-fable-5-2
+    serviceTier: fast
+    inferenceGeo: global
+  overrides:
+    dataHandling:
+      storageLocation: US
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '16'
+    cached_input_tokens:
+      per_mill_tokens: '0.4'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '20'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '32'
+    output_tokens:
+      per_mill_tokens: '80'

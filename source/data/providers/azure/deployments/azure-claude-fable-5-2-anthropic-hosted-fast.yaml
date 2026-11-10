@@ -1,0 +1,32 @@
+# Foundry sells Fast mode as its own model, which runs every request at Fast, at Anthropic's Fast prices.
+# Reviewed 2026-11-10: https://platform.claude.com/docs/en/build-with-claude/fast-mode
+# and https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [azure-anthropic-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-fable-5-2-fast
+    modelFormat: Anthropic
+    modelVersion: '1'
+    deploymentType: global_standard
+    serviceTier: fast
+  retirementDate: 2027-01-15
+  overrides:
+    # Foundry offers no max effort for Claude Fable and Mythos; its xhigh gives the same result.
+    # Reviewed 2026-11-10: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models
+    reasoningEfforts: [low, medium, high, xhigh]
+    dataHandling:
+      processingLocation: unknown
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '16'
+    cached_input_tokens:
+      per_mill_tokens: '0.4'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '20'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '32'
+    output_tokens:
+      per_mill_tokens: '80'

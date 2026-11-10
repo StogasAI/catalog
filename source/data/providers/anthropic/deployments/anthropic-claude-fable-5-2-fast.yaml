@@ -1,0 +1,19 @@
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [anthropic-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-fable-5-2
+    serviceTier: fast
+    inferenceGeo: global
+  pricing:
+    input_tokens:
+      per_mill_tokens: '16'
+    cached_input_tokens:
+      per_mill_tokens: '0.4'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '20'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '32'
+    output_tokens:
+      per_mill_tokens: '80'

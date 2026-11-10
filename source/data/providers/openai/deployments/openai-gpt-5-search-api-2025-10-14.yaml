@@ -11,5 +11,7 @@ deployments:
       per_mill_tokens: '0.125'
     output_tokens:
       per_mill_tokens: '10'
+    # The model searches on every request, and OpenAI charges its web search price per call.
+    # Reviewed 2026-11-10: https://developers.openai.com/api/docs/pricing
     openai_chat_completion_search_model_calls:
       per_1k_calls: '10'
