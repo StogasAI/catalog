@@ -1,14 +1,15 @@
 // A chain is one executable path from author to provider. Each fact appears once, on the node
 // whose value applies to the path. The deployment holds what it serves on the route, which the
 // compiler resolved from the model, the route and the deployment's own facts, so the model and
-// the route keep only what the deployment does not state. A route's retirement date and notes are
-// its own: the deployment's date covers all its routes, so the route keeps an earlier date of its
-// own, and the deployment's notes describe only the deployment. Group membership and the model's
-// efforts for each interface are not facts of the path: the route's efforts already apply them.
+// the route keep only what the deployment does not state. A route's retirement date is its own:
+// the deployment's date covers all its routes, so the route keeps an earlier date of its own.
+// Each node keeps the notes that it states, where the records of a route and a deployment also
+// repeat the notes above them. Group membership and the model's efforts for each interface are
+// not facts of the path: the route's efforts already apply them.
 export function catalogChain(graph, deploymentId, routeId) {
 	const { routes, ...deployment } = requireNode(graph.deployments, deploymentId);
 	const { chainHash: _chainHash, ...routeFacts } = requireNode(routes, routeId);
-	const served = { ...deployment, ...routeFacts };
+	const served = { ...deployment, ...routeFacts, notes: ownNotes(deployment.notes, 'deployment') };
 	const {
 		groupIds: _groups,
 		reasoningEffortsByInterface: _efforts,
@@ -24,11 +25,15 @@ export function catalogChain(graph, deploymentId, routeId) {
 			data: {
 				...unstated(route, served),
 				...(Object.hasOwn(route, 'retirementDate') && { retirementDate: route.retirementDate }),
-				...(Object.hasOwn(route, 'notes') && { notes: route.notes })
+				...(Object.hasOwn(route, 'notes') && { notes: ownNotes(route.notes, 'route') })
 			}
 		},
 		provider: { id: route.providerId, data: requireNode(graph.providers, route.providerId) }
 	};
+}
+
+function ownNotes(notes, kind) {
+	return notes.filter((note) => note.kind === kind);
 }
 
 function unstated(record, served) {

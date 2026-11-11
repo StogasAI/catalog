@@ -15,7 +15,7 @@ const structuralFields = new Set([
 	'providerId',
 	'retirementDate',
 	'routeIds',
-	'stogasUnsupported'
+	'stogasSupported'
 ]);
 
 /**

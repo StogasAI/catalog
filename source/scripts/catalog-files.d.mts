@@ -40,19 +40,26 @@ export function isRetired(date: string | null | undefined, at?: Date | number): 
 
 /**
  * A part that the root names: the SHA-256 of its bytes in hex, its size, the latest retirement
- * date of its records, or null when one of them has none, and whether it holds the records that
- * Stogas does not serve.
+ * date of its records, or null when one of them has none, and whether it holds records that
+ * Stogas serves or records that it does not.
  */
 export type CatalogPartFile = {
 	sha256: string;
 	size: number;
 	through: string | null;
-	stogasUnsupported: boolean;
+	stogasSupported: boolean;
 };
 
-/** Why Stogas does not serve a record; a record that it serves has none. */
-type Unsupported = { stogasUnsupported?: string };
-type Summary = { part: number; retirementDate: string | null } & Unsupported;
+/** A note of a compiled record, with the record that states it. */
+export type CatalogNote = {
+	kind: 'author' | 'group' | 'model' | 'provider' | 'route' | 'deployment';
+	id: string;
+	text: string;
+};
+
+/** Whether Stogas serves a record. */
+type Supported = { stogasSupported: boolean };
+type Summary = { part: number; retirementDate: string | null } & Supported;
 export type ModelSummary = Summary & {
 	aliases: string[];
 	authorId: string;
@@ -62,13 +69,11 @@ export type ModelSummary = Summary & {
 };
 export type RouteSummary = Summary & { interfaces: string[]; providerId: string };
 export type DeploymentSummary = Summary & { modelId: string; routeIds: string[] };
-/**
- * An author, group or provider: its whole record, its retirement date, and why Stogas does not
- * serve it when it does not.
- */
+/** An author, group or provider: its whole record, its retirement date, and whether Stogas serves it. */
 export type WholeSummary = Record<string, unknown> & {
+	notes: CatalogNote[];
 	retirementDate: string | null;
-} & Unsupported;
+} & Supported;
 
 export type CatalogSummaries = {
 	authors: Record<string, WholeSummary>;
@@ -125,7 +130,7 @@ export function recordSummary(
 	record: object,
 	part: number | undefined,
 	retirementDate: string | null,
-	stogasUnsupported?: string | null
+	stogasSupported: boolean
 ): object;
 
 /**

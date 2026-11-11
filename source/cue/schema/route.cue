@@ -51,7 +51,7 @@ package catalog
 	// batch route.
 	batch?: true
 	if batch != _|_ {
-		stogasUnsupported: #UnsupportedReason
+		stogasSupported: false
 	}
 
 	// Content the route carries to the provider. A deployment accepts the
@@ -71,8 +71,11 @@ package catalog
 	// API that it retires. Its deployments stop serving through it then, and a
 	// deployment that no other route serves retires.
 	retirementDate?: #Date
-	// Stogas does not serve this route, so none of its deployments either.
-	stogasUnsupported?: #UnsupportedReason
-	notes?:             #Note
+	// Stogas does not serve this route, so none of its deployments either, and its notes say why.
+	stogasSupported?: false
+	if stogasSupported != _|_ {
+		notes: #Note
+	}
+	notes?: #Note
 	periods?: [#Period, ...#Period]
 })

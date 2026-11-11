@@ -32,8 +32,8 @@ export type ProviderRouteContract = {
 	/** The route is a batch API. */
 	batch?: true;
 	hostedTools?: HostedToolContract[];
-	/** Why Stogas does not serve the route, which its deployments carry. */
-	stogasUnsupported?: string;
+	/** Stogas does not serve the route or its deployments, and the notes say why. */
+	stogasSupported?: false;
 	notes?: string;
 };
 
@@ -114,11 +114,13 @@ export function assertProviderOnboardingContract(
 		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
 		headquarteredCountry: contract.provider.headquarteredCountry,
-		notes: null
+		notes: []
 	};
 	expect(graph.providers[providerId]).toEqual(provider);
 
 	const routes = new Map(contract.routes.map((route) => [route.id, route]));
+	const routeNotes = (route: ProviderRouteContract) =>
+		route.notes === undefined ? [] : [{ kind: 'route', id: route.id, text: route.notes }];
 	const routeHandling = (route: ProviderRouteContract) => ({
 		...contract.provider.dataHandling,
 		...route.dataHandling
@@ -135,8 +137,8 @@ export function assertProviderOnboardingContract(
 			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),
 			providerId,
 			retirementDate: null,
-			stogasUnsupported: route.stogasUnsupported ?? null,
-			notes: route.notes ?? null
+			stogasSupported: route.stogasSupported !== false,
+			notes: routeNotes(route)
 		});
 	}
 
@@ -169,10 +171,11 @@ export function assertProviderOnboardingContract(
 		);
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
-		// Route IDs and chain hashes name the provider; everything that the routes serve matches,
-		// except the data handling that the cloud changes.
+		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
+		// matches, except the data handling that the cloud changes.
 		const served = (deployment: typeof copy, dataHandling = {}) => ({
 			...deployment,
+			notes: undefined,
 			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
 				...route,
 				dataHandling: { ...(route as { dataHandling: object }).dataHandling, ...dataHandling }
@@ -232,10 +235,15 @@ export function assertProviderOnboardingContract(
 					: (expected.modelReasoningMaxTokens ?? null),
 			retirementDate: expected.retirementDate,
 			routes: servedRoutes,
-			stogasUnsupported:
-				expected.routeIds.map((routeId) => routes.get(routeId)?.stogasUnsupported).find(Boolean) ??
-				null,
-			notes: expected.notes ?? null,
+			stogasSupported: expected.routeIds.every(
+				(routeId) => routes.get(routeId)?.stogasSupported !== false
+			),
+			notes: [
+				...expected.routeIds.flatMap((routeId) => routeNotes(routes.get(routeId)!)),
+				...(expected.notes === undefined
+					? []
+					: [{ kind: 'deployment', id: expected.id, text: expected.notes }])
+			],
 			upstream: expected.upstream,
 			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};

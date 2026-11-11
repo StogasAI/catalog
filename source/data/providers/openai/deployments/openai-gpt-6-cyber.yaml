@@ -5,7 +5,7 @@ deployments:
   upstream:
     model: gpt-6-cyber
   approvalRequired: true
-  stogasUnsupported: OpenAI accepts its requests only from IP addresses that your project allowlists, and the gateway's address is not public.
+  notes: OpenAI accepts its requests only from IP addresses that your project allowlists, so allowlist the gateway's address.
   # OpenAI lists no long context cache write price for this model. Every GPT-6 cache write costs
   # 1.25 times the input price at both context sizes, which gives 50.
   # Reviewed 2026-11-10: https://developers.openai.com/api/docs/pricing

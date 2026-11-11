@@ -21,7 +21,7 @@ function fixture(t, probe = '', part = null) {
 					sha256: digest(part),
 					size: Buffer.byteLength(part),
 					through: null,
-					stogasUnsupported: false
+					stogasSupported: true
 				}
 			]
 		: [];
@@ -43,7 +43,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-const root = { schema: 'stogas.catalog.v14', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
+const root = { schema: 'stogas.catalog.v15', locations: {}, summaries: {}, parts: ${JSON.stringify(parts)}, containerId: hostname() };
 mkdirSync('generated', { recursive: true });
 writeFileSync('generated/catalog.json', JSON.stringify(root));
 const part = ${JSON.stringify(part)};
@@ -144,7 +144,7 @@ helper.unref();
 			readFileSync(join(source.root, 'generated/catalog.json'), 'utf8')
 		);
 		assert.deepEqual(root, {
-			schema: 'stogas.catalog.v14',
+			schema: 'stogas.catalog.v15',
 			locations: {},
 			summaries: {},
 			parts: source.parts

@@ -132,10 +132,14 @@ package catalog
 	// it never retires before its provider stops it; omitted when no date is
 	// announced.
 	retirementDate?: #Date
-	// Stogas does not serve this deployment. A deployment that Stogas serves on one route serves
-	// on all of them, so a deployment on a route that Stogas does not serve is not served either.
-	stogasUnsupported?: #UnsupportedReason
-	notes?:             #Note
+	// Stogas does not serve this deployment, and its notes say why. A deployment that Stogas serves
+	// on one route serves on all of them, so a deployment on a route that Stogas does not serve is
+	// not served either.
+	stogasSupported?: false
+	if stogasSupported != _|_ {
+		notes: #Note
+	}
+	notes?: #Note
 	// Narrower facts than the deployment inherits from its model and routes.
 	overrides?: close({
 		contextWindowTokens?: int & >0

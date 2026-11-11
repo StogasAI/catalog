@@ -27,7 +27,8 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.model.data.groupIds).toBeUndefined();
 		expect(chain.model.data.reasoningEffortsByInterface).toBeUndefined();
 		// Each fact appears once: what the deployment states, the model and the route leave out. A
-		// route's own retirement date and notes are facts of the route, apart from the deployment's.
+		// route's own retirement date and notes are facts of the route, apart from the deployment's,
+		// and each node keeps only the notes that it states.
 		for (const node of [chain.model, chain.route])
 			for (const key of Object.keys(node.data))
 				if (node !== chain.route || (key !== 'retirementDate' && key !== 'notes'))
@@ -35,7 +36,14 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.route.data.retirementDate).toBe(
 			catalog.graph.routes[entry.routeId].retirementDate
 		);
-		expect(chain.route.data.notes).toBe(catalog.graph.routes[entry.routeId].notes);
+		expect(chain.route.data.notes).toEqual(
+			catalog.graph.routes[entry.routeId].notes.filter(({ kind }) => kind === 'route')
+		);
+		expect(chain.deployment.data.notes).toEqual(
+			catalog.graph.deployments[entry.deploymentId].notes.filter(
+				({ kind }) => kind === 'deployment'
+			)
+		);
 		// What the deployment doesn't state, the model and the route keep.
 		const {
 			groupIds: _groups,

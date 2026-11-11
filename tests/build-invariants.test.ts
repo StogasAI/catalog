@@ -299,24 +299,33 @@ describe('catalog source compiler invariants', () => {
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
 			name: 'OpenAI',
-			notes: null
+			notes: []
 		});
 	});
 
-	test('keeps the notes of every kind of node, and null without them', () => {
+	test('lists the notes of every kind of node with the node that states each', () => {
 		const source = sourceFixture();
-		const notes = 'Readers need this sentence.';
+		const text = 'Readers need this sentence.';
 		const { graph } = source as unknown as {
-			graph: Record<string, Record<string, { notes?: string }>>;
+			graph: Record<string, Record<string, { notes?: unknown }>>;
 		};
-		for (const kind of ['authors', 'models', 'providers', 'routes', 'deployments'])
-			for (const node of Object.values(graph[kind])) node.notes = notes;
+		const kinds = ['authors', 'models', 'providers', 'routes', 'deployments'];
+		for (const kind of kinds) for (const node of Object.values(graph[kind])) node.notes = text;
 		const compiled = buildCatalog(source).graph as unknown as typeof graph;
 		const plain = buildCatalog(sourceFixture()).graph as unknown as typeof graph;
-		for (const kind of ['authors', 'models', 'providers', 'routes', 'deployments']) {
-			expect(Object.values(compiled[kind]).map((node) => node.notes)).toEqual([notes]);
-			expect(Object.values(plain[kind]).map((node) => node.notes)).toEqual([null]);
-		}
+		const note = (kind: string) => ({ kind, id: Object.keys(compiled[`${kind}s`])[0], text });
+		// A route also holds its provider's notes, and a deployment those of its routes.
+		expect(Object.values(compiled.authors)[0].notes).toEqual([note('author')]);
+		expect(Object.values(compiled.models)[0].notes).toEqual([note('model')]);
+		expect(Object.values(compiled.providers)[0].notes).toEqual([note('provider')]);
+		expect(Object.values(compiled.routes)[0].notes).toEqual([note('provider'), note('route')]);
+		expect(Object.values(compiled.deployments)[0].notes).toEqual([
+			note('provider'),
+			note('route'),
+			note('deployment')
+		]);
+		for (const kind of kinds)
+			expect(Object.values(plain[kind]).map((node) => node.notes)).toEqual([[]]);
 	});
 
 	test('accepts aliases that move a word across the version, add or remove the snapshot date, or name a group', () => {
@@ -778,25 +787,29 @@ describe('catalog source compiler invariants', () => {
 			upstream: { model: 'gpt-batch' }
 		};
 		const batch = 'The gateway has no batch API.';
-		Object.assign(routes['openai-chat-completions'], { stogasUnsupported: batch });
+		Object.assign(routes['openai-chat-completions'], { stogasSupported: false, notes: batch });
 		let catalog = buildCatalog(source);
-		// The route's deployments take its reason; the other route and its deployment stay served.
-		expect(catalog.graph.routes['openai-chat-completions'].stogasUnsupported).toBe(batch);
-		expect(catalog.graph.deployments['openai-gpt-batch'].stogasUnsupported).toBe(batch);
-		expect(catalog.graph.routes['openai-responses'].stogasUnsupported).toBeNull();
-		expect(catalog.graph.deployments['openai-gpt-test'].stogasUnsupported).toBeNull();
+		// The route's deployments go unserved with it and carry its note; the other route and its
+		// deployment stay served.
+		const batchNote = { kind: 'route', id: 'openai-chat-completions', text: batch };
+		expect(catalog.graph.routes['openai-chat-completions'].stogasSupported).toBe(false);
+		expect(catalog.graph.deployments['openai-gpt-batch'].stogasSupported).toBe(false);
+		expect(catalog.graph.deployments['openai-gpt-batch'].notes).toEqual([batchNote]);
+		expect(catalog.graph.routes['openai-responses'].stogasSupported).toBe(true);
+		expect(catalog.graph.deployments['openai-gpt-test'].stogasSupported).toBe(true);
+		expect(catalog.graph.deployments['openai-gpt-test'].notes).toEqual([]);
 		let files = catalogFiles(catalog);
 		let root = JSON.parse(files.rootJson);
 		// A model goes unserved with its deployments, and a provider with its routes.
-		expect(root.summaries.models['gpt-batch'].stogasUnsupported).toBe(batch);
-		expect(root.summaries.models['gpt-test']).not.toHaveProperty('stogasUnsupported');
-		expect(root.summaries.providers.openai).not.toHaveProperty('stogasUnsupported');
-		expect(root.summaries.deployments['openai-gpt-batch'].stogasUnsupported).toBe(batch);
+		expect(root.summaries.models['gpt-batch'].stogasSupported).toBe(false);
+		expect(root.summaries.models['gpt-test'].stogasSupported).toBe(true);
+		expect(root.summaries.providers.openai.stogasSupported).toBe(true);
+		expect(root.summaries.deployments['openai-gpt-batch'].stogasSupported).toBe(false);
 		// Unserved records follow the others in parts of their own, which readers skip by default.
 		const flags = root.parts.map(
-			({ stogasUnsupported }: { stogasUnsupported: boolean }) => stogasUnsupported
+			({ stogasSupported }: { stogasSupported: boolean }) => stogasSupported
 		);
-		expect(flags).toEqual([false, true]);
+		expect(flags).toEqual([true, false]);
 		expect(root.summaries.deployments['openai-gpt-batch'].part).toBe(1);
 		expect(root.summaries.models['gpt-batch'].part).toBe(1);
 		expect(root.summaries.routes['openai-chat-completions'].part).toBe(1);
@@ -814,29 +827,26 @@ describe('catalog source compiler invariants', () => {
 		expect(Object.keys(served.deployments)).toEqual(['openai-gpt-test']);
 		expect(Object.keys(served.routes)).toEqual(['openai-responses']);
 
-		// A provider that Stogas does not serve gives each route its reason, and its record, which
-		// the root holds whole, carries none of its own.
+		// A provider that Stogas does not serve takes each route and deployment with it, which
+		// carry its note. Its record, which the root holds whole, says so only in its summary.
 		const cloud = 'Stogas has no account in this cloud.';
-		Object.assign(providers.openai, { stogasUnsupported: cloud });
+		Object.assign(providers.openai, { stogasSupported: false, notes: cloud });
 		catalog = buildCatalog(source);
-		expect(catalog.graph.routes['openai-responses'].stogasUnsupported).toBe(cloud);
-		expect(catalog.graph.routes['openai-chat-completions'].stogasUnsupported).toBe(batch);
-		expect(catalog.graph.deployments['openai-gpt-test'].stogasUnsupported).toBe(cloud);
-		expect(catalog.graph.providers.openai).not.toHaveProperty('stogasUnsupported');
+		const cloudNote = { kind: 'provider', id: 'openai', text: cloud };
+		expect(catalog.graph.routes['openai-responses'].stogasSupported).toBe(false);
+		expect(catalog.graph.routes['openai-chat-completions'].notes).toEqual([cloudNote, batchNote]);
+		expect(catalog.graph.deployments['openai-gpt-test'].stogasSupported).toBe(false);
+		expect(catalog.graph.deployments['openai-gpt-test'].notes).toEqual([cloudNote]);
+		expect(catalog.graph.providers.openai).not.toHaveProperty('stogasSupported');
 		files = catalogFiles(catalog);
 		root = JSON.parse(files.rootJson);
-		// Routes with different reasons leave their provider and author the general one.
-		expect(root.summaries.providers.openai.stogasUnsupported).toBe(
-			'Stogas serves none of its routes.'
-		);
-		expect(root.summaries.authors.openai.stogasUnsupported).toBe(
-			'Stogas serves none of its models.'
-		);
+		expect(root.summaries.providers.openai.stogasSupported).toBe(false);
+		expect(root.summaries.authors.openai.stogasSupported).toBe(false);
 		expect(
-			root.parts.every(({ stogasUnsupported }: { stogasUnsupported: boolean }) => stogasUnsupported)
+			root.parts.every(({ stogasSupported }: { stogasSupported: boolean }) => !stogasSupported)
 		).toBe(true);
 		expect(partsInEffect(root)).toEqual([]);
-		expect(authors.openai).not.toHaveProperty('stogasUnsupported');
+		expect(authors.openai).not.toHaveProperty('stogasSupported');
 	});
 
 	testRejections([
@@ -849,7 +859,8 @@ describe('catalog source compiler invariants', () => {
 					'openai-responses'
 				];
 				Object.assign(source.graph.routes['openai-chat-completions'], {
-					stogasUnsupported: 'The gateway has no batch API.'
+					stogasSupported: false,
+					notes: 'The gateway has no batch API.'
 				});
 			},
 			'openai-gpt-test: split the routes that Stogas serves from those that it does not'
@@ -883,10 +894,10 @@ describe('catalog source compiler invariants', () => {
 					{
 						name: 'Test',
 						start: '2026-11-01T00:00:00Z',
-						set: { stogasUnsupported: 'Not yet.' }
+						set: { stogasSupported: false }
 					}
 				]),
-			'cannot change stogasUnsupported'
+			'cannot change stogasSupported'
 		]
 	]);
 
@@ -2188,7 +2199,8 @@ describe('catalog source compiler invariants', () => {
 				(source: Source) => {
 					addFast(source);
 					Object.assign(source.graph.deployments['openai-gpt-test'], {
-						stogasUnsupported: 'Not served.'
+						stogasSupported: false,
+						notes: 'Not served.'
 					});
 				},
 				'openai-gpt-test-fast: Fast needs a Standard deployment on openai-responses'

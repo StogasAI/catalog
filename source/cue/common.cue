@@ -18,11 +18,9 @@ package catalog
 
 // One or two plain sentences on one line, at most 300 characters.
 #Sentences: string & =~"^[A-Z][^\\n]{0,298}\\.$"
-// Why Stogas does not serve a provider, route or deployment. The catalog lists what the market
-// offers; the gateway never routes to a record that Stogas does not serve.
-#UnsupportedReason: #Sentences
 // What a reader needs to know about a node that its fields cannot say, such as how a provider
-// relays requests. Policies never read it, so it never holds a fact that a field can hold.
+// relays requests or why Stogas does not serve it. Policies never read it, so it never holds a
+// fact that a field can hold.
 #Note: #Sentences
 
 #Modality:        "text" | "image" | "audio" | "video"

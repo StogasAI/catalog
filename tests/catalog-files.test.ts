@@ -42,34 +42,50 @@ function source(): Source {
 	});
 }
 
+type Dated = {
+	graph?: Record<string, Nodes>;
+	parts?: Nodes[string][];
+	summaries?: Record<string, Nodes>;
+	schedule: { graph?: Record<string, Nodes>; summaries?: Record<string, Nodes> }[];
+};
+const previousReason = 'The gateway cannot serve it.';
+
 /**
- * A root or part as the previous format wrote it: the hosting in the upstream, no companies between
- * the provider and the hosting, each route record with the deployment's prices and its hosted
- * tools' call prices, and notes only on routes and deployments.
+ * A root or part with the notes that the previous format can state: none, except the reason on a
+ * route or deployment record that Stogas does not serve.
+ */
+function withPreviousNotes<File extends CatalogRoot | CatalogPart>(file: File): File & Dated {
+	const copy = structuredClone(file) as File & Dated;
+	for (const state of [copy, ...copy.schedule])
+		for (const [kind, records] of Object.entries(state.graph ?? state.summaries ?? {}))
+			for (const [id, record] of Object.entries(records))
+				if (Object.hasOwn(record, 'notes'))
+					record.notes =
+						state.graph && record.stogasSupported === false
+							? [{ kind: kind.slice(0, -1), id, text: previousReason }]
+							: [];
+	return copy;
+}
+
+/**
+ * A root or part as the previous format wrote it: a null note on each record, the reason or null
+ * on each route and deployment, the reason on each summary of an unserved record, and each part
+ * marked as holding unserved records or not.
  */
 function previousFile<File extends CatalogRoot | CatalogPart>(file: File, schema: string): File {
-	const previous = structuredClone(file) as File & {
-		graph?: Record<string, Nodes>;
-		summaries?: Record<string, Nodes>;
-		schedule: { graph?: Record<string, Nodes>; summaries?: Record<string, Nodes> }[];
-	};
-	for (const graph of [previous, ...previous.schedule].map(
-		(state) => state.graph ?? state.summaries
-	)) {
-		for (const kind of ['authors', 'groups', 'providers', 'models'])
-			for (const record of Object.values(graph?.[kind] ?? {})) delete record.notes;
-		for (const deployment of Object.values(graph?.deployments ?? {})) {
-			if (!deployment.upstream) continue;
-			deployment.upstream.hosting = deployment.hosting;
-			for (const route of Object.values<Nodes[string]>(deployment.routes)) {
-				route.pricing = { ...deployment.pricing };
-				for (const offer of Object.values<Nodes[string]>(route.hostedTools)) {
-					Object.assign(route.pricing, offer.pricing);
-					delete offer.pricing;
-				}
+	const previous = withPreviousNotes(file);
+	for (const state of [previous, ...previous.schedule])
+		for (const records of Object.values(state.graph ?? state.summaries ?? {}))
+			for (const record of Object.values(records)) {
+				if (Object.hasOwn(record, 'notes')) record.notes = null;
+				if (!Object.hasOwn(record, 'stogasSupported')) continue;
+				if (!record.stogasSupported) record.stogasUnsupported = previousReason;
+				else if (state.graph) record.stogasUnsupported = null;
+				delete record.stogasSupported;
 			}
-			for (const field of ['hosting', 'via', 'pricing']) delete deployment[field];
-		}
+	for (const part of previous.parts ?? []) {
+		part.stogasUnsupported = !part.stogasSupported;
+		delete part.stogasSupported;
 	}
 	return { ...previous, schema };
 }
@@ -130,7 +146,7 @@ function synthetic(
 			routes: Object.fromEntries(
 				providers.map((index) => [
 					`route-${index}`,
-					{ interfaces: ['responses'], providerId: `provider-${index}` }
+					{ interfaces: ['responses'], providerId: `provider-${index}`, stogasSupported: true }
 				])
 			),
 			deployments: Object.fromEntries(
@@ -139,6 +155,7 @@ function synthetic(
 					{
 						modelId: 'model',
 						retirementDate: date(index),
+						stogasSupported: true,
 						routes: { [`route-${index % providers.length}`]: { notes: 'x'.repeat(bytes) } }
 					}
 				])
@@ -198,7 +215,7 @@ describe('catalog parts', () => {
 				sha256: part.sha256,
 				size: part.size,
 				through: root.parts[index]!.through,
-				stogasUnsupported: false
+				stogasSupported: true
 			});
 		});
 		deploymentsOf(parts).forEach((ids, index) => {
@@ -384,16 +401,16 @@ describe('catalog parts', () => {
 
 	test('read a root and parts of the previous format as the current format', () => {
 		const { root, parts } = files(partitionCatalog(scheduled()));
-		const previousRoot = previousFile(root, 'stogas.catalog.v13');
-		const previousParts = parts.map((part) => previousFile(part, 'stogas.catalog.part.v13'));
-		expect(JSON.stringify(previousParts)).toContain('"hosting":"google-cloud"}');
+		const previousRoot = previousFile(root, 'stogas.catalog.v14');
+		const previousParts = parts.map((part) => previousFile(part, 'stogas.catalog.part.v14'));
+		expect(JSON.stringify(previousParts)).toContain(`"stogasUnsupported":"${previousReason}"`);
 		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
-		expect(currentRoot).toEqual(root);
-		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
+		expect(currentRoot).toEqual(withPreviousNotes(root));
+		expect(previousParts.map(currentCatalogFile)).toEqual(parts.map(withPreviousNotes));
 		expect(checkedCatalogFiles(currentRoot, 1)).toEqual(root.parts);
 		expect(
 			assembleCatalog(currentRoot, previousParts.map(currentCatalogFile) as CatalogPart[])
-		).toEqual(assembleCatalog(root, parts));
+		).toEqual(assembleCatalog(withPreviousNotes(root), parts.map(withPreviousNotes)));
 		// Without the conversion, and for anything else, the reader refuses as before.
 		expect(() => assembleCatalog(previousRoot as never, parts)).toThrow('root is invalid');
 		for (const other of [
@@ -406,6 +423,47 @@ describe('catalog parts', () => {
 			expect(currentCatalogFile(other)).toBe(other);
 		expect(currentCatalogFile(root)).toBe(root);
 		expect(currentCatalogFile(parts[0])).toBe(parts[0]);
+		// The previous format's reason becomes a note of the record, and a summary keeps only
+		// whether Stogas serves the record.
+		const reason = 'The gateway has no batch API.';
+		expect(
+			currentCatalogFile({
+				schema: 'stogas.catalog.part.v14',
+				graph: { routes: { batch: { notes: 'Runs within a day.', stogasUnsupported: reason } } },
+				schedule: []
+			})
+		).toEqual({
+			schema: 'stogas.catalog.part.v15',
+			graph: {
+				routes: {
+					batch: {
+						notes: [
+							{ kind: 'route', id: 'batch', text: 'Runs within a day.' },
+							{ kind: 'route', id: 'batch', text: reason }
+						],
+						stogasSupported: false
+					}
+				}
+			},
+			schedule: []
+		});
+		expect(
+			currentCatalogFile({
+				schema: 'stogas.catalog.v14',
+				summaries: {
+					providers: { cloud: { notes: null, retirementDate: null, stogasUnsupported: reason } },
+					routes: { served: { part: 0, retirementDate: null } }
+				},
+				parts: [{ sha256: 'a', size: 1, through: null, stogasUnsupported: true }]
+			})
+		).toMatchObject({
+			schema: 'stogas.catalog.v15',
+			summaries: {
+				providers: { cloud: { notes: [], retirementDate: null, stogasSupported: false } },
+				routes: { served: { part: 0, retirementDate: null, stogasSupported: true } }
+			},
+			parts: [{ sha256: 'a', size: 1, through: null, stogasSupported: false }]
+		});
 	});
 
 	test('refuse parts that do not match their root', () => {
@@ -618,12 +676,12 @@ describe('catalog limits', () => {
 		sha256,
 		size,
 		through,
-		stogasUnsupported: false
+		stogasSupported: true
 	});
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v14',
+				schema: 'stogas.catalog.v15',
 				locations: {},
 				summaries: {},
 				parts,

@@ -40,14 +40,14 @@ export function partitionCatalog(catalog) {
 	const { graph, schedule } = catalog;
 	const dates = retirementDates(graph);
 	const dateOf = (kind, id) => dates[kind][id];
-	const reasons = unsupportedReasons(graph);
-	const reasonOf = (kind, id) => reasons[kind][id];
+	const supported = supportedRecords(graph);
+	const supportedOf = (kind, id) => supported[kind][id];
 	const records = Object.keys(PART_KINDS).flatMap((kind) =>
 		Object.entries(graph[kind]).map(([id, record]) => ({
 			kind,
 			id,
 			date: dateOf(kind, id),
-			unsupported: reasonOf(kind, id) !== null,
+			unsupported: !supportedOf(kind, id),
 			owner: owner(graph, kind, record),
 			// What the record adds to its part's file: its member, and its member of each schedule
 			// entry that changes it with that entry's frame, which is at least the file's share because
@@ -102,7 +102,7 @@ export function partitionCatalog(catalog) {
 		if (size > CATALOG_PART_LIMIT)
 			throw new Error(`A catalog part is ${size} bytes; the limit is ${CATALOG_PART_LIMIT}.`);
 	const summarize = (kind, id, record) =>
-		recordSummary(kind, record, partOf[kind]?.get(id), dateOf(kind, id), reasonOf(kind, id));
+		recordSummary(kind, record, partOf[kind]?.get(id), dateOf(kind, id), supportedOf(kind, id));
 	const summaries = Object.fromEntries(
 		CATALOG_KINDS.map((kind) => [
 			kind,
@@ -119,7 +119,7 @@ export function partitionCatalog(catalog) {
 			sha256,
 			size,
 			through: contents[index].through,
-			stogasUnsupported: contents[index].unsupported
+			stogasSupported: !contents[index].unsupported
 		})),
 		periods: catalog.periods,
 		// Every start stays, because parts can change where the root does not.
@@ -199,39 +199,30 @@ export function retirementDates(graph) {
 }
 
 /**
- * Why Stogas does not serve each record, by kind and ID, or null when it serves it. A route and a
- * deployment can say so themselves, and the build has given each route its provider's reason and
- * each deployment its routes'. A record also goes unserved once Stogas serves none of the records
- * it exists for, as it retires with them: a model or a route with its deployments, a provider with
- * its routes, an author with its models, and a group with the models in it and in its child
- * groups. It takes their reason when they share one. Periods cannot change reasons.
+ * Whether Stogas serves each record, by kind and ID. A route and a deployment say so themselves,
+ * since the build has given each route its provider's answer and each deployment its routes'. A
+ * record also goes unserved once Stogas serves none of the records it exists for, as it retires
+ * with them: a model or a route with its deployments, a provider with its routes, an author with
+ * its models, and a group with the models in it and in its child groups. Periods cannot change
+ * the answer.
  */
-export function unsupportedReasons(graph) {
-	const members = { models: 'deployments', routes: 'deployments', providers: 'routes' };
-	Object.assign(members, { authors: 'models', groups: 'models' });
-	// Each record's reason from the reasons of the records it exists for, listed by its ID.
+export function supportedRecords(graph) {
+	// Each record is served when one of the records it exists for is, or when it has none.
 	const derived = (kind, pairs) => {
-		const reasons = new Map();
-		for (const [id, reason] of pairs) {
-			if (!reasons.has(id)) reasons.set(id, []);
-			reasons.get(id).push(reason);
+		const answers = new Map();
+		for (const [id, served] of pairs) {
+			if (!answers.has(id)) answers.set(id, []);
+			answers.get(id).push(served);
 		}
 		return Object.fromEntries(
 			Object.keys(graph[kind]).map((id) => {
-				const listed = reasons.get(id) ?? [];
-				if (!listed.length || listed.includes(null)) return [id, null];
-				return [
-					id,
-					new Set(listed).size === 1 ? listed[0] : `Stogas serves none of its ${members[kind]}.`
-				];
+				const listed = answers.get(id) ?? [];
+				return [id, !listed.length || listed.includes(true)];
 			})
 		);
 	};
 	const deployments = Object.fromEntries(
-		Object.entries(graph.deployments).map(([id, deployment]) => [
-			id,
-			deployment.stogasUnsupported ?? null
-		])
+		Object.entries(graph.deployments).map(([id, deployment]) => [id, deployment.stogasSupported])
 	);
 	const models = derived(
 		'models',
@@ -244,7 +235,7 @@ export function unsupportedReasons(graph) {
 		)
 	);
 	for (const [id, route] of Object.entries(graph.routes))
-		routes[id] = route.stogasUnsupported ?? routes[id];
+		routes[id] = route.stogasSupported && routes[id];
 	const providers = derived(
 		'providers',
 		Object.entries(graph.routes).map(([id, { providerId }]) => [providerId, routes[id]])

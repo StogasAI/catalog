@@ -866,13 +866,13 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v14');
+		expect(catalog.schema).toBe('stogas.catalog.v15');
 		expect(catalog.schedule).toEqual([]);
 	});
 
 	test('orders parts so that they retire as a whole', () => {
 		// Parts of what Stogas does not serve come last, and the gateway never reads them.
-		const served = catalogRoot.parts.filter((part) => !part.stogasUnsupported);
+		const served = catalogRoot.parts.filter((part) => part.stogasSupported);
 		expect(catalogRoot.parts.slice(0, served.length)).toEqual(served);
 		for (const parts of [served, catalogRoot.parts.slice(served.length)]) {
 			const dates = parts.map(({ through }) => through);

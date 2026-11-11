@@ -474,6 +474,15 @@ function rejectRedundantOverride(base, override, owner) {
 	}
 }
 
+/**
+ * A record's own note as the list that compiled records hold, where each note names the record
+ * that states it. A route record also holds its provider's notes and a deployment record those of
+ * its routes, since their facts shape what it serves.
+ */
+function ownNotes(kind, id, text) {
+	return text === undefined ? [] : [{ kind, id, text }];
+}
+
 function normalizeSourceGraph(sourceGraph) {
 	return {
 		groups: Object.fromEntries(
@@ -482,14 +491,18 @@ function normalizeSourceGraph(sourceGraph) {
 				{
 					...group,
 					parentIds: [...(group.parentIds ?? [])].sort(),
-					notes: group.notes ?? null
+					notes: ownNotes('group', id, group.notes)
 				}
 			])
 		),
 		authors: Object.fromEntries(
 			Object.entries(sourceGraph.authors).map(([id, author]) => [
 				id,
-				{ ...author, aliases: [...(author.aliases ?? [])], notes: author.notes ?? null }
+				{
+					...author,
+					aliases: [...(author.aliases ?? [])],
+					notes: ownNotes('author', id, author.notes)
+				}
 			])
 		),
 		models: Object.fromEntries(
@@ -502,7 +515,7 @@ function normalizeSourceGraph(sourceGraph) {
 					aliases: [...(model.aliases ?? [])],
 					capabilities: model.capabilities ?? {},
 					knowledgeCutoff: model.knowledgeCutoff ?? null,
-					notes: model.notes ?? null,
+					notes: ownNotes('model', id, model.notes),
 					reasoning: model.reasoning,
 					reasoningEfforts: [...(model.reasoningEfforts ?? [])],
 					reasoningEffortsByInterface: model.reasoningEffortsByInterface ?? {},
@@ -518,7 +531,7 @@ function normalizeSourceGraph(sourceGraph) {
 					...provider,
 					aliases: [...(provider.aliases ?? [])],
 					credentialModes: [...provider.credentialModes],
-					notes: provider.notes ?? null
+					notes: ownNotes('provider', id, provider.notes)
 				}
 			])
 		),
@@ -1068,9 +1081,9 @@ function compileGraph(source, places) {
 					route.retirementDate ?? null,
 					provider.retirementDate ?? null
 				);
-				// Stogas does not serve a route that it says so of, or any route of a provider that
-				// it says so of.
-				const stogasUnsupported = route.stogasUnsupported ?? provider.stogasUnsupported;
+				// Stogas does not serve a route that says so, or any route of a provider that says so.
+				const stogasSupported =
+					route.stogasSupported !== false && provider.stogasSupported !== false;
 				const overrides = route.overrides ?? {};
 				rejectRedundantOverride(
 					provider.capabilities,
@@ -1108,8 +1121,8 @@ function compileGraph(source, places) {
 						),
 						hostedTools,
 						retirementDate,
-						stogasUnsupported: stogasUnsupported ?? null,
-						notes: route.notes ?? null
+						stogasSupported,
+						notes: [...provider.notes, ...ownNotes('route', routeId, route.notes)]
 					}
 				];
 			})
@@ -1295,16 +1308,25 @@ function compileGraph(source, places) {
 			throw new Error(`${deploymentId}: retirementDate precedes model releaseDate`);
 		}
 		// Stogas serves a deployment on every route that serves it or on none, so the gateway
-		// loads whole records, and a deployment that Stogas does not serve takes its routes' reason.
-		const routeReasons = deployment.routeIds.map(
-			(routeId) => graph.routes[routeId].stogasUnsupported
+		// loads whole records.
+		const routesSupported = deployment.routeIds.map(
+			(routeId) => graph.routes[routeId].stogasSupported
 		);
-		if (new Set(routeReasons.map((reason) => reason === null)).size > 1) {
+		if (new Set(routesSupported).size > 1) {
 			throw new Error(
 				`${deploymentId}: split the routes that Stogas serves from those that it does not`
 			);
 		}
-		const stogasUnsupported = deployment.stogasUnsupported ?? routeReasons[0];
+		const stogasSupported = deployment.stogasSupported !== false && routesSupported[0];
+		// Routes of one provider repeat its notes, so each note shows once, in route order.
+		const notes = [
+			...new Map(
+				deployment.routeIds
+					.flatMap((routeId) => graph.routes[routeId].notes)
+					.map((note) => [`${note.kind}:${note.id}`, note])
+			).values(),
+			...ownNotes('deployment', deploymentId, deployment.notes)
+		];
 		// A deployment's token prices hold on all of its routes, and a batch API bills its own, so a
 		// batch deployment serves only batch routes and names no service tier.
 		const batch = deployment.routeIds.map((routeId) => graph.routes[routeId].batch === true);
@@ -1526,8 +1548,8 @@ function compileGraph(source, places) {
 			// Closed models do not disclose how their weights are stored.
 			weightPrecision: deployment.weightPrecision ?? 'unknown',
 			retirementDate,
-			stogasUnsupported,
-			notes: deployment.notes ?? null,
+			stogasSupported,
+			notes,
 			...served
 		};
 	}
@@ -1576,7 +1598,7 @@ function compileGraph(source, places) {
 				!standard ||
 				(standard.retirementDate !== null &&
 					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate)) ||
-				(standard.stogasUnsupported !== null && fast.stogasUnsupported === null)
+				(!standard.stogasSupported && fast.stogasSupported)
 			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}
@@ -1594,7 +1616,7 @@ function compileGraph(source, places) {
 					capabilities: _routeDefaults,
 					dataHandling: _dataDefaults,
 					retirementDate: _routesDate,
-					stogasUnsupported: _routesReason,
+					stogasSupported: _routesSupport,
 					...facts
 				} = provider;
 				return [id, facts];

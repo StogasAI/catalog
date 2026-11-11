@@ -291,9 +291,9 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes: awsNotes,
+					notes: `${awsNotes} The gateway has no batch API and serves each request as it arrives.`,
 					batch: true,
-					stogasUnsupported: 'The gateway has no batch API and serves each request as it arrives.'
+					stogasSupported: false
 				}
 			],
 			deployments,

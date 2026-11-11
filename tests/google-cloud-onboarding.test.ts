@@ -211,9 +211,9 @@ describe('Google Cloud onboarding contract', () => {
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
 					notes:
-						"Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills.",
+						"Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills. The gateway has no batch API and serves each request as it arrives.",
 					batch: true,
-					stogasUnsupported: 'The gateway has no batch API and serves each request as it arrives.'
+					stogasSupported: false
 				}
 			],
 			deployments,

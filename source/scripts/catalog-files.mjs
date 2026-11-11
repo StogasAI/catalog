@@ -15,9 +15,10 @@
  * root gives each part the latest date in it. A reader skips each part whose records have all
  * retired, so a record leaves what readers load as it retires, without a release.
  *
- * The catalog also lists what Stogas does not serve, so that it shows the whole market. Such a
- * summary says why, and the records sit in parts of their own after the others, which the root
- * marks. The gateway never reads those parts, so it never routes to them.
+ * The catalog also lists what Stogas does not serve, so that it shows the whole market. Each
+ * summary says whether Stogas serves its record, and the records that it does not serve sit in
+ * parts of their own after the others, which the root marks. The gateway never reads those parts,
+ * so it never routes to them.
  *
  * The root and its parts share a schema version, and a change to either names a new version of
  * both, so a reader knows from the root alone whether it reads a catalog, and readers that find a
@@ -25,23 +26,24 @@
  * format as the current one, so that a reader without a catalog of its own, such as the website,
  * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v14';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v14';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v13';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v13';
-// The call meters of web search, the only hosted tool that the previous format priced.
-const PREVIOUS_WEB_SEARCH_METERS = [
-	'anthropic_web_search_calls',
-	'openai_responses_web_search_calls',
-	'openai_responses_web_search_preview_calls',
-	'openai_responses_web_search_preview_non_reasoning_calls'
-];
+export const CATALOG_SCHEMA = 'stogas.catalog.v15';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v15';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v14';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v14';
+const NOTE_KINDS = {
+	authors: 'author',
+	groups: 'group',
+	models: 'model',
+	providers: 'provider',
+	routes: 'route',
+	deployments: 'deployment'
+};
 
 /**
- * A root or part of the previous format as one of the current format. The previous format kept a
- * deployment's hosting in its upstream, listed no companies between the provider and the hosting,
- * gave each route record the deployment's prices merged with its hosted tools' call prices, and
- * had notes only on routes and deployments. Chain hashes stay those of the previous format. Any
+ * A root or part of the previous format as one of the current format. The previous format gave a
+ * record that Stogas does not serve the reason as `stogasUnsupported`, which was null on a served
+ * record and missing from a served summary, and each record one note or null. Here the reason
+ * becomes a note of the record, and a route or deployment does not repeat the notes above it. Any
  * other value comes back as it is, for the reader to check.
  */
 export function currentCatalogFile(value) {
@@ -50,85 +52,52 @@ export function currentCatalogFile(value) {
 		return {
 			...value,
 			schema: CATALOG_PART_SCHEMA,
-			graph: currentGraph(value.graph),
+			graph: currentGraph(value.graph, false),
 			schedule: value.schedule.map((entry) =>
-				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph) } : entry
+				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph, false) } : entry
 			)
 		};
 	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
 		return {
 			...value,
 			schema: CATALOG_SCHEMA,
-			summaries: currentGraph(value.summaries),
+			summaries: currentGraph(value.summaries, true),
+			parts: value.parts.map((part) => {
+				if (!isObject(part) || typeof part.stogasUnsupported !== 'boolean') return part;
+				const { stogasUnsupported, ...file } = part;
+				return { ...file, stogasSupported: !stogasUnsupported };
+			}),
 			schedule: Array.isArray(value.schedule)
 				? value.schedule.map((entry) =>
-						isObject(entry) ? { ...entry, summaries: currentGraph(entry.summaries) } : entry
+						isObject(entry) ? { ...entry, summaries: currentGraph(entry.summaries, true) } : entry
 					)
 				: value.schedule
 		};
 	return value;
 }
 
-function currentGraph(graph) {
+function currentGraph(graph, summaries) {
 	if (!isObject(graph)) return graph;
 	const current = { ...graph };
-	// The root holds these kinds whole and parts hold models, so each record gains its notes.
-	for (const kind of ['authors', 'groups', 'providers', 'models']) {
+	for (const [kind, noteKind] of Object.entries(NOTE_KINDS)) {
 		if (!isObject(graph[kind])) continue;
 		current[kind] = Object.fromEntries(
-			Object.entries(graph[kind]).map(([id, record]) => [
-				id,
-				isObject(record) && (kind !== 'models' || !Object.hasOwn(record, 'part'))
-					? { notes: null, ...record }
-					: record
-			])
+			Object.entries(graph[kind]).map(([id, record]) => {
+				if (!isObject(record)) return [id, record];
+				const { stogasUnsupported: reason = null, ...facts } = record;
+				// A summary always says whether Stogas serves its record; among records, only routes
+				// and deployments do.
+				if (summaries || Object.hasOwn(record, 'stogasUnsupported'))
+					facts.stogasSupported = reason === null;
+				if (Object.hasOwn(record, 'notes'))
+					facts.notes = [record.notes, summaries ? null : reason]
+						.filter((text) => typeof text === 'string')
+						.map((text) => ({ kind: noteKind, id, text }));
+				return [id, facts];
+			})
 		);
 	}
-	if (isObject(graph.deployments))
-		current.deployments = Object.fromEntries(
-			Object.entries(graph.deployments).map(([id, deployment]) => [
-				id,
-				currentDeployment(deployment)
-			])
-		);
 	return current;
-}
-
-function currentDeployment(deployment) {
-	// Every deployment of the previous format names its hosting in its upstream.
-	if (
-		!isObject(deployment) ||
-		!isObject(deployment.routes) ||
-		!isObject(deployment.upstream) ||
-		!Object.hasOwn(deployment.upstream, 'hosting')
-	)
-		return deployment;
-	const { hosting, ...upstream } = deployment.upstream;
-	let pricing = {};
-	const routes = Object.fromEntries(
-		Object.entries(deployment.routes).map(([routeId, route]) => {
-			if (!isObject(route) || !isObject(route.pricing) || !isObject(route.hostedTools))
-				return [routeId, route];
-			const { pricing: served, ...facts } = route;
-			const calls = Object.fromEntries(
-				PREVIOUS_WEB_SEARCH_METERS.filter((meter) => Object.hasOwn(served, meter)).map((meter) => [
-					meter,
-					served[meter]
-				])
-			);
-			pricing = Object.fromEntries(
-				Object.entries(served).filter(([meter]) => !Object.hasOwn(calls, meter))
-			);
-			const hostedTools = Object.fromEntries(
-				Object.entries(facts.hostedTools).map(([tool, offer]) => [
-					tool,
-					{ ...offer, pricing: tool === 'web_search' ? calls : {} }
-				])
-			);
-			return [routeId, { ...facts, hostedTools }];
-		})
-	);
-	return { ...deployment, hosting, via: [], upstream, pricing, routes };
 }
 
 export const CATALOG_KINDS = Object.freeze([
@@ -173,14 +142,13 @@ export function isRetired(date, at = Date.now()) {
 }
 
 /**
- * What the root keeps of a record that a part holds, or of a whole record, with why Stogas does not
- * serve it when it does not.
+ * What the root keeps of a record that a part holds, or of a whole record, with whether Stogas
+ * serves it.
  */
-export function recordSummary(kind, record, part, retirementDate, stogasUnsupported = null) {
-	const reason = stogasUnsupported === null ? {} : { stogasUnsupported };
+export function recordSummary(kind, record, part, retirementDate, stogasSupported) {
 	const fields = Object.hasOwn(PART_KINDS, kind) ? PART_KINDS[kind] : null;
-	if (!fields) return { ...record, retirementDate, ...reason };
-	const summary = { part, retirementDate, ...reason };
+	if (!fields) return { ...record, retirementDate, stogasSupported };
+	const summary = { part, retirementDate, stogasSupported };
 	for (const field of fields) if (Object.hasOwn(record, field)) summary[field] = record[field];
 	if (kind === 'deployments') summary.routeIds = Object.keys(record.routes).sort();
 	return summary;
@@ -188,7 +156,7 @@ export function recordSummary(kind, record, part, retirementDate, stogasUnsuppor
 
 /** A whole record from its summary in the root. */
 function wholeRecord(summary) {
-	const { retirementDate: _retirementDate, stogasUnsupported: _reason, ...record } = summary;
+	const { retirementDate: _retirementDate, stogasSupported: _supported, ...record } = summary;
 	return record;
 }
 
@@ -211,8 +179,8 @@ export function checkedCatalogFiles(root, rootSize) {
 	let bytes = rootSize;
 	for (const file of root.parts) {
 		if (
-			!hasKeys(file, ['sha256', 'size', 'through', 'stogasUnsupported']) ||
-			typeof file.stogasUnsupported !== 'boolean' ||
+			!hasKeys(file, ['sha256', 'size', 'through', 'stogasSupported']) ||
+			typeof file.stogasSupported !== 'boolean' ||
 			typeof file.sha256 !== 'string' ||
 			!/^[0-9a-f]{64}$/.test(file.sha256) ||
 			seen.has(file.sha256) ||
@@ -236,8 +204,8 @@ export function checkedCatalogFiles(root, rootSize) {
  * records that Stogas does not serve, as the gateway does.
  */
 export function partsInEffect(root, at = Date.now(), { unsupported = false } = {}) {
-	return root.parts.flatMap(({ through, stogasUnsupported }, index) =>
-		isRetired(through, at) || (stogasUnsupported && !unsupported) ? [] : [index]
+	return root.parts.flatMap(({ through, stogasSupported }, index) =>
+		isRetired(through, at) || !(stogasSupported || unsupported) ? [] : [index]
 	);
 }
 
@@ -394,7 +362,7 @@ function matching(kind, id, record, summary) {
 		record,
 		summary.part,
 		summary.retirementDate,
-		summary.stogasUnsupported ?? null
+		summary.stogasSupported
 	);
 	if (canonical(expected) !== canonical(summary))
 		throw new Error(`${kind} ${id} differs from its summary.`);

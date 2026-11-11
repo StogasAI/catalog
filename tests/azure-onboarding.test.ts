@@ -355,7 +355,7 @@ describe('Azure provider onboarding contract', () => {
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
 			name: 'Azure',
-			notes: null
+			notes: []
 		});
 		expect(
 			Object.entries(catalog.graph.routes)

@@ -38,11 +38,13 @@ A record serves until its date ends everywhere on Earth, at 12:00 UTC the next d
 
 ## What Stogas does not serve
 
-The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment states why in `stogasUnsupported`, one sentence, and the reason passes down the same way a retirement date does: a provider's reason goes to its routes, and a route's reason to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
+The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment says so with `stogasSupported: false`, and its `notes` say why. The answer passes down the same way a retirement date does: from a provider to its routes, and from a route to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
 
-OpenAI's Batch API, Anthropic's Message Batches API and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema requires a reason on every batch route.
+Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. Each compiled record lists its `notes` with the record that states each one, such as `{ "kind": "route", "id": "aws-batch-messages", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its routes, so an unserved record carries the reason.
 
-Unserved records sit in their own parts, which the root marks with `stogasUnsupported: true`. The gateway never reads those parts, so it never routes to these records. A request that names one fails with the reason.
+OpenAI's Batch API, Anthropic's Message Batches API and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema marks every batch route as unserved.
+
+Unserved records sit in their own parts, which the root marks with `stogasSupported: false`. The gateway never reads those parts, so it never routes to these records. A request that names one fails.
 
 ## Develop
 

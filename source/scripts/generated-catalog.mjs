@@ -16,9 +16,7 @@ export function readGeneratedCatalog({ directory = generated, at, unsupported = 
 	const root = read(CATALOG_ROOT);
 	const wanted = new Set(
 		at === undefined
-			? [...root.parts.keys()].filter(
-					(index) => unsupported || !root.parts[index].stogasUnsupported
-				)
+			? [...root.parts.keys()].filter((index) => unsupported || root.parts[index].stogasSupported)
 			: partsInEffect(root, at, { unsupported })
 	);
 	return {
