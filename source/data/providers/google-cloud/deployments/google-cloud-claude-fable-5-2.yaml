@@ -1,16 +1,17 @@
 # Agent Platform's global endpoint, which routes to any region with capacity.
 # Google keeps prompts and responses for up to 30 days to monitor abuse, under its Advanced AI Safety
-# Addendum, which each project accepts once in Model Garden. Under Section F of Anthropic's service
-# specific terms, the project must also share prompts and responses with Anthropic for each model
-# location it enables; Bedrock shares nothing with Anthropic. Data handling has no field for this yet.
+# Addendum, which each project accepts once in Model Garden. As Anthropic requires, the project also
+# shares them with Anthropic to monitor abuse, for each model location it enables.
+# Sharing reviewed 2026-11-12: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/abuse-monitoring
 # Vertex AI lists no SKUs for this model, so these prices come from the partner model pricing page,
 # reviewed 2026-11-10: https://cloud.google.com/model-garden/partner-models/pricing
 # Reviewed 2026-11-10: https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#global-multi-region-and-regional-endpoints
 # and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude/fable-5-2
 deployments:
   modelId: claude-fable-5-2
-  routeIds: [google-cloud-messages]
+  routeIds: [google-cloud-agent-platform-messages]
   hosting: google-cloud
+  sharedWith: [anthropic]
   upstream:
     model: claude-fable-5-2
     inferenceGeo: global

@@ -6,6 +6,7 @@ deployments:
     model: deepseek-ai/DeepSeek-V4-Pro-0813
     chuteId: b990f27b-59b1-526e-adfd-e3ad9ea8920d
   overrides:
+    contextWindowTokens: 1000000
     reasoningEfforts: []
   pricing:
     input_tokens:

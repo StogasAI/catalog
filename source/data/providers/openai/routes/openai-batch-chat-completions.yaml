@@ -15,8 +15,6 @@ routes:
   documentFormats:
     extensions: [.pdf]
     mediaTypes: [application/pdf]
-  dataHandling:
-    endToEndEncrypted: false
   overrides:
     capabilities:
       streaming: false

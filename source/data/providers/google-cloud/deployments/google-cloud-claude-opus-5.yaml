@@ -3,7 +3,7 @@
 # Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
 deployments:
   modelId: claude-opus-5
-  routeIds: [google-cloud-messages]
+  routeIds: [google-cloud-agent-platform-messages]
   hosting: google-cloud
   upstream:
     model: claude-opus-5

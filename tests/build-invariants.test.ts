@@ -1554,6 +1554,28 @@ describe('catalog source compiler invariants', () => {
 		).toBe(5);
 	});
 
+	test('compiles each guarantee that source leaves out as false', () => {
+		const { graph } = buildCatalog(
+			changed((source) => {
+				const { zeroDataRetention, tee, teeVerified, ...facts } =
+					source.graph.providers.openai.dataHandling;
+				expect([zeroDataRetention, tee, teeVerified]).toEqual([false, false, false]);
+				source.graph.providers.openai.dataHandling = facts as never;
+				delete (source.graph.routes['openai-responses'] as { dataHandling?: unknown }).dataHandling;
+			})
+		);
+		const guarantees = {
+			endToEndEncrypted: false,
+			zeroDataRetention: false,
+			tee: false,
+			teeVerified: false
+		};
+		expect(graph.routes['openai-responses'].dataHandling).toMatchObject(guarantees);
+		expect(
+			graph.deployments['openai-gpt-test'].routes['openai-responses'].dataHandling
+		).toMatchObject(guarantees);
+	});
+
 	test('rejects a route data handling fact that repeats its provider', () => {
 		expect(() =>
 			buildCatalog(
@@ -1797,23 +1819,14 @@ describe('catalog source compiler invariants', () => {
 				'openai-responses.hostedTools[0]: web_fetch has no call meter openai_responses_web_search_calls'
 			],
 			[
-				'hosted tool offered twice to one hosting',
+				'hosted tool offered twice',
 				(source: Source) => {
 					source.graph.routes['openai-responses'].hostedTools = [
 						openaiWebSearch('1'),
 						openaiWebSearch('2')
 					];
 				},
-				'openai-responses: web_search has two offers for one hosting'
-			],
-			[
-				'hosted tool offered to a hosting that no deployment has',
-				(source: Source) => {
-					source.graph.routes['openai-responses'].hostedTools = [
-						{ ...openaiWebSearch('1'), hostings: ['aws'] }
-					];
-				},
-				'openai-responses: no deployment has hosting aws of its web_search'
+				'openai-responses: each hosted tool has one offer'
 			],
 			[
 				'web search without every call meter of its wire',
@@ -1987,23 +2000,35 @@ describe('catalog source compiler invariants', () => {
 		expect(buildCatalog(pro).graph.deployments['openai-gpt-test-pro-flex']).toBeDefined();
 	});
 
-	describe('names the companies between a provider and the hosting', () => {
-		function relayed(hosting: string, via: string[] | undefined, id: string) {
+	describe('lists every company that receives a request', () => {
+		function relayed(
+			hosting: string,
+			via: string[] | undefined,
+			id: string,
+			sharedWith?: string[]
+		) {
 			return changed((source) => {
 				asAzure(source);
 				const deployment = source.graph.deployments['azure-gpt-test'];
-				Object.assign(deployment, { hosting, via });
+				Object.assign(deployment, { hosting, via, sharedWith });
 				source.graph.deployments = { [id]: deployment };
 			});
 		}
 
-		test('lists none for a provider that runs the model or sends requests straight to the hosting', () => {
+		test('names the provider alone when it runs the model, and the hosting after it', () => {
 			const own = buildCatalog(relayed('azure', undefined, 'azure-gpt-test')).graph;
-			expect(own.deployments['azure-gpt-test']).toMatchObject({ hosting: 'azure', via: [] });
+			expect(own.deployments['azure-gpt-test']).toMatchObject({
+				hosting: 'azure',
+				companies: ['azure']
+			});
+			expect(own.deployments['azure-gpt-test']).not.toHaveProperty('via');
 			const resold = buildCatalog(
 				relayed('anthropic', undefined, 'azure-gpt-test-anthropic-hosted')
 			);
-			expect(resold.graph.deployments['azure-gpt-test-anthropic-hosted'].via).toEqual([]);
+			expect(resold.graph.deployments['azure-gpt-test-anthropic-hosted'].companies).toEqual([
+				'azure',
+				'anthropic'
+			]);
 		});
 
 		test.each([
@@ -2016,7 +2041,10 @@ describe('catalog source compiler invariants', () => {
 			[['fireworks'], 'unknown', 'azure-gpt-test-via-fireworks-unknown-hosted']
 		])('keeps %p in request order before %s and names each in the ID', (via, hosting, id) => {
 			const { graph } = buildCatalog(relayed(hosting, via, id));
-			expect(graph.deployments[id]).toMatchObject({ hosting, via });
+			expect(graph.deployments[id]).toMatchObject({
+				hosting,
+				companies: ['azure', ...via, hosting]
+			});
 		});
 
 		test.each([
@@ -2043,6 +2071,39 @@ describe('catalog source compiler invariants', () => {
 		])('rejects %s', (_name, hosting, via, id) => {
 			expect(() => buildCatalog(relayed(hosting, via, id))).toThrow(
 				`${id}: via names each company between the provider and the hosting once`
+			);
+		});
+
+		test.each([
+			['azure', undefined, 'azure-gpt-test', ['openai'], ['azure', 'openai']],
+			[
+				'anthropic',
+				['fireworks'],
+				'azure-gpt-test-via-fireworks-anthropic-hosted',
+				['openai', 'unknown'],
+				['azure', 'fireworks', 'anthropic', 'openai', 'unknown']
+			]
+		])(
+			'lists the companies that %s shares requests with after it',
+			(hosting, via, id, sharedWith, companies) => {
+				const { graph } = buildCatalog(relayed(hosting, via, id, sharedWith));
+				expect(graph.deployments[id].companies).toEqual(companies);
+			}
+		);
+
+		test.each([
+			['the provider', 'anthropic', undefined, ['azure']],
+			['the hosting', 'anthropic', undefined, ['anthropic']],
+			['a company between the provider and the hosting', 'anthropic', ['fireworks'], ['fireworks']],
+			['a company twice', 'anthropic', undefined, ['openai', 'openai']]
+		])('rejects sharing with %s', (_name, hosting, via, sharedWith) => {
+			const id = [
+				'azure-gpt-test',
+				...(via ?? []).map((company) => `via-${company}`),
+				'anthropic-hosted'
+			].join('-');
+			expect(() => buildCatalog(relayed(hosting, via, id, sharedWith))).toThrow(
+				`${id}: sharedWith names each other company that the hosting shares requests with once`
 			);
 		});
 

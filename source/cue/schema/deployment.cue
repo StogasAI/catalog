@@ -48,11 +48,12 @@ package catalog
 	serviceTier?:   "flex" | "fast"
 })
 
-// AWS serves Claude two ways: Amazon Bedrock runs it on AWS (hosting aws),
-// and Claude Platform on AWS is Anthropic's own service billed through AWS
-// (hosting anthropic). inferenceGeo is the geography of Bedrock's inference
-// profile, the prefix of its ID, or Anthropic's inference geography, which
-// models before Claude 4.6 do not take; the build requires it for Bedrock.
+// AWS serves Claude on the routes of two products: Amazon Bedrock runs it on
+// AWS (hosting aws), and Claude Platform on AWS is Anthropic's own service
+// billed through AWS (hosting anthropic). inferenceGeo is the geography of
+// Bedrock's inference profile, the prefix of its ID, or Anthropic's inference
+// geography, which models before Claude 4.6 do not take; the build requires it
+// for Bedrock and checks each route's hosting.
 #AWSDeployment: {
 	hosting: "aws" | "anthropic"
 	upstream: close({
@@ -70,9 +71,10 @@ package catalog
 // geography that Anthropic and Google Cloud name.
 #InferenceGeography: "global" | "us" | "eu" | "jp" | "au" | "in" | "ca"
 
-// Google Cloud serves Claude two ways: Google runs it on Agent Platform,
-// formerly Vertex AI (hosting google-cloud), and Anthropic runs it itself, billed
-// through Google Cloud (hosting anthropic). inferenceGeo is Google's endpoint
+// Google Cloud serves Claude on the routes of two products: Google runs it on
+// Agent Platform, formerly Vertex AI (hosting google-cloud), and Anthropic runs
+// it itself, billed through Google Cloud (hosting anthropic). The build checks
+// each route's hosting. inferenceGeo is Google's endpoint
 // location, global or the us or eu multi-region, or Anthropic's inference
 // geography, which has no eu and which models before Claude 4.6 do not take;
 // the build requires it for Agent Platform. fast is Anthropic's Fast mode,
@@ -121,6 +123,9 @@ package catalog
 	// model itself has none. unknown stands for one or more that the provider does not name, and
 	// a hosting of unknown already covers them. The deployment ID names each.
 	via?: [#Company, ...#Company]
+	// The companies that the hosting shares each request and its response with, such as the model's
+	// developer for abuse monitoring, when the provider documents them.
+	sharedWith?: [#Company, ...#Company]
 	upstream: #Upstream
 	// The provider serves this deployment only to accounts it has approved.
 	approvalRequired?: true

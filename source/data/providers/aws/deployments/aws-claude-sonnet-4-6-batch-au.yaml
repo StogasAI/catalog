@@ -4,7 +4,7 @@
 # https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
 deployments:
   modelId: claude-sonnet-4-6
-  routeIds: [aws-batch-messages]
+  routeIds: [aws-bedrock-batch-messages]
   hosting: aws
   upstream:
     model: au.anthropic.claude-sonnet-4-6

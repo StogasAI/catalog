@@ -4,7 +4,7 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#batch-processing
 deployments:
   modelId: claude-mythos-5-2
-  routeIds: [google-cloud-batch-messages]
+  routeIds: [google-cloud-anthropic-managed-message-batches]
   hosting: anthropic
   upstream:
     model: claude-mythos-5-2
@@ -13,7 +13,6 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: US
-      storageLocation: US
       retentionDays: 30
   pricing:
     input_tokens:

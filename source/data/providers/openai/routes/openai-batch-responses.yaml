@@ -208,8 +208,6 @@ routes:
       - text/x-yaml
       - text/x-zsh
       - text/xml
-  dataHandling:
-    endToEndEncrypted: false
   overrides:
     capabilities:
       streaming: false

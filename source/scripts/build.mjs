@@ -82,13 +82,19 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
-// The routes that serve Claude on each cloud, and who runs it on each. Google Cloud's batch route
-// is Anthropic's Message Batches API.
+// The routes that serve Claude on each cloud, one for each product, and who runs Claude on each:
+// the cloud itself, or Anthropic with the cloud's sign-in and billing.
 const cloudClaudeRoutes = {
-	aws: { 'aws-messages': ['anthropic', 'aws'], 'aws-batch-messages': ['anthropic', 'aws'] },
+	aws: {
+		'aws-bedrock-messages': 'aws',
+		'aws-bedrock-batch-messages': 'aws',
+		'aws-claude-platform-messages': 'anthropic',
+		'aws-claude-platform-message-batches': 'anthropic'
+	},
 	'google-cloud': {
-		'google-cloud-messages': ['anthropic', 'google-cloud'],
-		'google-cloud-batch-messages': ['anthropic']
+		'google-cloud-agent-platform-messages': 'google-cloud',
+		'google-cloud-anthropic-managed-messages': 'anthropic',
+		'google-cloud-anthropic-managed-message-batches': 'anthropic'
 	}
 };
 // Chutes runs the models of an end-to-end encrypted route itself and selects an instance by the
@@ -531,11 +537,27 @@ function normalizeSourceGraph(sourceGraph) {
 					...provider,
 					aliases: [...(provider.aliases ?? [])],
 					credentialModes: [...provider.credentialModes],
+					// Source states only the guarantees that a provider gives.
+					dataHandling: {
+						zeroDataRetention: false,
+						tee: false,
+						teeVerified: false,
+						...provider.dataHandling
+					},
 					notes: ownNotes('provider', id, provider.notes)
 				}
 			])
 		),
-		routes: sourceGraph.routes,
+		routes: Object.fromEntries(
+			Object.entries(sourceGraph.routes).map(([id, route]) => [
+				id,
+				{
+					...route,
+					// Source states end-to-end encryption only on routes that have it.
+					dataHandling: { endToEndEncrypted: false, ...route.dataHandling }
+				}
+			])
+		),
 		deployments: sourceGraph.deployments
 	};
 }
@@ -633,7 +655,7 @@ function servedFacts(graph, model, deployment) {
 				? model.reasoningEffortsByInterface[route.interfaces[0]]
 				: undefined;
 		const dataHandling = mergeFacts(route.dataHandling, overrides.dataHandling ?? {});
-		const offers = hostedToolOffers(route, deployment);
+		const offers = route.hostedTools;
 		routes[routeId] = {
 			capabilities: Object.fromEntries(
 				capabilityNames.map((name) => [
@@ -678,23 +700,12 @@ function servedFacts(graph, model, deployment) {
 	};
 }
 
-// The route's hosted tools that run for the deployment: each offer without hostings, and each
-// whose hostings include the deployment's.
-function hostedToolOffers(route, deployment) {
-	return route.hostedTools.filter(
-		(offer) => !offer.hostings || offer.hostings.includes(deployment.hosting)
-	);
-}
-
-// A route's hosted tools in canonical order, each tool at most once for each hosting, with only
-// its own call meters and places that locations lists.
+// A route's hosted tools in canonical order, each tool once, with only its own call meters and
+// places that locations lists. Every deployment of the route runs them.
 function compileHostedTools(routeId, source, places) {
 	const offers = (source ?? []).map((offer, index) => {
 		const owner = `${routeId}.hostedTools[${index}]`;
 		if (!hostedToolRanks.has(offer.tool)) throw new Error(`${owner}: unknown tool ${offer.tool}`);
-		if (offer.hostings && new Set(offer.hostings).size !== offer.hostings.length) {
-			throw new Error(`${owner}: hostings must be unique`);
-		}
 		for (const meter of Object.keys(offer.pricing ?? {})) {
 			if (!hostedToolMeters[offer.tool].includes(meter)) {
 				throw new Error(`${owner}: ${offer.tool} has no call meter ${meter}`);
@@ -708,32 +719,13 @@ function compileHostedTools(routeId, source, places) {
 		}
 		return {
 			tool: offer.tool,
-			...(offer.hostings && { hostings: [...offer.hostings].sort() }),
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
 			dataHandling: structuredClone(offer.dataHandling ?? {})
 		};
 	});
-	const firstHosting = (offer) => offer.hostings?.[0] ?? '';
-	offers.sort(
-		(left, right) =>
-			hostedToolRanks.get(left.tool) - hostedToolRanks.get(right.tool) ||
-			(firstHosting(left) < firstHosting(right)
-				? -1
-				: firstHosting(left) > firstHosting(right)
-					? 1
-					: 0)
-	);
-	for (const [index, offer] of offers.entries()) {
-		for (const other of offers.slice(0, index)) {
-			if (
-				other.tool === offer.tool &&
-				(!other.hostings ||
-					!offer.hostings ||
-					other.hostings.some((hosting) => offer.hostings.includes(hosting)))
-			) {
-				throw new Error(`${routeId}: ${offer.tool} has two offers for one hosting`);
-			}
-		}
+	offers.sort((left, right) => hostedToolRanks.get(left.tool) - hostedToolRanks.get(right.tool));
+	if (new Set(offers.map((offer) => offer.tool)).size !== offers.length) {
+		throw new Error(`${routeId}: each hosted tool has one offer`);
 	}
 	return offers;
 }
@@ -813,7 +805,7 @@ function validateServedFacts(
 	}
 	for (const [routeId, route] of Object.entries(served.routes)) {
 		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling, places);
-		for (const offer of hostedToolOffers(graph.routes[routeId], deployment)) {
+		for (const offer of graph.routes[routeId].hostedTools) {
 			for (const meter of Object.keys(deployment.pricing)) {
 				if (offer.pricing?.[meter]) {
 					throw new Error(
@@ -1407,13 +1399,14 @@ function compileGraph(source, places) {
 			providerId === 'aws' ||
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
-		// AWS and Google Cloud serve only Claude, on the routes and hostings that each offers.
+		// AWS and Google Cloud serve only Claude, and each of their routes is a product that one
+		// company runs.
 		const cloudRoutes = cloudClaudeRoutes[providerId];
 		for (const routeId of cloudRoutes ? deployment.routeIds : []) {
-			if (model.authorId !== 'anthropic' || !cloudRoutes[routeId]?.includes(deployment.hosting)) {
+			if (model.authorId !== 'anthropic' || cloudRoutes[routeId] !== deployment.hosting) {
 				throw new Error(
 					`${deploymentId}: ${providerId} serves Claude on ${Object.entries(cloudRoutes)
-						.map(([id, hostings]) => `${id}, hosted by ${hostings.join(' or ')}`)
+						.map(([id, hosting]) => `${id}, hosted by ${hosting}`)
 						.join('; ')}`
 				);
 			}
@@ -1503,9 +1496,11 @@ function compileGraph(source, places) {
 		}
 		// A provider that runs the model itself sends requests through no one. Each company between
 		// it and the hosting is named once, and unknown, which stands for those that the provider
-		// does not name, adds nothing to a hosting of unknown.
+		// does not name, adds nothing to a hosting of unknown. A company that the hosting shares
+		// requests with receives them in no other way.
 		const { hosting } = deployment;
 		const via = deployment.via ?? [];
+		const sharedWith = deployment.sharedWith ?? [];
 		if (
 			(via.length > 0 && hosting === providerId) ||
 			new Set(via).size !== via.length ||
@@ -1514,6 +1509,16 @@ function compileGraph(source, places) {
 		) {
 			throw new Error(
 				`${deploymentId}: via names each company between the provider and the hosting once`
+			);
+		}
+		if (
+			new Set(sharedWith).size !== sharedWith.length ||
+			sharedWith.some(
+				(company) => company === providerId || company === hosting || via.includes(company)
+			)
+		) {
+			throw new Error(
+				`${deploymentId}: sharedWith names each other company that the hosting shares requests with once`
 			);
 		}
 		// The ID names the provider and model, then each fact that sets the deployment apart from the
@@ -1542,7 +1547,8 @@ function compileGraph(source, places) {
 		deployments[deploymentId] = {
 			modelId: deployment.modelId,
 			hosting,
-			via,
+			// Every company that receives the deployment's requests, in the order that they reach it.
+			companies: [providerId, ...via, ...(hosting === providerId ? [] : [hosting]), ...sharedWith],
 			upstream,
 			approvalRequired: deployment.approvalRequired ?? false,
 			// Closed models do not disclose how their weights are stored.
@@ -1554,25 +1560,9 @@ function compileGraph(source, places) {
 		};
 	}
 
-	// An offer for a hosting that no deployment of its route has would never run.
-	for (const [routeId, route] of Object.entries(graph.routes)) {
-		for (const offer of route.hostedTools) {
-			for (const hosting of offer.hostings ?? []) {
-				if (
-					!Object.values(deployments).some(
-						(deployment) =>
-							deployment.hosting === hosting && Object.hasOwn(deployment.routes, routeId)
-					)
-				) {
-					throw new Error(`${routeId}: no deployment has hosting ${hosting} of its ${offer.tool}`);
-				}
-			}
-		}
-	}
-
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
 	// provider ran at Standard at, the one deployment of the model on the same route that matches
-	// its hosting, its path there and these upstream fields. The provider's model name can differ,
+	// the companies that receive its requests and these upstream fields. The provider's model name can differ,
 	// as Azure's Claude Fast does.
 	const siblingFields = [
 		'reasoningMode',
@@ -1590,8 +1580,7 @@ function compileGraph(source, places) {
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
 					Object.hasOwn(candidate.routes, routeId) &&
-					candidate.hosting === fast.hosting &&
-					same(candidate.via, fast.via) &&
+					same(candidate.companies, fast.companies) &&
 					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field])
 			);
 			if (

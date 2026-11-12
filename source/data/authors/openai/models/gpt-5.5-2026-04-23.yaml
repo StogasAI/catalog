@@ -4,6 +4,9 @@ models:
   aliases: [gpt-5.5]
   groupIds: [gpt-5.5]
   contextWindowTokens: 1050000
+  # OpenAI's page states no input limit. Microsoft states 922,000 for this version, and every OpenAI
+  # page that states one gives the window less the 128,000 output tokens.
+  maxInputTokens: 922000
   maxOutputTokens: 128000
   inputModalities: [text, image]
   outputModalities: [text]

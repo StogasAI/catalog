@@ -1,12 +1,15 @@
 # Agent Platform's us multi-region endpoint, at Google's 10 percent premium over the global endpoint.
 # Google keeps prompts and responses for up to 30 days to monitor abuse, under its Advanced AI
-# Safety Addendum, which each project accepts once in Model Garden.
+# Safety Addendum, which each project accepts once in Model Garden. As Anthropic requires, the
+# project also shares them with Anthropic to monitor abuse, for each model location it enables.
+# Sharing reviewed 2026-11-12: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/abuse-monitoring
 # Vertex AI lists no SKUs for this model, so these prices come from the partner model pricing page.
 # Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
 deployments:
   modelId: claude-fable-5
-  routeIds: [google-cloud-messages]
+  routeIds: [google-cloud-agent-platform-messages]
   hosting: google-cloud
+  sharedWith: [anthropic]
   upstream:
     model: claude-fable-5
     inferenceGeo: us

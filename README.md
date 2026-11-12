@@ -20,6 +20,9 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 - `generated/catalog.json` is the root. It lists every record with the fields that list, link, and resolve it, and names each part in `generated/catalog.parts/` by SHA-256 and size. A page that shows one model reads one part.
 - A record can list named, dated periods that change its facts for a time, such as a promotional price. The catalog holds the base graph and, for each dated state, the records that differ from it.
 - Prices are decimal USD strings. `retentionDays: null` and `trainingUse: null` mean unknown, not zero or false.
+- A record states only the guarantees that hold: a provider's `zeroDataRetention`, `tee` and `teeVerified`, and a route's `endToEndEncrypted`. Compiled records state each one, false where the source omits it.
+- A deployment's `hosting` names the company that runs the model, `via` the companies that pass requests on between the provider and the hosting, and `sharedWith` the companies that the hosting shares requests and responses with, such as the model's developer for abuse monitoring. The compiled record lists them all in `companies`, in the order that they receive a request, so one condition covers every company that receives it.
+- A route is one API of a provider. AWS and Google Cloud have a route for each product that serves Claude, such as Amazon Bedrock and Claude Platform on AWS, and each product's company runs every deployment on it.
 - `source/data/locations.yaml` lists places as a graph. Each place has a kind, `world`, `continent`, `region`, `union`, `country` or `subdivision`. A continent, region or union lists every country that it covers, and the build derives the places that directly contain each place from those lists. A record names a place for data handling, a headquarters, or a provider's `accountLocations`, where an account's resources can keep data. A place stays listed only while a record names it or a place inside it.
 
 ## Retirement
@@ -40,9 +43,9 @@ A record serves until its date ends everywhere on Earth, at 12:00 UTC the next d
 
 The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment says so with `stogasSupported: false`, and its `notes` say why. The answer passes down the same way a retirement date does: from a provider to its routes, and from a route to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
 
-Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. Each compiled record lists its `notes` with the record that states each one, such as `{ "kind": "route", "id": "aws-batch-messages", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its routes, so an unserved record carries the reason.
+Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. Each compiled record lists its `notes` with the record that states each one, such as `{ "kind": "route", "id": "aws-bedrock-batch-messages", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its routes, so an unserved record carries the reason.
 
-OpenAI's Batch API, Anthropic's Message Batches API and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema marks every batch route as unserved.
+OpenAI's Batch API, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema marks every batch route as unserved.
 
 Unserved records sit in their own parts, which the root marks with `stogasSupported: false`. The gateway never reads those parts, so it never routes to these records. A request that names one fails.
 

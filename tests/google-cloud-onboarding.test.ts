@@ -1,10 +1,17 @@
 import { describe, test } from 'bun:test';
-import { anthropicHosted, claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
+import {
+	anthropicHosted,
+	claudeCapabilities,
+	claudeModels,
+	tokenPrices,
+	type ClaudeModelId
+} from './cloud-claude';
 import { catalog } from './generated-catalog';
 import {
 	assertProviderOnboardingContract,
 	type DataHandlingContract,
-	type ProviderDeploymentContract
+	type ProviderDeploymentContract,
+	type ProviderRouteContract
 } from './provider-onboarding';
 
 const capabilities = {
@@ -96,14 +103,16 @@ function deployment(
 ): ProviderDeploymentContract {
 	return {
 		...claudeModels[model],
-		capabilities,
+		capabilities: claudeCapabilities(model, capabilities),
 		dataHandling: { ...providerHandling, ...dataHandling },
 		id,
 		modelId: model,
 		pricing,
 		retirementDate: null,
-		routeIds: ['google-cloud-messages'],
+		routeIds: ['google-cloud-agent-platform-messages'],
 		hosting: 'google-cloud',
+		// Google shares Fable's prompts and responses with Anthropic to monitor abuse.
+		...(model.startsWith('claude-fable-') ? { sharedWith: ['anthropic'] } : {}),
 		upstream: { ...upstream, model, serviceTier: 'standard' }
 	};
 }
@@ -140,8 +149,30 @@ const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
 	(model) => !model.startsWith('claude-mythos') || model === 'claude-mythos-5-2'
 );
 
+// Only Anthropic's own offering runs web search and web fetch.
+const anthropicHostedTools: ProviderRouteContract['hostedTools'] = [
+	{
+		dataHandling: { processingLocation: 'unknown' },
+		pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
+		tool: 'web_search'
+	},
+	{
+		dataHandling: {
+			processingLocation: 'unknown',
+			retentionDays: null,
+			storageLocation: 'unknown',
+			zeroDataRetention: false
+		},
+		tool: 'web_fetch'
+	}
+];
+const formats = {
+	extensions: ['.csv', '.md', '.pdf', '.txt'],
+	mediaTypes: ['application/pdf', 'text/plain']
+};
+
 describe('Google Cloud onboarding contract', () => {
-	test('pins the Claude route and every deployment', () => {
+	test('pins the Claude routes and every deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
 				aliases: ['gcp'],
@@ -154,64 +185,30 @@ describe('Google Cloud onboarding contract', () => {
 			},
 			routes: [
 				{
-					documentFormats: {
-						extensions: ['.csv', '.md', '.pdf', '.txt'],
-						mediaTypes: ['application/pdf', 'text/plain']
-					},
-					// Only Anthropic's own offering runs web search and web fetch.
-					hostedTools: [
-						{
-							dataHandling: { processingLocation: 'unknown' },
-							hostings: ['anthropic'],
-							pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
-							tool: 'web_search'
-						},
-						{
-							dataHandling: {
-								processingLocation: 'unknown',
-								retentionDays: null,
-								storageLocation: 'unknown',
-								zeroDataRetention: false
-							},
-							hostings: ['anthropic'],
-							tool: 'web_fetch'
-						}
-					],
-					id: 'google-cloud-messages',
+					documentFormats: formats,
+					id: 'google-cloud-agent-platform-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses'],
-					notes:
-						"Google runs Claude on Agent Platform. Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills."
+					interfaces: ['chat_completions', 'responses']
+				},
+				{
+					// Anthropic stores data in the US and deletes inputs and outputs within 30 days.
+					dataHandling: { retentionDays: 30, storageLocation: 'US' },
+					documentFormats: formats,
+					hostedTools: anthropicHostedTools,
+					id: 'google-cloud-anthropic-managed-messages',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions', 'responses']
 				},
 				{
 					capabilities: { streaming: false },
-					documentFormats: {
-						extensions: ['.csv', '.md', '.pdf', '.txt'],
-						mediaTypes: ['application/pdf', 'text/plain']
-					},
-					hostedTools: [
-						{
-							dataHandling: { processingLocation: 'unknown' },
-							hostings: ['anthropic'],
-							pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
-							tool: 'web_search'
-						},
-						{
-							dataHandling: {
-								processingLocation: 'unknown',
-								retentionDays: null,
-								storageLocation: 'unknown',
-								zeroDataRetention: false
-							},
-							hostings: ['anthropic'],
-							tool: 'web_fetch'
-						}
-					],
-					id: 'google-cloud-batch-messages',
+					// Message Batches results stay available for 29 days.
+					dataHandling: { retentionDays: 29, storageLocation: 'US' },
+					documentFormats: formats,
+					hostedTools: anthropicHostedTools,
+					id: 'google-cloud-anthropic-managed-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes:
-						"Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills. The gateway has no batch API and serves each request as it arrives.",
+					notes: 'The gateway has no batch API and serves each request as it arrives.',
 					batch: true,
 					stogasSupported: false
 				}
@@ -223,7 +220,7 @@ describe('Google Cloud onboarding contract', () => {
 				'claude-mythos-5-2',
 				'claude-opus-5-5'
 			]),
-			// Claude Platform on Google Cloud stores data in the US.
+			// Claude Models on Google Cloud (Anthropic managed) stores data in the US.
 			anthropicHostedDataHandling: { storageLocation: 'US' }
 		});
 	});

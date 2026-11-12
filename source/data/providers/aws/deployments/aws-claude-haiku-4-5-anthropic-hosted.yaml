@@ -3,13 +3,10 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#claude-platform-on-aws-pricing
 deployments:
   modelId: claude-haiku-4-5
-  routeIds: [aws-messages]
+  routeIds: [aws-claude-platform-messages]
   hosting: anthropic
   upstream:
     model: claude-haiku-4-5-20251001
-  overrides:
-    dataHandling:
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '1'

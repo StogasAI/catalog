@@ -4,7 +4,7 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing
 deployments:
   modelId: claude-fable-5-2
-  routeIds: [google-cloud-messages]
+  routeIds: [google-cloud-anthropic-managed-messages]
   hosting: anthropic
   upstream:
     model: claude-fable-5-2
@@ -12,8 +12,6 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: US
-      storageLocation: US
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '8.8'

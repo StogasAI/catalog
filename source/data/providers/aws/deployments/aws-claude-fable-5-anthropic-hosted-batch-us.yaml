@@ -3,7 +3,7 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#claude-platform-on-aws-pricing
 deployments:
   modelId: claude-fable-5
-  routeIds: [aws-batch-messages]
+  routeIds: [aws-claude-platform-message-batches]
   hosting: anthropic
   upstream:
     model: claude-fable-5

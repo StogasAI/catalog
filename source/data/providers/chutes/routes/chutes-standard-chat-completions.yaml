@@ -7,7 +7,5 @@ routes:
     extensions: []
     mediaTypes: []
   dataHandling:
-    endToEndEncrypted: false
     trainingUse: null
     tee: false
-  notes: Chutes forwards these requests to third-party inference platforms that it does not name, whose own staff and systems can access content while they process it.

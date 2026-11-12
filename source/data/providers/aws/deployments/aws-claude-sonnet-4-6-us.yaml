@@ -7,7 +7,7 @@
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html
 deployments:
   modelId: claude-sonnet-4-6
-  routeIds: [aws-messages]
+  routeIds: [aws-bedrock-messages]
   hosting: aws
   upstream:
     model: us.anthropic.claude-sonnet-4-6

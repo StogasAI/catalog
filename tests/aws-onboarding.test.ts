@@ -1,6 +1,12 @@
 import { describe, test } from 'bun:test';
 import { catalog } from './generated-catalog';
-import { anthropicHosted, claudeModels, tokenPrices, type ClaudeModelId } from './cloud-claude';
+import {
+	anthropicHosted,
+	claudeCapabilities,
+	claudeModels,
+	tokenPrices,
+	type ClaudeModelId
+} from './cloud-claude';
 import {
 	assertProviderOnboardingContract,
 	type DataHandlingContract,
@@ -136,20 +142,17 @@ function deployment(
 ): ProviderDeploymentContract {
 	return {
 		...claudeModels[model],
-		capabilities,
+		capabilities: claudeCapabilities(model, capabilities),
 		dataHandling: { ...providerHandling, ...dataHandling },
 		id,
 		modelId: model,
 		pricing,
 		retirementDate: null,
-		routeIds: ['aws-messages'],
+		routeIds: ['aws-bedrock-messages'],
 		hosting: 'aws',
 		upstream: { ...upstream, serviceTier: 'standard' }
 	};
 }
-
-const awsNotes =
-	"Amazon Bedrock runs Claude on AWS. Claude Platform on AWS is Anthropic's own API, which Anthropic runs and AWS bills.";
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
@@ -226,8 +229,8 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 				},
 				half(geo === 'global' ? global : us)
 			),
-			capabilities: { ...capabilities, streaming: false },
-			routeIds: ['aws-batch-messages']
+			capabilities: { ...claudeCapabilities(model, capabilities), streaming: false },
+			routeIds: ['aws-bedrock-batch-messages']
 		});
 	}
 }
@@ -237,11 +240,10 @@ const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
 	(model) => !model.startsWith('claude-mythos')
 );
 
-// Only Claude Platform on AWS runs web search and web fetch, on both routes.
-const cloudHostedTools: ProviderRouteContract['hostedTools'] = [
+// Only Claude Platform on AWS runs web search and web fetch, on both of its routes.
+const platformHostedTools: ProviderRouteContract['hostedTools'] = [
 	{
 		dataHandling: { processingLocation: 'unknown' },
-		hostings: ['anthropic'],
 		pricing: { anthropic_web_search_calls: { per_1k_calls: '10' } },
 		tool: 'web_search'
 	},
@@ -252,13 +254,17 @@ const cloudHostedTools: ProviderRouteContract['hostedTools'] = [
 			storageLocation: 'unknown',
 			zeroDataRetention: false
 		},
-		hostings: ['anthropic'],
 		tool: 'web_fetch'
 	}
 ];
+const formats = {
+	extensions: ['.csv', '.md', '.pdf', '.txt'],
+	mediaTypes: ['application/pdf', 'text/plain']
+};
+const batchNotes = 'The gateway has no batch API and serves each request as it arrives.';
 
 describe('AWS onboarding contract', () => {
-	test('pins the Claude route and every deployment', () => {
+	test('pins the Claude routes and every deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
 				aliases: [],
@@ -271,27 +277,40 @@ describe('AWS onboarding contract', () => {
 			},
 			routes: [
 				{
-					documentFormats: {
-						extensions: ['.csv', '.md', '.pdf', '.txt'],
-						mediaTypes: ['application/pdf', 'text/plain']
-					},
-					hostedTools: cloudHostedTools,
-					id: 'aws-messages',
+					documentFormats: formats,
+					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses'],
-					notes: awsNotes
+					interfaces: ['chat_completions', 'responses']
 				},
 				{
 					capabilities: { streaming: false },
-					documentFormats: {
-						extensions: ['.csv', '.md', '.pdf', '.txt'],
-						mediaTypes: ['application/pdf', 'text/plain']
-					},
-					hostedTools: cloudHostedTools,
-					id: 'aws-batch-messages',
+					documentFormats: formats,
+					id: 'aws-bedrock-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes: `${awsNotes} The gateway has no batch API and serves each request as it arrives.`,
+					notes: batchNotes,
+					batch: true,
+					stogasSupported: false
+				},
+				{
+					// Anthropic deletes inputs and outputs within 30 days.
+					dataHandling: { retentionDays: 30 },
+					documentFormats: formats,
+					hostedTools: platformHostedTools,
+					id: 'aws-claude-platform-messages',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions', 'responses']
+				},
+				{
+					capabilities: { streaming: false },
+					// Message Batches results stay available for 29 days.
+					dataHandling: { retentionDays: 29 },
+					documentFormats: formats,
+					hostedTools: platformHostedTools,
+					id: 'aws-claude-platform-message-batches',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions', 'responses'],
+					notes: batchNotes,
 					batch: true,
 					stogasSupported: false
 				}

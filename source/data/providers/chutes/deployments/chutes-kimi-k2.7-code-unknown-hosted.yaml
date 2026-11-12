@@ -5,6 +5,8 @@ deployments:
   upstream:
     model: moonshotai/Kimi-K2.7-Code
     chuteId: 36e54170-0e13-59b7-8aab-8ed348dabd49
+  overrides:
+    maxOutputTokens: 16384
   pricing:
     input_tokens:
       per_mill_tokens: '0.832'

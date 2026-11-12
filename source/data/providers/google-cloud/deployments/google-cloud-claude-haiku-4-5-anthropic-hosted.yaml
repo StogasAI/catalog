@@ -4,14 +4,10 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing
 deployments:
   modelId: claude-haiku-4-5
-  routeIds: [google-cloud-messages]
+  routeIds: [google-cloud-anthropic-managed-messages]
   hosting: anthropic
   upstream:
     model: claude-haiku-4-5-20251001
-  overrides:
-    dataHandling:
-      storageLocation: US
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '1'

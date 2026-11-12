@@ -26,25 +26,18 @@
  * format as the current one, so that a reader without a catalog of its own, such as the website,
  * can ship before the first catalog of a new format does.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v15';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v15';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v14';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v14';
-const NOTE_KINDS = {
-	authors: 'author',
-	groups: 'group',
-	models: 'model',
-	providers: 'provider',
-	routes: 'route',
-	deployments: 'deployment'
-};
+export const CATALOG_SCHEMA = 'stogas.catalog.v16';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v16';
+const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v15';
+const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v15';
 
 /**
- * A root or part of the previous format as one of the current format. The previous format gave a
- * record that Stogas does not serve the reason as `stogasUnsupported`, which was null on a served
- * record and missing from a served summary, and each record one note or null. Here the reason
- * becomes a note of the record, and a route or deployment does not repeat the notes above it. Any
- * other value comes back as it is, for the reader to check.
+ * A root or part of the previous format as one of the current format. The previous format named
+ * the companies between a deployment's provider and its hosting in `via`, and a route's hosted
+ * tools could name the hostings that ran them. Here a deployment lists in `companies` every
+ * company that receives its requests: its provider, those in `via` and its hosting, once each in
+ * that order. A route's tools leave out their hostings; each deployment's route still holds the
+ * tools that it ran. Any other value comes back as it is, for the reader to check.
  */
 export function currentCatalogFile(value) {
 	if (!isObject(value)) return value;
@@ -52,52 +45,50 @@ export function currentCatalogFile(value) {
 		return {
 			...value,
 			schema: CATALOG_PART_SCHEMA,
-			graph: currentGraph(value.graph, false),
+			graph: currentGraph(value.graph),
 			schedule: value.schedule.map((entry) =>
-				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph, false) } : entry
+				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph) } : entry
 			)
 		};
 	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
-		return {
-			...value,
-			schema: CATALOG_SCHEMA,
-			summaries: currentGraph(value.summaries, true),
-			parts: value.parts.map((part) => {
-				if (!isObject(part) || typeof part.stogasUnsupported !== 'boolean') return part;
-				const { stogasUnsupported, ...file } = part;
-				return { ...file, stogasSupported: !stogasUnsupported };
-			}),
-			schedule: Array.isArray(value.schedule)
-				? value.schedule.map((entry) =>
-						isObject(entry) ? { ...entry, summaries: currentGraph(entry.summaries, true) } : entry
-					)
-				: value.schedule
-		};
+		return { ...value, schema: CATALOG_SCHEMA };
 	return value;
 }
 
-function currentGraph(graph, summaries) {
+function currentGraph(graph) {
 	if (!isObject(graph)) return graph;
 	const current = { ...graph };
-	for (const [kind, noteKind] of Object.entries(NOTE_KINDS)) {
-		if (!isObject(graph[kind])) continue;
-		current[kind] = Object.fromEntries(
-			Object.entries(graph[kind]).map(([id, record]) => {
-				if (!isObject(record)) return [id, record];
-				const { stogasUnsupported: reason = null, ...facts } = record;
-				// A summary always says whether Stogas serves its record; among records, only routes
-				// and deployments do.
-				if (summaries || Object.hasOwn(record, 'stogasUnsupported'))
-					facts.stogasSupported = reason === null;
-				if (Object.hasOwn(record, 'notes'))
-					facts.notes = [record.notes, summaries ? null : reason]
-						.filter((text) => typeof text === 'string')
-						.map((text) => ({ kind: noteKind, id, text }));
-				return [id, facts];
-			})
+	if (isObject(graph.deployments))
+		current.deployments = currentRecords(graph.deployments, (id, deployment) => {
+			const { via, ...facts } = deployment;
+			// A deployment's ID starts with its provider's ID and then its model's.
+			const end = typeof facts.modelId === 'string' ? id.indexOf(`-${facts.modelId}`) : -1;
+			if (!Array.isArray(via) || end < 1 || typeof facts.hosting !== 'string') return deployment;
+			return { ...facts, companies: [...new Set([id.slice(0, end), ...via, facts.hosting])] };
+		});
+	if (isObject(graph.routes))
+		current.routes = currentRecords(graph.routes, (_id, route) =>
+			Array.isArray(route.hostedTools)
+				? {
+						...route,
+						hostedTools: route.hostedTools.map((offer) => {
+							if (!isObject(offer)) return offer;
+							const { hostings: _hostings, ...tool } = offer;
+							return tool;
+						})
+					}
+				: route
 		);
-	}
 	return current;
+}
+
+function currentRecords(records, convert) {
+	return Object.fromEntries(
+		Object.entries(records).map(([id, record]) => [
+			id,
+			isObject(record) ? convert(id, record) : record
+		])
+	);
 }
 
 export const CATALOG_KINDS = Object.freeze([

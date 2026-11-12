@@ -36,6 +36,21 @@ export const claudeModels = {
 } as const;
 export type ClaudeModelId = keyof typeof claudeModels;
 
+// The Claude models that refuse a forced tool choice wherever they run.
+const forcedToolChoiceRefused = new Set<ClaudeModelId>([
+	'claude-fable-5-2',
+	'claude-fable-5-1',
+	'claude-mythos-5-2',
+	'claude-mythos-5-1',
+	'claude-opus-5-5',
+	'claude-sonnet-5-5'
+]);
+
+/** A route's capabilities as a deployment of the model serves them. */
+export function claudeCapabilities(model: ClaudeModelId, capabilities: Record<string, boolean>) {
+	return forcedToolChoiceRefused.has(model) ? { ...capabilities, toolChoice: false } : capabilities;
+}
+
 /**
  * The deployments that Anthropic runs on a cloud: each model at Standard, at Fast for the models
  * in `fast`, and through the Message Batches API, globally and, from Claude 4.6, with US-only

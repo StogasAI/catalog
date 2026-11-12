@@ -6,6 +6,9 @@ deployments:
     model: claude-mythos-5-2
     inferenceGeo: global
   approvalRequired: true
+  overrides:
+    dataHandling:
+      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '4'

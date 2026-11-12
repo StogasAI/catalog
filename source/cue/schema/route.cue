@@ -58,11 +58,10 @@ package catalog
 	// modalities that both its model and the route accept.
 	inputModalities: [#Modality, ...#Modality]
 	documentFormats: #DocumentFormats
-	dataHandling:    #RouteDataHandling
+	dataHandling?:   #RouteDataHandling
 	// Tools that run at the provider, or at a service that it calls, when a
-	// request lists them. A deployment offers each tool whose hostings include
-	// its own, and requests that list a tool route only to deployments that
-	// offer it.
+	// request lists them. Every deployment of the route offers them, and
+	// requests that list a tool route only to deployments that offer it.
 	hostedTools?: [#HostedTool, ...#HostedTool]
 	overrides?: close({
 		capabilities?: #CapabilityOverrides

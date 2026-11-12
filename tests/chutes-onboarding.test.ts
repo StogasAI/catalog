@@ -259,8 +259,9 @@ const deployments: ProviderDeploymentContract[] = [
 		'deepseek',
 		'deepseek-ai/DeepSeek-V4.1-Flash-1017',
 		'34c7b79d-854b-5e32-981a-774d322062b0',
-		{ contextWindowTokens: 1048576, maxOutputTokens: 393216 },
+		{ contextWindowTokens: 1_000_000, maxOutputTokens: 393216 },
 		{
+			contextWindowTokens: 1048576,
 			inputModalities: ['text', 'image'],
 			maxOutputTokens: 393216,
 			reasoning: 'optional',
@@ -275,8 +276,9 @@ const deployments: ProviderDeploymentContract[] = [
 		'deepseek',
 		'deepseek-ai/DeepSeek-V4-Pro-0813',
 		'b990f27b-59b1-526e-adfd-e3ad9ea8920d',
-		{ contextWindowTokens: 1048576, maxOutputTokens: 393216 },
+		{ contextWindowTokens: 1_000_000, maxOutputTokens: 393216 },
 		{
+			contextWindowTokens: 1048576,
 			inputModalities: ['text'],
 			maxOutputTokens: 393216,
 			reasoning: 'optional',
@@ -321,8 +323,8 @@ const deployments: ProviderDeploymentContract[] = [
 		'moonshot-ai',
 		'moonshotai/Kimi-K2.7-Code',
 		'36e54170-0e13-59b7-8aab-8ed348dabd49',
-		{ contextWindowTokens: 262144, maxOutputTokens: 262144 },
-		{ inputModalities: ['text', 'image', 'video'], reasoning: 'required' },
+		{ contextWindowTokens: 262144, maxOutputTokens: 16384 },
+		{ inputModalities: ['text', 'image', 'video'], maxOutputTokens: 262144, reasoning: 'required' },
 		['0.832', '0.167', '3.5']
 	),
 	standard(
@@ -331,9 +333,11 @@ const deployments: ProviderDeploymentContract[] = [
 		'qwen',
 		'Qwen/Qwen3.8-2.4T-A95B',
 		'd86bda6f-f327-538c-9e23-44f7372e1cb8',
-		{ contextWindowTokens: 1010000, maxOutputTokens: 1010000 },
+		{ contextWindowTokens: 1_000_000, maxOutputTokens: 131072 },
 		{
+			contextWindowTokens: 1_010_000,
 			inputModalities: ['text'],
+			maxOutputTokens: 1_010_000,
 			reasoning: 'required',
 			reasoningEfforts: ['low', 'medium', 'xhigh']
 		},
@@ -391,9 +395,7 @@ describe('Chutes provider onboarding contract', () => {
 					id: 'chutes-standard-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
-					interfaces: ['chat_completions'],
-					notes:
-						'Chutes forwards these requests to third-party inference platforms that it does not name, whose own staff and systems can access content while they process it.'
+					interfaces: ['chat_completions']
 				}
 			]
 		});
@@ -462,6 +464,7 @@ function standard(
 	chuteId: string,
 	limits: { contextWindowTokens: number; maxInputTokens?: number; maxOutputTokens: number },
 	model: {
+		contextWindowTokens?: number;
 		inputModalities: string[];
 		maxOutputTokens?: number;
 		reasoning: 'optional' | 'required';
@@ -479,6 +482,7 @@ function standard(
 		maxInputTokens: limits.maxInputTokens,
 		maxOutputTokens: limits.maxOutputTokens,
 		modelId,
+		modelContextWindowTokens: model.contextWindowTokens,
 		modelMaxOutputTokens: model.maxOutputTokens,
 		modelReasoning: model.reasoning,
 		modelReasoningEfforts: model.reasoningEfforts ?? [],

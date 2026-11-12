@@ -4,7 +4,7 @@
 # Messages API support, limits and retention reviewed 2026-11-03: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-8.html
 deployments:
   modelId: claude-opus-4-8
-  routeIds: [aws-messages]
+  routeIds: [aws-bedrock-messages]
   hosting: aws
   upstream:
     model: global.anthropic.claude-opus-4-8

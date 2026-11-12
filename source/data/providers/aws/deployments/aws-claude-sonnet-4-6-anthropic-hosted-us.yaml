@@ -3,7 +3,7 @@
 # and https://platform.claude.com/docs/en/about-claude/pricing#claude-platform-on-aws-pricing
 deployments:
   modelId: claude-sonnet-4-6
-  routeIds: [aws-messages]
+  routeIds: [aws-claude-platform-messages]
   hosting: anthropic
   upstream:
     model: claude-sonnet-4-6
@@ -11,7 +11,6 @@ deployments:
   overrides:
     dataHandling:
       processingLocation: US
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '3.3'

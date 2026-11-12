@@ -3,7 +3,8 @@
 # (https://platform.claude.com/docs/en/build-with-claude/batch-processing and
 # https://platform.claude.com/docs/en/about-claude/pricing#batch-processing). Batch requests
 # cannot stream or use Fast mode. Results stay available for 29 days, outside zero data
-# retention, so each batch deployment keeps them for 29 days.
+# retention, so each batch deployment keeps them for 29 days, and the Fable and Mythos models keep
+# their 30 days.
 routes:
   providerId: anthropic
   endpoint: https://api.anthropic.com/v1/messages/batches
@@ -15,7 +16,7 @@ routes:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
-    endToEndEncrypted: false
+    retentionDays: 29
   # Prices reviewed 2026-10-11: https://platform.claude.com/docs/en/about-claude/pricing
   # Data handling reviewed 2026-11-03: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   # and https://platform.claude.com/docs/en/manage-claude/data-residency. inference_geo covers model inference

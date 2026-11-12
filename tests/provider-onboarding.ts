@@ -39,7 +39,6 @@ export type ProviderRouteContract = {
 
 type HostedToolContract = {
 	dataHandling: Partial<DataHandlingContract>;
-	hostings?: string[];
 	pricing?: Record<string, Record<string, string>>;
 	tool: 'mcp' | 'web_fetch' | 'web_search';
 };
@@ -65,6 +64,8 @@ export type ProviderDeploymentContract = {
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	/** Who runs the model. */
 	hosting: string;
+	/** The companies that the hosting shares requests with. */
+	sharedWith?: string[];
 	notes?: string;
 	outputModalities: string[];
 	pricing: Record<string, Record<string, string>>;
@@ -171,10 +172,11 @@ export function assertProviderOnboardingContract(
 		);
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
-		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
-		// matches, except the data handling that the cloud changes.
+		// Route IDs, chain hashes, notes and the companies that receive requests name the provider;
+		// everything that the routes serve matches, except the data handling that the cloud changes.
 		const served = (deployment: typeof copy, dataHandling = {}) => ({
 			...deployment,
+			companies: undefined,
 			notes: undefined,
 			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
 				...route,
@@ -192,9 +194,7 @@ export function assertProviderOnboardingContract(
 			[...expected.routeIds].sort().map((routeId) => {
 				const route = routes.get(routeId);
 				if (!route) throw new Error(`${expected.id}: unknown contract route ${routeId}`);
-				const offers = (route.hostedTools ?? []).filter(
-					(offer) => !offer.hostings || offer.hostings.includes(expected.hosting)
-				);
+				const offers = route.hostedTools ?? [];
 				return [
 					routeId,
 					{
@@ -225,7 +225,7 @@ export function assertProviderOnboardingContract(
 			maxOutputTokens: expected.maxOutputTokens,
 			modelId: expected.modelId,
 			hosting: expected.hosting,
-			via: [],
+			companies: [...new Set([providerId, expected.hosting]), ...(expected.sharedWith ?? [])],
 			outputModalities: expected.outputModalities,
 			pricing: expected.pricing,
 			reasoning: expected.modelReasoning ?? 'unsupported',

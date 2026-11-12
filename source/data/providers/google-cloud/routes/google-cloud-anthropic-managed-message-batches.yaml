@@ -1,8 +1,10 @@
-# Anthropic's Message Batches API on Claude on Google Cloud (Anthropic managed), at
+# Anthropic's Message Batches API on Claude Models on Google Cloud (Anthropic managed), at
 # https://claude.googleapis.com/v1/projects/{project}/locations/global/workspaces/{workspace}/invoke/v1/messages/batches,
-# runs Messages requests at half of every token price, and its results stay available for 29 days,
-# as on Anthropic's own API. Batch requests cannot stream. Agent Platform's own batch prediction is
-# not listed yet: Google's documentation and its price tables disagree on its endpoints and prices.
+# runs Messages requests at half of every token price, and server tools keep their own prices. Batch
+# requests cannot stream. Results stay available for 29 days, as on Anthropic's own API, so each
+# deployment keeps them for 29 days, and the Fable and Mythos models keep their 30 days. Agent
+# Platform's own batch prediction is not listed yet:
+# Google's documentation and its price tables disagree on its endpoints and prices.
 # Reviewed 2026-11-05:
 # https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/anthropic-managed
 # https://platform.claude.com/docs/en/about-claude/pricing#batch-processing
@@ -15,20 +17,17 @@ routes:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]
   dataHandling:
-    endToEndEncrypted: false
-  notes: Anthropic-managed Claude on Google Cloud is Anthropic's own API, which Anthropic runs and Google Cloud bills. The gateway has no batch API and serves each request as it arrives.
-  # Only Anthropic's own offering runs web search and web fetch, at Anthropic's prices, as on its
-  # Messages route.
+    storageLocation: US
+    retentionDays: 29
+  notes: The gateway has no batch API and serves each request as it arrives.
   hostedTools:
     - tool: web_search
-      hostings: [anthropic]
       pricing:
         anthropic_web_search_calls:
           per_1k_calls: '10'
       dataHandling:
         processingLocation: unknown
     - tool: web_fetch
-      hostings: [anthropic]
       dataHandling:
         processingLocation: unknown
         storageLocation: unknown

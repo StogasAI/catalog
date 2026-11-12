@@ -1,0 +1,21 @@
+models:
+  authorId: openai
+  name: GPT-5.5 Pro
+  aliases: [gpt-5.5-pro]
+  groupIds: [gpt-5.5]
+  contextWindowTokens: 1050000
+  # OpenAI's page states no input limit. Every OpenAI page that states one gives the window less the
+  # 128,000 output tokens.
+  maxInputTokens: 922000
+  maxOutputTokens: 128000
+  inputModalities: [text, image]
+  outputModalities: [text]
+  capabilities:
+    streaming: false
+    implicitPromptCaching: false
+    explicitPromptCaching: false
+  reasoning: required
+  reasoningEfforts: [medium, high, xhigh]
+  snapshot: 2026-04-23
+  releaseDate: 2026-04-24
+  knowledgeCutoff: 2025-12-01

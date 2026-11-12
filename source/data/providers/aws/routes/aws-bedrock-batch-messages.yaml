@@ -1,0 +1,21 @@
+# Bedrock's batch inference at https://bedrock.{region}.amazonaws.com/model-invocation-job runs files
+# of Messages requests as jobs, through the same inference profiles at about half of the on-demand
+# price. A job reads its requests from, and writes its results to, S3 buckets in the customer's
+# account, so the customer chooses where they are stored and for how long, and the place and
+# retention of its deployments stay unknown. The AWS Price List bills only their input and output
+# tokens. Batch requests cannot stream. Reviewed 2026-11-05:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/batch-inference.html
+# https://docs.aws.amazon.com/bedrock/latest/userguide/batch-inference-supported.html
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+routes:
+  providerId: aws
+  interfaces: [chat_completions, responses]
+  batch: true
+  inputModalities: [text, image]
+  documentFormats:
+    extensions: [.csv, .md, .pdf, .txt]
+    mediaTypes: [application/pdf, text/plain]
+  notes: The gateway has no batch API and serves each request as it arrives.
+  overrides:
+    capabilities:
+      streaming: false

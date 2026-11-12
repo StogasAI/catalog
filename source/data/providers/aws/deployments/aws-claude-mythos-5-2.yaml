@@ -9,7 +9,7 @@
 # and https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
 deployments:
   modelId: claude-mythos-5-2
-  routeIds: [aws-messages]
+  routeIds: [aws-bedrock-messages]
   hosting: aws
   upstream:
     model: global.anthropic.claude-mythos-5-2
