@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 63, providers: 6, routes: 18, deployments: 530 });
+		).toEqual({ authors: 11, models: 64, providers: 6, routes: 20, deployments: 554 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -81,7 +81,7 @@ describe('compiled catalog', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(128);
+		expect(Object.keys(selectors)).toHaveLength(152);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5-5': 'claude-opus-5-5',
 			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',

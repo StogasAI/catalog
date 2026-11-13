@@ -45,7 +45,7 @@ The catalog lists the whole market, including what Stogas does not serve. A prov
 
 Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. Each compiled record lists its `notes` with the record that states each one, such as `{ "kind": "route", "id": "aws-bedrock-batch-messages", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its routes, so an unserved record carries the reason.
 
-OpenAI's Batch API, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier. The gateway has no batch API, so the schema marks every batch route as unserved.
+OpenAI's Batch API, Azure's batch jobs, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier, and on Azure they take a batch deployment type, `global_batch` or `data_zone_batch_us`, because Azure runs batch jobs only on those. The gateway has no batch API, so the schema marks every batch route as unserved.
 
 Unserved records sit in their own parts, which the root marks with `stogasSupported: false`. The gateway never reads those parts, so it never routes to these records. A request that names one fails.
 

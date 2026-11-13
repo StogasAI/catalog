@@ -20,32 +20,41 @@ function azureDeployments() {
 
 type AzureLocation = 'global' | 'apac' | 'eu' | 'instant' | 'us';
 
-// Each node is a deployment for both routes plus, for models with Pro, a Responses-only Pro deployment.
+// Each node is a deployment for both routes, or both batch routes, plus, for models with Pro, a
+// Responses-only Pro deployment.
 function gptTargets(
 	modelId: string,
 	modelVersion: string,
-	nodes: readonly (readonly ['standard' | 'flex' | 'fast', AzureLocation])[],
-	{ model = modelId, pro = true }: { model?: string; pro?: boolean } = {}
+	nodes: readonly (readonly ['standard' | 'flex' | 'fast' | 'batch', AzureLocation])[],
+	{
+		model = modelId,
+		pro = true,
+		routeIds = ['azure-chat-completions', 'azure-responses']
+	}: { model?: string; pro?: boolean; routeIds?: string[] } = {}
 ): AzureTarget[] {
-	return nodes.flatMap(([serviceTier, location]) => {
-		const tierSuffix = serviceTier === 'standard' ? '' : `-${serviceTier}`;
+	return nodes.flatMap(([tier, location]) => {
+		const tierSuffix = tier === 'standard' ? '' : `-${tier}`;
 		const suffix = `${tierSuffix}${location === 'global' ? '' : `-${location}`}`;
+		const kind = tier === 'batch' ? 'batch' : 'standard';
 		const upstream = {
 			deploymentType:
 				location === 'global'
-					? 'global_standard'
+					? `global_${kind}`
 					: location === 'instant'
 						? 'instant'
-						: `data_zone_standard_${location}`,
+						: `data_zone_${kind}_${location}`,
 			model,
 			modelFormat: 'OpenAI',
 			modelVersion,
-			serviceTier
+			serviceTier: tier === 'batch' ? 'standard' : tier
 		};
 		const base = {
 			id: `azure-${modelId}${suffix}`,
 			modelId,
-			routeIds: ['azure-chat-completions', 'azure-responses'],
+			routeIds:
+				tier === 'batch'
+					? routeIds.map((routeId) => routeId.replace('azure-', 'azure-batch-'))
+					: routeIds,
 			hosting: 'azure',
 			upstream
 		};
@@ -67,6 +76,14 @@ function gptTargets(
 const standardNodes = (['global', 'eu', 'instant', 'us'] as const).map(
 	(location) => ['standard', location] as const
 );
+const gpt54Nodes = [
+	...standardNodes,
+	['standard', 'apac'],
+	['fast', 'global'],
+	['fast', 'us'],
+	['batch', 'global'],
+	['batch', 'us']
+] as const;
 
 const otherTargets: AzureTarget[] = [
 	['azure-claude-fable-5-anthropic-hosted', 'claude-fable-5', '1', 'anthropic', 'global_standard'],
@@ -293,6 +310,27 @@ function claudePricing(
 describe('Azure provider onboarding contract', () => {
 	test('publishes the exact verified Azure target matrix without duplicates', () => {
 		const expected = [
+			...gptTargets('gpt-5.4-2026-03-05', '2026-03-05', gpt54Nodes, {
+				model: 'gpt-5.4',
+				pro: false
+			}),
+			...gptTargets('gpt-5.4-mini-2026-03-17', '2026-03-17', gpt54Nodes, {
+				model: 'gpt-5.4-mini',
+				pro: false
+			}),
+			...gptTargets('gpt-5.4-nano-2026-03-17', '2026-03-17', standardNodes, {
+				model: 'gpt-5.4-nano',
+				pro: false
+			}),
+			...gptTargets(
+				'gpt-5.4-pro-2026-03-05',
+				'2026-03-05',
+				[
+					['standard', 'global'],
+					['standard', 'instant']
+				],
+				{ model: 'gpt-5.4-pro', pro: false, routeIds: ['azure-responses'] }
+			),
 			...gptTargets(
 				'gpt-5.5-2026-04-23',
 				'2026-04-24',
@@ -342,7 +380,7 @@ describe('Azure provider onboarding contract', () => {
 		expect(new Set(actual.map(({ id }) => id)).size).toBe(actual.length);
 	});
 
-	test('keeps Azure BYOK-only and uses only the three verified wire routes', () => {
+	test('keeps Azure BYOK-only and lists only its verified routes', () => {
 		// Product names such as Azure OpenAI are not aliases; see the catalog alias rule.
 		expect(catalog.graph.providers.azure).toEqual({
 			// The Azure geographies that offer Foundry models, where a resource keeps data at rest.
@@ -362,7 +400,13 @@ describe('Azure provider onboarding contract', () => {
 				.filter(([, route]) => route.providerId === 'azure')
 				.map(([id]) => id)
 				.sort()
-		).toEqual(['azure-anthropic-messages', 'azure-chat-completions', 'azure-responses']);
+		).toEqual([
+			'azure-anthropic-messages',
+			'azure-batch-chat-completions',
+			'azure-batch-responses',
+			'azure-chat-completions',
+			'azure-responses'
+		]);
 		expect(catalog.graph.providers.azure.credentialModes).toEqual(['byok']);
 	});
 
@@ -415,6 +459,48 @@ describe('Azure provider onboarding contract', () => {
 						}
 			);
 		}
+	});
+
+	test('prices GPT-5.4 and gives it the windows that OpenAI does, with Data Zones above Global', () => {
+		// Asia Pacific Data Zones cost 1.2 times Global, and the US and EU Data Zones 1.1 times.
+		const zoneTenths = (deploymentType: string) =>
+			deploymentType === 'data_zone_standard_apac'
+				? 12n
+				: deploymentType.startsWith('data_zone_')
+					? 11n
+					: 10n;
+		let compared = 0;
+		for (const [, deployment] of azureDeployments()) {
+			const { deploymentType, serviceTier } = deployment.upstream;
+			const tier = deploymentType.includes('batch')
+				? '-batch'
+				: serviceTier === 'standard'
+					? ''
+					: `-${serviceTier}`;
+			const openai = catalog.graph.deployments[`openai-${deployment.modelId}${tier}`];
+			if (!deployment.modelId.startsWith('gpt-5.4-') || !openai) continue;
+			const tenths = zoneTenths(deploymentType);
+			expect(deployment.pricing).toEqual(
+				Object.fromEntries(
+					Object.entries(openai.pricing as Record<string, Record<string, string>>).map(
+						([meter, rates]) => [
+							meter,
+							Object.fromEntries(
+								Object.entries(rates).map(([key, value]) => [key, scaled(value, tenths, 10n)])
+							)
+						]
+					)
+				)
+			);
+			expect([
+				deployment.contextWindowTokens,
+				deployment.maxInputTokens,
+				deployment.maxOutputTokens
+			]).toEqual([openai.contextWindowTokens, openai.maxInputTokens, openai.maxOutputTokens]);
+			compared++;
+		}
+		// Every GPT-5.4 deployment but nano's, which OpenAI shuts down before the catalog's cutoff.
+		expect(compared).toBe(20);
 	});
 
 	test('pins GPT-5.5 prices, windows, and retirement for every location and tier', () => {

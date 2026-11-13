@@ -1,0 +1,21 @@
+deployments:
+  modelId: gpt-5.4-mini-2026-03-17
+  routeIds: [azure-chat-completions, azure-responses]
+  hosting: azure
+  upstream:
+    model: gpt-5.4-mini
+    modelFormat: OpenAI
+    modelVersion: '2026-03-17'
+    deploymentType: data_zone_standard_apac
+  retirementDate: 2027-09-21
+  overrides:
+    dataHandling:
+      processingLocation: apac
+      storageLocation: apac
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.9'
+    cached_input_tokens:
+      per_mill_tokens: '0.09'
+    output_tokens:
+      per_mill_tokens: '5.4'

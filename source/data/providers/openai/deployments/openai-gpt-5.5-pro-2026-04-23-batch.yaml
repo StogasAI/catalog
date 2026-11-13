@@ -4,9 +4,6 @@ deployments:
   hosting: openai
   upstream:
     model: gpt-5.5-pro-2026-04-23
-  overrides:
-    dataHandling:
-      retentionDays: null
   # OpenAI lists no long context price for this tier. Its batch and flex prices are half of the
   # standard ones, which give 30 and 135 for prompts over 272,000 tokens.
   # Reviewed 2026-11-12: https://developers.openai.com/api/docs/pricing

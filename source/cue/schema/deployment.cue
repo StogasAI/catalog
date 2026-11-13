@@ -39,11 +39,15 @@ package catalog
 
 #AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "OpenAI" | "OpenAI-OSS"
 
+// The type of Azure deployment that a customer creates. Data Zone types keep processing and
+// storage in their zone, and the batch types serve only the batch routes.
+#AzureDeploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac" | "global_batch" | "data_zone_batch_us"
+
 #AzureUpstream: close({
 	model:          #UpstreamId
 	modelFormat:    #AzureModelFormat
 	modelVersion:   #UpstreamId
-	deploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
+	deploymentType: #AzureDeploymentType
 	reasoningMode?: "pro"
 	serviceTier?:   "flex" | "fast"
 })
@@ -108,7 +112,7 @@ package catalog
 	reasoningMode?:  "pro"
 	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
-	deploymentType?: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac"
+	deploymentType?: #AzureDeploymentType
 })
 
 #Deployment: close({

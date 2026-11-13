@@ -4,9 +4,6 @@ deployments:
   hosting: openai
   upstream:
     model: gpt-6-sol
-  overrides:
-    dataHandling:
-      retentionDays: null
   pricing:
     input_tokens:
       per_mill_tokens: '1'

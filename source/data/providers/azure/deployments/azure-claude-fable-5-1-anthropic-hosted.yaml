@@ -7,7 +7,7 @@ deployments:
     modelFormat: Anthropic
     modelVersion: '1'
     deploymentType: global_standard
-  retirementDate: 2027-12-05
+  retirementDate: 2027-12-07
   overrides:
     # Foundry offers no max effort for Claude Fable and Mythos; its xhigh gives the same result.
     # Reviewed 2026-10-14: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models

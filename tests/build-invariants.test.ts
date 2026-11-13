@@ -2150,6 +2150,19 @@ describe('catalog source compiler invariants', () => {
 			source.graph.deployments = { 'azure-gpt-test-instant': deployment };
 		});
 		expect(buildCatalog(instant).graph.deployments['azure-gpt-test-instant']).toBeDefined();
+
+		const batch = changed((source) => {
+			asAzure(source);
+			Object.assign(source.graph.routes['azure-responses'], {
+				batch: true,
+				notes: 'The gateway has no batch API.'
+			});
+			const deployment = source.graph.deployments['azure-gpt-test'];
+			deployment.upstream.deploymentType = 'data_zone_batch_us';
+			deployment.overrides = { dataHandling: { processingLocation: 'US', storageLocation: 'US' } };
+			source.graph.deployments = { 'azure-gpt-test-batch-us': deployment };
+		});
+		expect(buildCatalog(batch).graph.deployments['azure-gpt-test-batch-us']).toBeDefined();
 	});
 
 	describe('rejects contradictory Azure target structures', () => {
@@ -2193,7 +2206,26 @@ describe('catalog source compiler invariants', () => {
 					source.graph.deployments['azure-gpt-test'].upstream.deploymentType =
 						'data_zone_standard_us';
 				},
-				'Data Zone Standard must keep processing and storage in its declared location'
+				'a Data Zone deployment must keep processing and storage in its zone'
+			],
+			[
+				'Azure batch type on a route that is not batch',
+				(source: Source) => {
+					asAzure(source);
+					source.graph.deployments['azure-gpt-test'].upstream.deploymentType = 'global_batch';
+				},
+				'azure-gpt-test: only an Azure batch deployment type serves batch routes'
+			],
+			[
+				'Azure Global Standard on a batch route',
+				(source: Source) => {
+					asAzure(source);
+					Object.assign(source.graph.routes['azure-responses'], {
+						batch: true,
+						notes: 'The gateway has no batch API.'
+					});
+				},
+				'azure-gpt-test: only an Azure batch deployment type serves batch routes'
 			],
 			[
 				'Azure Instant with standard handling',

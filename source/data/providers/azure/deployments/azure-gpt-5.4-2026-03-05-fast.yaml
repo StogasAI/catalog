@@ -1,0 +1,21 @@
+deployments:
+  modelId: gpt-5.4-2026-03-05
+  routeIds: [azure-chat-completions, azure-responses]
+  hosting: azure
+  upstream:
+    model: gpt-5.4
+    modelFormat: OpenAI
+    modelVersion: '2026-03-05'
+    deploymentType: global_standard
+    serviceTier: fast
+  retirementDate: 2027-09-02
+  overrides:
+    # Microsoft publishes Priority meters for GPT-5.4 prompts up to 272,000 tokens only.
+    contextWindowTokens: 272000
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5'
+    cached_input_tokens:
+      per_mill_tokens: '0.5'
+    output_tokens:
+      per_mill_tokens: '30'

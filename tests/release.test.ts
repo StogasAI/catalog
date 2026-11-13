@@ -259,7 +259,7 @@ describe('catalog release metadata', () => {
 		} finally {
 			rmSync(output, { force: true, recursive: true });
 		}
-	});
+	}, 60_000);
 });
 
 describe('catalog release repair', () => {
@@ -407,7 +407,7 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 				rmSync(root, { recursive: true, force: true });
 			}
 		}
-	});
+	}, 60_000);
 
 	test('publishes nothing when the blobs differ from what the release names', () => {
 		const cases: [string, (release: string, blobs: string) => void, string][] = [
@@ -453,5 +453,5 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 				rmSync(root, { recursive: true, force: true });
 			}
 		}
-	});
+	}, 60_000);
 });

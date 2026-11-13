@@ -1,0 +1,20 @@
+# Azure runs a file of Chat Completions requests on a Global Batch or Data Zone Batch deployment at its
+# batch prices and aims to finish within 24 hours
+# (https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/batch). Batch requests cannot
+# stream, and Microsoft documents text and image input for them. Azure keeps batch input and
+# output files until they are deleted unless the request sets an expiry of 14 to 30 days, so the
+# route states unknown retention.
+routes:
+  providerId: azure
+  interfaces: [chat_completions]
+  batch: true
+  inputModalities: [text, image]
+  documentFormats:
+    extensions: []
+    mediaTypes: []
+  overrides:
+    capabilities:
+      streaming: false
+  dataHandling:
+    retentionDays: null
+  notes: The gateway has no batch API and serves each request as it arrives.

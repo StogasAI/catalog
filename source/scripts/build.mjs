@@ -205,6 +205,18 @@ const INFERENCE_GEO_PROCESSING = {
 	us: 'US'
 };
 
+// Where each Azure Data Zone keeps processing and storage, by the zone that ends a Data Zone
+// deployment type, as us in data_zone_batch_us.
+const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
+
+function azureDataZone(deploymentType) {
+	return /^data_zone_(?:standard|batch)_(.+)$/.exec(deploymentType ?? '')?.[1];
+}
+
+function azureBatchType(deploymentType) {
+	return /^(?:global|data_zone)_batch(?:_|$)/.test(deploymentType ?? '');
+}
+
 /**
  * The file-owned records as YAML for CUE: the first file holds every record but deployments, and
  * each further file holds a batch of deployments under their providers.
@@ -1328,6 +1340,10 @@ function compileGraph(source, places) {
 		if (batch[0] && deployment.upstream.serviceTier !== undefined) {
 			throw new Error(`${deploymentId}: a batch deployment names no service tier`);
 		}
+		// Azure runs batch jobs only on its batch deployment types, which serve nothing else.
+		if (providerId === 'azure' && batch[0] !== azureBatchType(deployment.upstream.deploymentType)) {
+			throw new Error(`${deploymentId}: only an Azure batch deployment type serves batch routes`);
+		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
 			(providerId === 'openai' &&
@@ -1444,26 +1460,17 @@ function compileGraph(source, places) {
 		validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire, places);
 		rejectMaskedOverrides(graph, deploymentId, model, deployment, served);
 		const dataHandlingValues = Object.values(served.routes).map((route) => route.dataHandling);
-		if (
-			providerId === 'azure' &&
-			deployment.hosting === 'azure' &&
-			deployment.upstream.deploymentType.startsWith('data_zone_standard_')
-		) {
-			const expectedLocations = {
-				data_zone_standard_apac: { processing: 'apac', storage: 'apac' },
-				data_zone_standard_eu: { processing: 'europe', storage: 'europe' },
-				data_zone_standard_us: { processing: 'US', storage: 'US' }
-			}[deployment.upstream.deploymentType];
+		const dataZone = azureDataZone(deployment.upstream.deploymentType);
+		if (providerId === 'azure' && deployment.hosting === 'azure' && dataZone) {
+			const location = AZURE_DATA_ZONE_LOCATIONS[dataZone];
 			if (
-				!expectedLocations ||
+				!location ||
 				dataHandlingValues.some(
-					(value) =>
-						value.processingLocation !== expectedLocations.processing ||
-						value.storageLocation !== expectedLocations.storage
+					(value) => value.processingLocation !== location || value.storageLocation !== location
 				)
 			) {
 				throw new Error(
-					`${deploymentId}: Data Zone Standard must keep processing and storage in its declared location`
+					`${deploymentId}: a Data Zone deployment must keep processing and storage in its zone`
 				);
 			}
 		}
@@ -1534,7 +1541,7 @@ function compileGraph(source, places) {
 			reasoningMode,
 			serviceTier ?? (deploymentType === 'instant' ? 'instant' : batch[0] && 'batch'),
 			inferenceGeo !== 'global' && inferenceGeo,
-			/^data_zone_standard_(.+)$/.exec(deploymentType ?? '')?.[1]
+			azureDataZone(deploymentType)
 		]
 			.filter(Boolean)
 			.join('-');
