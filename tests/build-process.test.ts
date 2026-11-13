@@ -17,8 +17,10 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCatalog } from './generated-catalog';
 
-// These cases launch real compilers; use the same bound as each build process.
-setDefaultTimeout(60_000);
+// These cases launch real compilers; use the same bound as each build process, and a case that
+// runs many builds adds up their bounds.
+const BUILD_TIMEOUT_MS = 60_000;
+setDefaultTimeout(BUILD_TIMEOUT_MS);
 
 const catalogRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Builds running in this checkout keep `.tmp-` paths in these folders; copy only catalog inputs.
@@ -54,7 +56,7 @@ function runBuild(root: string, args: string[] = [], environment: Record<string,
 		env: { ...env, ...environment },
 		stderr: 'pipe',
 		stdout: 'pipe',
-		timeout: 60_000
+		timeout: BUILD_TIMEOUT_MS
 	});
 	return {
 		exitCode: result.exitCode,
@@ -455,52 +457,58 @@ exit 1
 			'  pricing:\n'
 		].join('\n');
 
-	test('rewrites only the part of a changed record and removes every file of no part', () => {
-		const root = catalogCopy();
-		const generated = join(root, 'generated');
-		const partsPath = join(generated, 'catalog.parts');
-		const partNames = () => readdirSync(partsPath).sort();
-		const before = partNames();
-		expect(before).toEqual(
-			readCatalog(generated)
-				.root.parts.map(({ sha256 }) => `${sha256}.json`)
-				.sort()
-		);
-		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
-		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		expectBuildSuccess(runBuild(root));
-		const after = partNames();
-		expect(after.filter((name) => !before.includes(name))).toHaveLength(1);
-		expect(before.filter((name) => !after.includes(name))).toHaveLength(1);
-		for (const { sha256, size } of readCatalog(generated).root.parts) {
-			const bytes = readFileSync(join(partsPath, `${sha256}.json`));
-			expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha256);
-			expect(bytes.byteLength).toBe(size);
-		}
-		expectBuildSuccess(runBuild(root, ['--check']));
-
-		const partPath = join(partsPath, after[0]!);
-		const part = readFileSync(partPath, 'utf8');
-		writeFileSync(partPath, part.replace('"schema"', '"schema" '));
-		expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		writeFileSync(partPath, part);
-		expectBuildSuccess(runBuild(root, ['--check']));
-		// Files of no part, and those of an older format, fail the check, and a build removes them.
-		for (const stray of [
-			join(partsPath, `${'0'.repeat(64)}.json`),
-			join(generated, 'catalog.runtime.json'),
-			join(generated, 'catalog.public.parts/part.json')
-		]) {
-			mkdirSync(dirname(stray), { recursive: true });
-			writeFileSync(stray, '{}');
+	test(
+		'rewrites only the part of a changed record and removes every file of no part',
+		() => {
+			const root = catalogCopy();
+			const generated = join(root, 'generated');
+			const partsPath = join(generated, 'catalog.parts');
+			const partNames = () => readdirSync(partsPath).sort();
+			const before = partNames();
+			expect(before).toEqual(
+				readCatalog(generated)
+					.root.parts.map(({ sha256 }) => `${sha256}.json`)
+					.sort()
+			);
+			const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
+			replaceSource(root, path, '  pricing:\n', datedPrice('2'));
 			expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
-		}
-		expectBuildSuccess(runBuild(root));
-		expect(readdirSync(generated).sort()).toEqual(['catalog.json', 'catalog.parts']);
-		expect(partNames()).toEqual(after);
-		expectBuildSuccess(runBuild(root, ['--check']));
-	});
+			expectBuildSuccess(runBuild(root));
+			const after = partNames();
+			expect(after.filter((name) => !before.includes(name))).toHaveLength(1);
+			expect(before.filter((name) => !after.includes(name))).toHaveLength(1);
+			for (const { sha256, size } of readCatalog(generated).root.parts) {
+				const bytes = readFileSync(join(partsPath, `${sha256}.json`));
+				expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha256);
+				expect(bytes.byteLength).toBe(size);
+			}
+			expectBuildSuccess(runBuild(root, ['--check']));
+
+			const partPath = join(partsPath, after[0]!);
+			const part = readFileSync(partPath, 'utf8');
+			writeFileSync(partPath, part.replace('"schema"', '"schema" '));
+			expect(runBuild(root, ['--check']).output).toContain('Generated catalog artifacts are stale');
+			writeFileSync(partPath, part);
+			expectBuildSuccess(runBuild(root, ['--check']));
+			// Files of no part, and those of an older format, fail the check, and a build removes them.
+			for (const stray of [
+				join(partsPath, `${'0'.repeat(64)}.json`),
+				join(generated, 'catalog.runtime.json'),
+				join(generated, 'catalog.public.parts/part.json')
+			]) {
+				mkdirSync(dirname(stray), { recursive: true });
+				writeFileSync(stray, '{}');
+				expect(runBuild(root, ['--check']).output).toContain(
+					'Generated catalog artifacts are stale'
+				);
+			}
+			expectBuildSuccess(runBuild(root));
+			expect(readdirSync(generated).sort()).toEqual(['catalog.json', 'catalog.parts']);
+			expect(partNames()).toEqual(after);
+			expectBuildSuccess(runBuild(root, ['--check']));
+		},
+		10 * BUILD_TIMEOUT_MS
+	);
 
 	test('compiles a dated period from source into the schedule', () => {
 		const root = catalogCopy();
