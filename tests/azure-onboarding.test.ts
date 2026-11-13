@@ -411,8 +411,8 @@ describe('Azure provider onboarding contract', () => {
 	});
 
 	test('pins GPT prices and retirement for every Azure location, tier, and reasoning mode', () => {
-		// Global input, cached input, and output prices; EU and Asia Pacific Data Zone price in tenths of
-		// Global; retirement.
+		// Global input, cached input, and output prices; EU Data Zone price in tenths of Global;
+		// retirement. US Data Zones cost 1.1 times Global and Asia Pacific Data Zones 1.2 times.
 		const models = {
 			'gpt-5.6-luna': [['0.2', '0.02', '1.2'], 11n, '2028-01-11'],
 			'gpt-5.6-sol': [['4', '0.4', '20'], 11n, '2028-01-11'],
@@ -430,10 +430,11 @@ describe('Azure provider onboarding contract', () => {
 			const regionTenths =
 				deploymentType === 'data_zone_standard_us'
 					? 11n
-					: deploymentType === 'data_zone_standard_eu' ||
-						  deploymentType === 'data_zone_standard_apac'
-						? euTenths
-						: 10n;
+					: deploymentType === 'data_zone_standard_apac'
+						? 12n
+						: deploymentType === 'data_zone_standard_eu'
+							? euTenths
+							: 10n;
 			const [tierNumerator, tierDenominator] =
 				serviceTier === 'fast' ? [2n, 1n] : serviceTier === 'flex' ? [1n, 2n] : [1n, 1n];
 			expect(deployment.pricing).toEqual(
