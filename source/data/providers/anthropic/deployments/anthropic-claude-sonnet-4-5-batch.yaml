@@ -1,0 +1,19 @@
+deployments:
+  modelId: claude-sonnet-4-5
+  routeIds: [anthropic-message-batches]
+  hosting: anthropic
+  upstream:
+    model: claude-sonnet-4-5-20250929
+  # Reviewed 2026-11-13: https://platform.claude.com/docs/en/about-claude/model-deprecations
+  retirementDate: 2026-11-30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1.5'
+    cached_input_tokens:
+      per_mill_tokens: '0.15'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '1.875'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '3'
+    output_tokens:
+      per_mill_tokens: '7.5'

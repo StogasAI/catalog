@@ -1,0 +1,20 @@
+deployments:
+  modelId: claude-opus-4-1
+  routeIds: [anthropic-messages]
+  hosting: anthropic
+  upstream:
+    model: claude-opus-4-1-20250805
+  # Anthropic retired it on August 5, 2026, at these prices.
+  # Reviewed 2026-11-13: https://platform.claude.com/docs/en/about-claude/model-deprecations
+  retirementDate: 2026-08-05
+  pricing:
+    input_tokens:
+      per_mill_tokens: '15'
+    cached_input_tokens:
+      per_mill_tokens: '1.5'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '18.75'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '30'
+    output_tokens:
+      per_mill_tokens: '75'

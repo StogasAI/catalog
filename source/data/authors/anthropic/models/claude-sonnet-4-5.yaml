@@ -1,0 +1,16 @@
+models:
+  authorId: anthropic
+  name: Claude Sonnet 4.5
+  aliases: [claude-sonnet-4-5-20250929, claude-4.5-sonnet]
+  groupIds: [claude-sonnet]
+  contextWindowTokens: 200000
+  maxOutputTokens: 64000
+  inputModalities: [text, image]
+  outputModalities: [text]
+  reasoning: optional
+  reasoningMaxTokens:
+    minimum: 1024
+    maximum: 63999
+  snapshot: 2025-09-29
+  releaseDate: 2025-09-29
+  knowledgeCutoff: 2025-04-01

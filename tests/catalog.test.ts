@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 64, providers: 6, routes: 20, deployments: 554 });
+		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 562 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -137,30 +137,26 @@ describe('compiled catalog', () => {
 		expect(catalog.graph.providers.openai.aliases).toEqual(['open-ai']);
 	});
 
-	test('excludes confirmed shutdowns through the pre-launch cutoff without retiring other providers', () => {
-		expect(catalog.graph.deployments['anthropic-claude-haiku-4-5']).toBeDefined();
+	test('keeps models that their providers retired, with the dates that the providers gave', () => {
 		expect(catalog.graph.deployments['anthropic-claude-opus-4-5'].retirementDate).toBeNull();
-		expect(catalog.graph.deployments['azure-claude-haiku-4-5']).toBeUndefined();
-		expect(catalog.graph.deployments['azure-claude-haiku-4-5-anthropic-hosted']).toBeUndefined();
-		for (const modelId of [
-			'gpt-5-nano-2025-08-07',
-			'claude-sonnet-4-5',
-			'claude-opus-4-1',
-			'gpt-4o-mini-search-preview-2025-03-11',
-			'gpt-4o-search-preview-2025-03-11'
-		]) {
-			expect(catalog.graph.models).not.toHaveProperty(modelId);
-			expect(
-				Object.values(catalog.graph.deployments).some(
-					(deployment) => deployment.modelId === modelId
-				)
-			).toBe(false);
-		}
-		for (const deployment of Object.values(catalog.graph.deployments)) {
+		// Retired before this catalog, retiring within weeks, and a model whose every deployment
+		// has a date, so the model, and a group that holds only such models, retire with them.
+		for (const [deploymentId, date] of [
+			['openai-gpt-4o-search-preview-2025-03-11', '2026-07-23'],
+			['openai-gpt-4o-mini-search-preview-2025-03-11', '2026-07-23'],
+			['anthropic-claude-opus-4-1', '2026-08-05'],
+			['anthropic-claude-sonnet-4-5', '2026-11-30'],
+			['openai-gpt-5-nano-2025-08-07', '2026-12-11'],
+			['openai-gpt-5-nano-2025-08-07-batch', '2026-12-11']
+		])
+			expect(catalog.graph.deployments[deploymentId].retirementDate).toBe(date);
+		const { groups, models } = catalogRoot.summaries;
+		expect(models['claude-opus-4-1'].retirementDate).toBe('2026-08-05');
+		expect(models['gpt-5-nano-2025-08-07'].retirementDate).toBe('2026-12-11');
+		expect(groups['gpt-4o'].retirementDate).toBe('2026-07-23');
+		expect(groups['claude-opus'].retirementDate).toBeNull();
+		for (const deployment of Object.values(catalog.graph.deployments))
 			expect(deployment).toHaveProperty('retirementDate');
-			if (deployment.retirementDate !== null)
-				expect(deployment.retirementDate > '2026-12-31').toBe(true);
-		}
 	});
 
 	test('materializes runtime admission and billing facts', () => {

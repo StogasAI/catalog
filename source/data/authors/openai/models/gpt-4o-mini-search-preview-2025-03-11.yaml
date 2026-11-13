@@ -1,0 +1,18 @@
+models:
+  authorId: openai
+  name: GPT-4o mini Search Preview
+  aliases: [gpt-4o-mini-search-preview]
+  groupIds: [gpt-4o]
+  contextWindowTokens: 128000
+  maxOutputTokens: 16384
+  inputModalities: [text]
+  outputModalities: [text]
+  capabilities:
+    functionCalling: false
+    parallelFunctionCalling: false
+    implicitPromptCaching: false
+    explicitPromptCaching: false
+  reasoning: unsupported
+  snapshot: 2025-03-11
+  releaseDate: 2025-03-11
+  knowledgeCutoff: 2023-10-01
