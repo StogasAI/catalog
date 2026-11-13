@@ -4,6 +4,7 @@ routes:
   interfaces: [responses]
   inputModalities: [text, image]
   # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs#supported-file-types
+  # Live checks on 2026-11-13 also read text/tab-separated-values, which the page omits.
   documentFormats:
     extensions:
       [
@@ -127,6 +128,7 @@ routes:
       - text/plain
       - text/rtf
       - text/srt
+      - text/tab-separated-values
       - text/tsv
       - text/tsx
       - text/vbscript
