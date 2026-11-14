@@ -43,8 +43,12 @@ export function buildCatalogRelease(root = repositoryRoot) {
 		const context = join(work, 'context');
 		mkdirSync(context);
 		const imageFile = join(work, 'image');
+		// The pinned images also come in other architectures, so the build names one. Docker
+		// emulates it on an ARM machine, and every rebuild runs the same tools.
 		run('docker', [
 			'build',
+			'--platform',
+			'linux/amd64',
 			'--quiet',
 			'--iidfile',
 			imageFile,
@@ -57,6 +61,8 @@ export function buildCatalogRelease(root = repositoryRoot) {
 		container = run('docker', [
 			'create',
 			'--init',
+			'--platform',
+			'linux/amd64',
 			'--cap-drop=ALL',
 			'--security-opt=no-new-privileges',
 			'--pids-limit=256',
