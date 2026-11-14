@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-5.4-2026-03-05
   routeIds: [openai-chat-completions, openai-responses]
-  hosting: openai
   upstream:
     model: gpt-5.4-2026-03-05
   pricing:

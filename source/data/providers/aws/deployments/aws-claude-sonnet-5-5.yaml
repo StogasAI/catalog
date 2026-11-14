@@ -5,7 +5,6 @@
 deployments:
   modelId: claude-sonnet-5-5
   routeIds: [aws-bedrock-messages]
-  hosting: aws
   upstream:
     model: global.anthropic.claude-sonnet-5-5
     inferenceGeo: global

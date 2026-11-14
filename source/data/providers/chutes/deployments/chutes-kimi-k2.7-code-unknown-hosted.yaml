@@ -1,7 +1,6 @@
 deployments:
   modelId: kimi-k2.7-code
   routeIds: [chutes-standard-chat-completions]
-  hosting: unknown
   upstream:
     model: moonshotai/Kimi-K2.7-Code
     chuteId: 36e54170-0e13-59b7-8aab-8ed348dabd49

@@ -3,8 +3,8 @@
 // compiler resolved from the model, the route and the deployment's own facts, so the model and
 // the route keep only what the deployment does not state. A route's retirement date is its own:
 // the deployment's date covers all its routes, so the route keeps an earlier date of its own.
-// Each node keeps the notes that it states, where the records of a route and a deployment also
-// repeat the notes above them. Group membership and the model's efforts for each interface are
+// Each node keeps the notes that it states, so a chain shows each note once, on its node; the
+// records of a route and a deployment also repeat the notes of their parents. Group membership and the model's efforts for each interface are
 // not facts of the path: the route's efforts already apply them.
 export function catalogChain(graph, deploymentId, routeId) {
 	const { routes, ...deployment } = requireNode(graph.deployments, deploymentId);
@@ -18,7 +18,7 @@ export function catalogChain(graph, deploymentId, routeId) {
 	const route = requireNode(graph.routes, routeId);
 	return {
 		author: { id: model.authorId, data: requireNode(graph.authors, model.authorId) },
-		model: { id: deployment.modelId, data: unstated(model, served) },
+		model: { id: deployment.modelId, data: { ...unstated(model, served), notes: model.notes } },
 		deployment: { id: deploymentId, data: served },
 		route: {
 			id: routeId,

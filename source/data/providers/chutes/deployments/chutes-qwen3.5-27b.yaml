@@ -1,7 +1,6 @@
 deployments:
   modelId: qwen3.5-27b
   routeIds: [chutes-chat-completions]
-  hosting: chutes
   upstream:
     model: Qwen/Qwen3.5-27B-TEE
     chuteId: d24fc0ce-25e3-5377-8e8a-af99ee9bb70d

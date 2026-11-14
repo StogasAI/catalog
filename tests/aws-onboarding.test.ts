@@ -149,7 +149,7 @@ function deployment(
 		pricing,
 		retirementDate: null,
 		routeIds: ['aws-bedrock-messages'],
-		hosting: 'aws',
+		hosting: 'amazon',
 		upstream: { ...upstream, serviceTier: 'standard' }
 	};
 }
@@ -252,7 +252,9 @@ const platformHostedTools: ProviderRouteContract['hostedTools'] = [
 			processingLocation: 'unknown',
 			retentionDays: null,
 			storageLocation: 'unknown',
-			zeroDataRetention: false
+			zeroDataRetention: false,
+			// Website publishers receive the URLs that the tool fetches.
+			sharedWith: ['unknown']
 		},
 		tool: 'web_fetch'
 	}
@@ -261,7 +263,6 @@ const formats = {
 	extensions: ['.csv', '.md', '.pdf', '.txt'],
 	mediaTypes: ['application/pdf', 'text/plain']
 };
-const batchNotes = 'The gateway has no batch API and serves each request as it arrives.';
 
 describe('AWS onboarding contract', () => {
 	test('pins the Claude routes and every deployment', () => {
@@ -271,6 +272,7 @@ describe('AWS onboarding contract', () => {
 				capabilities,
 				credentialModes: ['byok'],
 				dataHandling: providerHandling,
+				companyId: 'amazon',
 				headquarteredCountry: 'US',
 				id: 'aws',
 				name: 'AWS'
@@ -288,7 +290,6 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-bedrock-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes: batchNotes,
 					batch: true,
 					stogasSupported: false
 				},
@@ -310,7 +311,6 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-claude-platform-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes: batchNotes,
 					batch: true,
 					stogasSupported: false
 				}

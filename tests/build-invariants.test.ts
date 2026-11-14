@@ -52,9 +52,12 @@ function sourceFixture() {
 				parentIds?: string[];
 			}
 		>,
+		companies: {
+			openai: { name: 'OpenAI', headquarteredCountry: 'US' }
+		} as Record<string, { name: string; headquarteredCountry: string }>,
 		graph: {
 			authors: {
-				openai: { name: 'OpenAI', headquarteredCountry: 'US' }
+				openai: { name: 'OpenAI', companyId: 'openai' }
 			},
 			models: {
 				'gpt-test': {
@@ -75,7 +78,7 @@ function sourceFixture() {
 				openai: {
 					name: 'OpenAI',
 					credentialModes: ['byok'],
-					headquarteredCountry: 'US',
+					companyId: 'openai',
 					accountLocations: ['DE', 'US'] as string[] | undefined,
 					capabilities: structuredClone(capabilities),
 					dataHandling: {
@@ -95,7 +98,8 @@ function sourceFixture() {
 					endpoint: 'https://api.openai.com/v1/responses',
 					interfaces: ['responses'],
 					inputModalities: ['text', 'image'],
-					documentFormats: { extensions: [] as string[], mediaTypes: [] as string[] },
+					hosting: undefined as string | undefined,
+					documentFormats: undefined as { extensions: string[]; mediaTypes: string[] } | undefined,
 					dataHandling: { endToEndEncrypted: false },
 					hostedTools: [] as Array<Record<string, unknown>>
 				}
@@ -104,8 +108,7 @@ function sourceFixture() {
 				'openai-gpt-test': {
 					modelId: 'gpt-test',
 					routeIds: ['openai-responses'],
-					hosting: 'openai' as string | undefined,
-					via: undefined as string[] | undefined,
+					hosting: undefined as string | undefined,
 					upstream: { model: 'gpt-test' } as Record<string, unknown>,
 					pricing: {
 						input_tokens: { per_mill_tokens: '1' },
@@ -143,14 +146,19 @@ function addSecondOpenAIRoute(source: Source) {
 		endpoint: 'https://api.openai.com/v1/chat/completions',
 		interfaces: ['chat_completions'],
 		inputModalities: ['text', 'image'],
-		documentFormats: { extensions: [], mediaTypes: [] },
 		dataHandling: { endToEndEncrypted: false }
 	};
 }
 
-function asAzure(source: Source) {
-	source.graph.providers.azure = source.graph.providers.openai;
+/** The fixture's provider under another ID, as the offering of another company. */
+function asProvider(source: Source, providerId: string, companyId: string, name: string) {
+	source.companies[companyId] = { name, headquarteredCountry: 'US' };
+	source.graph.providers[providerId] = { ...source.graph.providers.openai, companyId };
 	delete source.graph.providers.openai;
+}
+
+function asAzure(source: Source) {
+	asProvider(source, 'azure', 'microsoft', 'Microsoft');
 	source.graph.routes['azure-responses'] = {
 		...source.graph.routes['openai-responses'],
 		providerId: 'azure'
@@ -159,7 +167,6 @@ function asAzure(source: Source) {
 	source.graph.deployments['azure-gpt-test'] = {
 		...source.graph.deployments['openai-gpt-test'],
 		routeIds: ['azure-responses'],
-		hosting: 'azure',
 		upstream: {
 			model: 'gpt-test',
 			modelFormat: 'OpenAI',
@@ -171,17 +178,15 @@ function asAzure(source: Source) {
 }
 
 function asAnthropic(source: Source) {
-	source.graph.providers.anthropic = source.graph.providers.openai;
-	delete source.graph.providers.openai;
+	asProvider(source, 'anthropic', 'anthropic', 'Anthropic');
 	source.graph.routes['anthropic-messages'] = {
 		...source.graph.routes['openai-responses'],
 		providerId: 'anthropic'
 	};
 	delete source.graph.routes['openai-responses'];
-	source.graph.deployments['anthropic-gpt-test'] = {
+	source.graph.deployments['anthropic-gpt-test-us'] = {
 		...source.graph.deployments['openai-gpt-test'],
 		routeIds: ['anthropic-messages'],
-		hosting: 'anthropic',
 		upstream: { model: 'gpt-test', inferenceGeo: 'us' }
 	};
 	delete source.graph.deployments['openai-gpt-test'];
@@ -189,7 +194,8 @@ function asAnthropic(source: Source) {
 
 function asAzureClaude(source: Source) {
 	asAzure(source);
-	source.graph.authors.anthropic = { name: 'Anthropic', headquarteredCountry: 'US' };
+	source.companies.anthropic = { name: 'Anthropic', headquarteredCountry: 'US' };
+	source.graph.authors.anthropic = { name: 'Anthropic', companyId: 'anthropic' };
 	source.graph.models['gpt-test'].authorId = 'anthropic';
 	source.graph.routes['azure-anthropic-messages'] = {
 		...source.graph.routes['azure-responses'],
@@ -263,7 +269,7 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				(value) => {
-					value.graph.authors.other = { name: 'Other' };
+					value.graph.authors.other = { name: 'Other', companyId: 'openai' };
 					value.graph.groups.leaf.authorId = 'other';
 				},
 				'another author'
@@ -296,6 +302,7 @@ describe('catalog source compiler invariants', () => {
 		expect(catalogs.graph.providers.openai).toEqual({
 			accountLocations: ['DE', 'US'],
 			aliases: [],
+			companyId: 'openai',
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
 			name: 'OpenAI',
@@ -314,7 +321,7 @@ describe('catalog source compiler invariants', () => {
 		const compiled = buildCatalog(source).graph as unknown as typeof graph;
 		const plain = buildCatalog(sourceFixture()).graph as unknown as typeof graph;
 		const note = (kind: string) => ({ kind, id: Object.keys(compiled[`${kind}s`])[0], text });
-		// A route also holds its provider's notes, and a deployment those of its routes.
+		// A route also holds its provider's notes, and a deployment those of its routes and its model.
 		expect(Object.values(compiled.authors)[0].notes).toEqual([note('author')]);
 		expect(Object.values(compiled.models)[0].notes).toEqual([note('model')]);
 		expect(Object.values(compiled.providers)[0].notes).toEqual([note('provider')]);
@@ -322,6 +329,7 @@ describe('catalog source compiler invariants', () => {
 		expect(Object.values(compiled.deployments)[0].notes).toEqual([
 			note('provider'),
 			note('route'),
+			note('model'),
 			note('deployment')
 		]);
 		for (const kind of kinds)
@@ -385,7 +393,6 @@ describe('catalog source compiler invariants', () => {
 			processingLocation: 'eu',
 			storageLocation: 'US-CA'
 		});
-		Object.assign(source.graph.authors.openai, { headquarteredCountry: 'US' });
 		const { locations } = buildCatalog(source);
 		expect(Object.keys(locations)).toEqual(Object.keys(locations).sort());
 		expect(locations.world).toEqual({ name: 'World', kind: 'world', parentIds: [] });
@@ -562,14 +569,12 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				'unlisted headquarters',
-				(source: Source) =>
-					Object.assign(source.graph.authors.openai, { headquarteredCountry: 'FR' }),
+				(source: Source) => Object.assign(source.companies.openai, { headquarteredCountry: 'FR' }),
 				'headquarteredCountry names a country that locations does not list'
 			],
 			[
 				'region as headquarters',
-				(source: Source) =>
-					Object.assign(source.graph.authors.openai, { headquarteredCountry: 'eu' }),
+				(source: Source) => Object.assign(source.companies.openai, { headquarteredCountry: 'eu' }),
 				'headquarteredCountry names a country that locations does not list'
 			]
 		]);
@@ -742,7 +747,6 @@ describe('catalog source compiler invariants', () => {
 			...structuredClone(deployments['openai-gpt-test']),
 			modelId: 'gpt-only',
 			routeIds: ['openai-chat-completions'],
-			hosting: 'openai',
 			upstream: { model: 'gpt-only' }
 		};
 		Object.assign(routes['openai-chat-completions'], { retirementDate: '2026-08-01' });
@@ -783,7 +787,6 @@ describe('catalog source compiler invariants', () => {
 			...structuredClone(deployments['openai-gpt-test']),
 			modelId: 'gpt-batch',
 			routeIds: ['openai-chat-completions'],
-			hosting: 'openai',
 			upstream: { model: 'gpt-batch' }
 		};
 		const batch = 'The gateway has no batch API.';
@@ -1054,14 +1057,12 @@ describe('catalog source compiler invariants', () => {
 		models['gpt-listed'] = { ...models['gpt-test'], name: 'GPT Listed' };
 		deployments['openai-gpt-test-flex'] = {
 			...structuredClone(deployment),
-			hosting: 'openai',
 			upstream: { model: 'gpt-test', serviceTier: 'flex' },
 			retirementDate: '2026-09-01'
 		};
 		deployments['openai-gpt-other'] = {
 			...structuredClone(deployment),
 			modelId: 'gpt-other',
-			hosting: 'openai',
 			upstream: { model: 'gpt-other' },
 			retirementDate: '2026-05-01'
 		};
@@ -1539,7 +1540,8 @@ describe('catalog source compiler invariants', () => {
 			trainingUse: null,
 			zeroDataRetention: false,
 			tee: false,
-			teeVerified: false
+			teeVerified: false,
+			sharedWith: []
 		});
 		expect(
 			graph.deployments['openai-gpt-test'].routes['openai-responses'].dataHandling
@@ -1596,15 +1598,15 @@ describe('catalog source compiler invariants', () => {
 
 		function chutesSource(
 			routeId: string,
-			hosting: string | undefined,
 			upstream: Record<string, unknown>,
 			id = 'chutes-gpt-test'
 		) {
 			return changed((source) => {
+				source.companies.chutes = { name: 'Chutes', headquarteredCountry: 'US' };
 				source.graph.providers.chutes = {
 					name: 'Chutes',
 					credentialModes: ['managed'],
-					headquarteredCountry: 'US',
+					companyId: 'chutes',
 					capabilities: structuredClone(capabilities),
 					dataHandling: {
 						processingLocation: 'world',
@@ -1621,23 +1623,22 @@ describe('catalog source compiler invariants', () => {
 					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					interfaces: ['chat_completions'],
 					inputModalities: ['text'],
-					documentFormats: { extensions: [], mediaTypes: [] },
 					dataHandling: { endToEndEncrypted: true },
 					hostedTools: []
 				};
 				source.graph.routes['chutes-standard-chat-completions'] = {
 					providerId: 'chutes',
+					hosting: 'unknown',
 					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
 					interfaces: ['chat_completions'],
 					inputModalities: ['text'],
-					documentFormats: { extensions: [], mediaTypes: [] },
 					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },
 					hostedTools: []
 				};
 				source.graph.deployments[id] = {
 					modelId: 'gpt-test',
 					routeIds: [routeId],
-					hosting,
+					hosting: undefined,
 					upstream: { model: 'org/gpt-test', chuteId, ...upstream } as never,
 					pricing: {
 						input_tokens: { per_mill_tokens: '1' },
@@ -1663,7 +1664,8 @@ describe('catalog source compiler invariants', () => {
 				id: 'chutes-gpt-test-unknown-hosted'
 			}
 		])('accepts a deployment that $name', ({ routeId, hosting, upstream, id }) => {
-			const { graph } = buildCatalog(chutesSource(routeId, hosting, upstream, id));
+			const { graph } = buildCatalog(chutesSource(routeId, upstream, id));
+			// The route says who runs its deployments.
 			expect(graph.deployments[id].hosting).toBe(hosting);
 			expect(graph.deployments[id].upstream).toEqual({
 				model: 'org/gpt-test',
@@ -1674,49 +1676,30 @@ describe('catalog source compiler invariants', () => {
 		});
 
 		test.each([
-			['an encrypted route without a GPU count', 'chutes-chat-completions', 'chutes', {}],
+			['an encrypted route without a GPU count', 'chutes-chat-completions', {}, 'chutes-gpt-test'],
 			[
 				'a standard route with a GPU count',
 				'chutes-standard-chat-completions',
-				'unknown',
-				{ gpuCount: 8 }
+				{ gpuCount: 8 },
+				'chutes-gpt-test-unknown-hosted'
 			]
-		])('rejects %s', (_name, routeId, hosting, upstream) => {
-			expect(() => buildCatalog(chutesSource(routeId, hosting, upstream))).toThrow(
-				'chutes-gpt-test: upstream selector does not match provider chutes'
+		])('rejects %s', (_name, routeId, upstream, id) => {
+			expect(() => buildCatalog(chutesSource(routeId, upstream, id))).toThrow(
+				`${id}: upstream selector does not match provider chutes`
 			);
 		});
 
-		test('rejects a deployment without a hosting', () => {
-			expect(() =>
-				buildCatalog(chutesSource('chutes-standard-chat-completions', undefined, {}))
-			).toThrow('chutes-gpt-test: hosting is required');
-		});
-
-		test.each([
-			[
-				'a standard deployment whose operator is named',
-				'chutes-standard-chat-completions',
-				'anthropic',
-				{},
-				'requires hosting unknown'
-			],
-			[
-				'an encrypted deployment that another operator runs',
-				'chutes-chat-completions',
-				'unknown',
-				{ gpuCount: 8 },
-				'requires hosting chutes'
-			]
-		])('rejects %s', (_name, routeId, hosting, upstream, message) => {
-			expect(() => buildCatalog(chutesSource(routeId, hosting, upstream))).toThrow(message);
-		});
-
 		test('rejects a deployment whose routes take different selectors', () => {
-			const source = chutesSource('chutes-chat-completions', 'chutes', { gpuCount: 8 });
+			const source = chutesSource('chutes-chat-completions', { gpuCount: 8 });
 			// Both routes serve chat completions, so the deployment needs a route of another interface.
 			source.graph.routes['chutes-standard-chat-completions'].interfaces = ['responses'];
-			source.graph.deployments['chutes-gpt-test'].routeIds.push('chutes-standard-chat-completions');
+			const deployment = source.graph.deployments['chutes-gpt-test'];
+			deployment.routeIds.push('chutes-standard-chat-completions');
+			// The routes name different hostings, so the deployment must name its own.
+			expect(() => buildCatalog(source)).toThrow(
+				'chutes-gpt-test: its routes name different hostings, so name its own'
+			);
+			deployment.hosting = 'chutes';
 			expect(() => buildCatalog(source)).toThrow(
 				'chutes-gpt-test: upstream selector does not match provider chutes'
 			);
@@ -1981,6 +1964,7 @@ describe('catalog source compiler invariants', () => {
 		const source = changed(asAzure);
 		const deployment = source.graph.deployments['azure-gpt-test'];
 		deployment.hosting = 'fireworks';
+		source.companies.fireworks = { name: 'Fireworks AI', headquarteredCountry: 'US' };
 		Object.assign(deployment.upstream, {
 			modelFormat: 'Fireworks',
 			deploymentType: 'data_zone_standard_us'
@@ -2000,128 +1984,167 @@ describe('catalog source compiler invariants', () => {
 		expect(buildCatalog(pro).graph.deployments['openai-gpt-test-pro-flex']).toBeDefined();
 	});
 
-	describe('lists every company that receives a request', () => {
-		function relayed(
-			hosting: string,
-			via: string[] | undefined,
-			id: string,
-			sharedWith?: string[]
-		) {
+	describe('names who runs a deployment and who else receives its requests', () => {
+		const company = { headquarteredCountry: 'US' };
+
+		/** Azure's deployment with a hosting of its own, under the ID that the hosting gives it. */
+		function hosted(hosting: string | undefined, id: string, mutate?: Mutator) {
 			return changed((source) => {
 				asAzure(source);
 				const deployment = source.graph.deployments['azure-gpt-test'];
-				Object.assign(deployment, { hosting, via, sharedWith });
+				deployment.hosting = hosting;
+				if (hosting && hosting !== 'unknown' && hosting !== 'microsoft')
+					source.companies[hosting] = { name: hosting, ...company };
 				source.graph.deployments = { [id]: deployment };
+				mutate?.(source);
 			});
 		}
 
-		test('names the provider alone when it runs the model, and the hosting after it', () => {
-			const own = buildCatalog(relayed('azure', undefined, 'azure-gpt-test')).graph;
-			expect(own.deployments['azure-gpt-test']).toMatchObject({
-				hosting: 'azure',
-				companies: ['azure']
+		test("takes the provider's company when no record names another", () => {
+			const { graph, companies } = buildCatalog(hosted(undefined, 'azure-gpt-test'));
+			expect(graph.deployments['azure-gpt-test'].hosting).toBe('microsoft');
+			expect(graph.deployments['azure-gpt-test']).not.toHaveProperty('companies');
+			// A route's record states no hosting, because a deployment can name another.
+			expect(graph.routes['azure-responses']).not.toHaveProperty('hosting');
+			expect(graph.providers.azure).toMatchObject({
+				companyId: 'microsoft',
+				headquarteredCountry: 'US'
 			});
-			expect(own.deployments['azure-gpt-test']).not.toHaveProperty('via');
-			const resold = buildCatalog(
-				relayed('anthropic', undefined, 'azure-gpt-test-anthropic-hosted')
-			);
-			expect(resold.graph.deployments['azure-gpt-test-anthropic-hosted'].companies).toEqual([
-				'azure',
-				'anthropic'
-			]);
+			expect(companies.microsoft).toEqual({ name: 'Microsoft', headquarteredCountry: 'US' });
 		});
 
 		test.each([
-			[['fireworks'], 'anthropic', 'azure-gpt-test-via-fireworks-anthropic-hosted'],
-			[
-				['fireworks', 'unknown'],
-				'anthropic',
-				'azure-gpt-test-via-fireworks-via-unknown-anthropic-hosted'
-			],
-			[['fireworks'], 'unknown', 'azure-gpt-test-via-fireworks-unknown-hosted']
-		])('keeps %p in request order before %s and names each in the ID', (via, hosting, id) => {
-			const { graph } = buildCatalog(relayed(hosting, via, id));
-			expect(graph.deployments[id]).toMatchObject({
-				hosting,
-				companies: ['azure', ...via, hosting]
+			['anthropic', 'azure-gpt-test-anthropic-hosted'],
+			['unknown', 'azure-gpt-test-unknown-hosted']
+		])('names %s in the ID of a deployment that names it', (hosting, id) => {
+			expect(buildCatalog(hosted(hosting, id)).graph.deployments[id].hosting).toBe(hosting);
+		});
+
+		test('gives every deployment of a route the hosting that the route names', () => {
+			const id = 'azure-gpt-test-anthropic-hosted';
+			const source = hosted(undefined, id, (candidate) => {
+				candidate.companies.anthropic = { name: 'Anthropic', ...company };
+				candidate.graph.routes['azure-responses'].hosting = 'anthropic';
 			});
+			expect(buildCatalog(source).graph.deployments[id].hosting).toBe('anthropic');
+			// A deployment can still name another.
+			source.companies.fireworks = { name: 'Fireworks AI', ...company };
+			source.graph.deployments = {
+				...source.graph.deployments,
+				'azure-gpt-test-fireworks-hosted': {
+					...source.graph.deployments[id],
+					hosting: 'fireworks'
+				}
+			};
+			expect(
+				buildCatalog(source).graph.deployments['azure-gpt-test-fireworks-hosted'].hosting
+			).toBe('fireworks');
 		});
 
 		test.each([
 			[
-				'a provider that runs the model itself',
-				'azure',
-				['fireworks'],
-				'azure-gpt-test-via-fireworks'
+				"a route that repeats its provider's company",
+				hosted(undefined, 'azure-gpt-test', (source) => {
+					source.graph.routes['azure-responses'].hosting = 'microsoft';
+				}),
+				"azure-responses.hosting redundantly repeats its provider's company"
 			],
 			[
-				'a company named twice',
-				'anthropic',
-				['fireworks', 'fireworks'],
-				'azure-gpt-test-anthropic-hosted'
+				"a deployment that repeats its route's hosting",
+				hosted('microsoft', 'azure-gpt-test'),
+				"azure-gpt-test.hosting redundantly repeats its route's hosting"
 			],
-			['the provider', 'anthropic', ['azure'], 'azure-gpt-test-anthropic-hosted'],
-			['the hosting', 'anthropic', ['anthropic'], 'azure-gpt-test-anthropic-hosted'],
 			[
-				'unknown before a hosting of unknown',
-				'unknown',
-				['unknown'],
-				'azure-gpt-test-unknown-hosted'
+				'a hosting that companies does not list',
+				hosted('anthropic', 'azure-gpt-test-anthropic-hosted', (source) => {
+					delete source.companies.anthropic;
+				}),
+				'azure-gpt-test-anthropic-hosted: companies does not list the hosting anthropic'
+			],
+			[
+				'a company that no record names',
+				hosted(undefined, 'azure-gpt-test', (source) => {
+					source.companies.fireworks = { name: 'Fireworks AI', ...company };
+				}),
+				'Company fireworks: no record names it, so remove it'
+			],
+			[
+				'a provider whose company is not listed',
+				hosted(undefined, 'azure-gpt-test', (source) => {
+					delete source.companies.microsoft;
+				}),
+				'provider azure: companies does not list microsoft'
 			]
-		])('rejects %s', (_name, hosting, via, id) => {
-			expect(() => buildCatalog(relayed(hosting, via, id))).toThrow(
-				`${id}: via names each company between the provider and the hosting once`
+		])('rejects %s', (_name, source, message) => {
+			expect(() => buildCatalog(source)).toThrow(message);
+		});
+
+		test('lists the companies that requests are shared with on each record that states them', () => {
+			const shared = (source: Source, sharedWith: string[]) => {
+				for (const id of sharedWith)
+					if (id !== 'unknown') source.companies[id] = { name: id, ...company };
+			};
+			// A provider's list holds on its routes and deployments.
+			const provider = hosted(undefined, 'azure-gpt-test', (source) => {
+				shared(source, ['anthropic']);
+				Object.assign(source.graph.providers.azure.dataHandling, { sharedWith: ['anthropic'] });
+			});
+			const sharedWith = (source: Source, id = 'azure-gpt-test') =>
+				buildCatalog(source).graph.deployments[id].routes['azure-responses'].dataHandling
+					.sharedWith;
+			expect(sharedWith(provider)).toEqual(['anthropic']);
+			// A route's list replaces it, and a deployment's replaces that.
+			shared(provider, ['fireworks']);
+			Object.assign(provider.graph.routes['azure-responses'].dataHandling, {
+				sharedWith: ['fireworks', 'unknown']
+			});
+			expect(() => buildCatalog(provider)).toThrow(
+				'Company anthropic: no record names it, so remove it'
 			);
+			provider.graph.deployments['azure-gpt-test'].overrides = {
+				dataHandling: { sharedWith: [] }
+			};
+			expect(() => buildCatalog(provider)).toThrow(
+				'Company anthropic: no record names it, so remove it'
+			);
+			provider.graph.deployments['azure-gpt-test'].overrides = {
+				dataHandling: { sharedWith: ['anthropic', 'fireworks', 'unknown'] }
+			};
+			expect(sharedWith(provider)).toEqual(['anthropic', 'fireworks', 'unknown']);
+			// A record that states none has an empty list.
+			expect(sharedWith(hosted(undefined, 'azure-gpt-test'))).toEqual([]);
 		});
 
 		test.each([
-			['azure', undefined, 'azure-gpt-test', ['openai'], ['azure', 'openai']],
-			[
-				'anthropic',
-				['fireworks'],
-				'azure-gpt-test-via-fireworks-anthropic-hosted',
-				['openai', 'unknown'],
-				['azure', 'fireworks', 'anthropic', 'openai', 'unknown']
-			]
-		])(
-			'lists the companies that %s shares requests with after it',
-			(hosting, via, id, sharedWith, companies) => {
-				const { graph } = buildCatalog(relayed(hosting, via, id, sharedWith));
-				expect(graph.deployments[id].companies).toEqual(companies);
-			}
-		);
-
-		test.each([
-			['the provider', 'anthropic', undefined, ['azure']],
-			['the hosting', 'anthropic', undefined, ['anthropic']],
-			['a company between the provider and the hosting', 'anthropic', ['fireworks'], ['fireworks']],
-			['a company twice', 'anthropic', undefined, ['openai', 'openai']]
-		])('rejects sharing with %s', (_name, hosting, via, sharedWith) => {
-			const id = [
-				'azure-gpt-test',
-				...(via ?? []).map((company) => `via-${company}`),
-				'anthropic-hosted'
-			].join('-');
-			expect(() => buildCatalog(relayed(hosting, via, id, sharedWith))).toThrow(
-				`${id}: sharedWith names each other company that the hosting shares requests with once`
-			);
+			["the provider's company", 'anthropic', ['microsoft']],
+			['the hosting', 'anthropic', ['anthropic']],
+			['a company twice', 'anthropic', ['openai', 'openai']],
+			['companies out of order', 'anthropic', ['unknown', 'openai']],
+			['a company that companies does not list', 'anthropic', ['fireworks']]
+		])('rejects sharing with %s', (_name, hosting, sharedWith) => {
+			const id = 'azure-gpt-test-anthropic-hosted';
+			const source = hosted(hosting, id, (candidate) => {
+				candidate.graph.deployments[id].overrides = { dataHandling: { sharedWith } };
+			});
+			expect(() => buildCatalog(source)).toThrow(`${id} on azure-responses: sharedWith`);
 		});
 
-		test('gives two paths to one hosting their own IDs', () => {
-			const source = relayed(
-				'anthropic',
-				['fireworks'],
-				'azure-gpt-test-via-fireworks-anthropic-hosted'
+		test('lists the companies that a hosted tool sends content to', () => {
+			const source = changed((candidate) => {
+				candidate.graph.routes['openai-responses'].hostedTools = [
+					{ tool: 'mcp', dataHandling: { sharedWith: ['unknown'] } }
+				];
+			});
+			const { graph } = buildCatalog(source);
+			expect(
+				graph.deployments['openai-gpt-test'].routes['openai-responses'].hostedTools.mcp.dataHandling
+			).toEqual({ sharedWith: ['unknown'] });
+			source.graph.routes['openai-responses'].hostedTools = [
+				{ tool: 'mcp', dataHandling: { sharedWith: ['fireworks'] } }
+			];
+			expect(() => buildCatalog(source)).toThrow(
+				'openai-responses.hostedTools[0]: sharedWith must list companies'
 			);
-			const direct = structuredClone(
-				source.graph.deployments['azure-gpt-test-via-fireworks-anthropic-hosted']
-			);
-			delete direct.via;
-			source.graph.deployments['azure-gpt-test-anthropic-hosted'] = direct;
-			expect(Object.keys(buildCatalog(source).graph.deployments)).toEqual([
-				'azure-gpt-test-via-fireworks-anthropic-hosted',
-				'azure-gpt-test-anthropic-hosted'
-			]);
 		});
 	});
 
@@ -2146,23 +2169,119 @@ describe('catalog source compiler invariants', () => {
 			asAzure(source);
 			const deployment = source.graph.deployments['azure-gpt-test'];
 			deployment.upstream.deploymentType = 'instant';
-			deployment.overrides = { dataHandling: { retentionDays: null, trainingUse: null } };
 			source.graph.deployments = { 'azure-gpt-test-instant': deployment };
 		});
 		expect(buildCatalog(instant).graph.deployments['azure-gpt-test-instant']).toBeDefined();
 
 		const batch = changed((source) => {
 			asAzure(source);
-			Object.assign(source.graph.routes['azure-responses'], {
-				batch: true,
-				notes: 'The gateway has no batch API.'
-			});
+			source.graph.routes['azure-responses'].batch = true;
 			const deployment = source.graph.deployments['azure-gpt-test'];
 			deployment.upstream.deploymentType = 'data_zone_batch_us';
-			deployment.overrides = { dataHandling: { processingLocation: 'US', storageLocation: 'US' } };
 			source.graph.deployments = { 'azure-gpt-test-batch-us': deployment };
 		});
 		expect(buildCatalog(batch).graph.deployments['azure-gpt-test-batch-us']).toBeDefined();
+	});
+
+	describe('takes the data handling that upstream fields decide', () => {
+		const handling = (source: Source, id: string, routeId: string) =>
+			buildCatalog(source).graph.deployments[id].routes[routeId].dataHandling;
+
+		/** Azure's deployment with other upstream fields, under the ID that they give it. */
+		function azure(upstream: Record<string, string>, id: string, mutate?: Mutator) {
+			return changed((source) => {
+				asAzure(source);
+				const deployment = source.graph.deployments['azure-gpt-test'];
+				Object.assign(deployment.upstream, upstream);
+				source.graph.deployments = { [id]: deployment };
+				mutate?.(source);
+			});
+		}
+
+		test('an inference geography says where inference runs', () => {
+			expect(
+				handling(changed(asAnthropic), 'anthropic-gpt-test-us', 'anthropic-messages')
+			).toMatchObject({ processingLocation: 'US', storageLocation: 'unknown' });
+			// Anthropic runs a request that names no geography anywhere in the world.
+			const global = changed((source) => {
+				asAnthropic(source);
+				const deployment = source.graph.deployments['anthropic-gpt-test-us'];
+				delete deployment.upstream.inferenceGeo;
+				source.graph.routes['anthropic-messages'].dataHandling.processingLocation = 'US';
+				source.graph.deployments = { 'anthropic-gpt-test': deployment };
+			});
+			expect(handling(global, 'anthropic-gpt-test', 'anthropic-messages')).toMatchObject({
+				processingLocation: 'world'
+			});
+		});
+
+		test('an Azure Data Zone that Microsoft runs keeps processing and storage in its zone', () => {
+			const id = 'azure-gpt-test-eu';
+			expect(
+				handling(azure({ deploymentType: 'data_zone_standard_eu' }, id), id, 'azure-responses')
+			).toMatchObject({ processingLocation: 'europe', storageLocation: 'europe' });
+			// Another company's Data Zone states its own locations.
+			const other = 'azure-gpt-test-fireworks-hosted-us';
+			const fireworks = azure(
+				{ deploymentType: 'data_zone_standard_us', modelFormat: 'Fireworks' },
+				other,
+				(source) => {
+					source.companies.fireworks = { name: 'Fireworks AI', headquarteredCountry: 'US' };
+					source.graph.deployments[other].hosting = 'fireworks';
+				}
+			);
+			expect(handling(fireworks, other, 'azure-responses')).toMatchObject({
+				processingLocation: 'world',
+				storageLocation: 'unknown'
+			});
+		});
+
+		test.each([
+			['Instant', { deploymentType: 'instant' }, 'azure-gpt-test-instant'],
+			['Flex', { serviceTier: 'flex' }, 'azure-gpt-test-flex']
+		])('Azure %s leaves storage, retention and training unknown', (_name, upstream, id) => {
+			expect(handling(azure(upstream, id), id, 'azure-responses')).toMatchObject({
+				processingLocation: 'world',
+				storageLocation: 'unknown',
+				retentionDays: null,
+				trainingUse: null
+			});
+		});
+
+		testRejections([
+			[
+				'an override of where an inference geography runs',
+				(source: Source) => {
+					asAnthropic(source);
+					source.graph.deployments['anthropic-gpt-test-us'].overrides = {
+						dataHandling: { processingLocation: 'world' }
+					};
+				},
+				'anthropic-gpt-test-us.overrides.dataHandling.processingLocation follows from its upstream fields'
+			],
+			[
+				'an override of where a Data Zone stores',
+				(source: Source) => {
+					asAzure(source);
+					const deployment = source.graph.deployments['azure-gpt-test'];
+					deployment.upstream.deploymentType = 'data_zone_standard_us';
+					deployment.overrides = { dataHandling: { storageLocation: 'world' } };
+					source.graph.deployments = { 'azure-gpt-test-us': deployment };
+				},
+				'azure-gpt-test-us.overrides.dataHandling.storageLocation follows from its upstream fields'
+			],
+			[
+				'an override of what Azure Instant retains',
+				(source: Source) => {
+					asAzure(source);
+					const deployment = source.graph.deployments['azure-gpt-test'];
+					deployment.upstream.deploymentType = 'instant';
+					deployment.overrides = { dataHandling: { retentionDays: 0 } };
+					source.graph.deployments = { 'azure-gpt-test-instant': deployment };
+				},
+				'azure-gpt-test-instant.overrides.dataHandling.retentionDays follows from its upstream fields'
+			]
+		]);
 	});
 
 	describe('rejects contradictory Azure target structures', () => {
@@ -2183,7 +2302,6 @@ describe('catalog source compiler invariants', () => {
 				(source: Source) => {
 					asAzureClaude(source);
 					source.graph.deployments['azure-gpt-test'].upstream.modelFormat = 'OpenAI';
-					source.graph.deployments['azure-gpt-test'].hosting = 'azure';
 				},
 				'only Azure Anthropic-format models use the Azure Anthropic Messages route'
 			],
@@ -2200,15 +2318,6 @@ describe('catalog source compiler invariants', () => {
 				'only Azure Anthropic-format models use the Azure Anthropic Messages route'
 			],
 			[
-				'Azure US Data Zone with world handling',
-				(source: Source) => {
-					asAzure(source);
-					source.graph.deployments['azure-gpt-test'].upstream.deploymentType =
-						'data_zone_standard_us';
-				},
-				'a Data Zone deployment must keep processing and storage in its zone'
-			],
-			[
 				'Azure batch type on a route that is not batch',
 				(source: Source) => {
 					asAzure(source);
@@ -2220,43 +2329,9 @@ describe('catalog source compiler invariants', () => {
 				'Azure Global Standard on a batch route',
 				(source: Source) => {
 					asAzure(source);
-					Object.assign(source.graph.routes['azure-responses'], {
-						batch: true,
-						notes: 'The gateway has no batch API.'
-					});
+					source.graph.routes['azure-responses'].batch = true;
 				},
 				'azure-gpt-test: only an Azure batch deployment type serves batch routes'
-			],
-			[
-				'Azure Instant with standard handling',
-				(source: Source) => {
-					asAzure(source);
-					source.graph.deployments['azure-gpt-test'].upstream.deploymentType = 'instant';
-				},
-				'Azure Instant and Flex previews must leave storage, retention and training unknown'
-			],
-			[
-				'Azure Flex with standard handling',
-				(source: Source) => {
-					asAzure(source);
-					source.graph.deployments['azure-gpt-test'].upstream.serviceTier = 'flex';
-				},
-				'Azure Instant and Flex previews must leave storage, retention and training unknown'
-			],
-			[
-				'Anthropic US geography with world handling',
-				asAnthropic,
-				'processingLocation must match upstream inferenceGeo'
-			],
-			[
-				'Anthropic US handling without a US geography',
-				(source: Source) => {
-					asAnthropic(source);
-					const deployment = source.graph.deployments['anthropic-gpt-test'];
-					deployment.upstream.inferenceGeo = 'global';
-					deployment.overrides = { dataHandling: { processingLocation: 'US' } };
-				},
-				'processingLocation must match upstream inferenceGeo'
 			],
 			[
 				'service tier on a model format without tiers',
@@ -2274,7 +2349,6 @@ describe('catalog source compiler invariants', () => {
 		function addFast(source: Source) {
 			source.graph.deployments['openai-gpt-test-fast'] = {
 				...structuredClone(source.graph.deployments['openai-gpt-test']),
-				hosting: 'openai',
 				upstream: { model: 'gpt-test', serviceTier: 'fast' }
 			};
 		}

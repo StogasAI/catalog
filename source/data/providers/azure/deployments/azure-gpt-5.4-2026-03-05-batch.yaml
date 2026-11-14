@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-5.4-2026-03-05
   routeIds: [azure-batch-chat-completions, azure-batch-responses]
-  hosting: azure
   upstream:
     model: gpt-5.4
     modelFormat: OpenAI

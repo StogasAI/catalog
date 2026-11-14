@@ -1,7 +1,6 @@
 deployments:
   modelId: deepseek-v4.1-flash-1017
   routeIds: [chutes-standard-chat-completions]
-  hosting: unknown
   upstream:
     model: deepseek-ai/DeepSeek-V4.1-Flash-1017
     chuteId: 34c7b79d-854b-5e32-981a-774d322062b0

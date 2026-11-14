@@ -19,6 +19,8 @@ export type DataHandlingContract = {
 	zeroDataRetention: boolean;
 	tee: boolean;
 	teeVerified: boolean;
+	/** The companies, other than the provider's and the hosting, that receive requests. */
+	sharedWith?: string[];
 };
 
 export type ProviderRouteContract = {
@@ -32,7 +34,7 @@ export type ProviderRouteContract = {
 	/** The route is a batch API. */
 	batch?: true;
 	hostedTools?: HostedToolContract[];
-	/** Stogas does not serve the route or its deployments, and the notes say why. */
+	/** Stogas does not serve the route or its deployments. */
 	stogasSupported?: false;
 	notes?: string;
 };
@@ -62,9 +64,9 @@ export type ProviderDeploymentContract = {
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
-	/** Who runs the model. */
+	/** The company that runs the model, or unknown. */
 	hosting: string;
-	/** The companies that the hosting shares requests with. */
+	/** The companies, other than the provider's and the hosting, that receive its requests. */
 	sharedWith?: string[];
 	notes?: string;
 	outputModalities: string[];
@@ -84,6 +86,7 @@ export type ProviderOnboardingContract = {
 		capabilities: Record<string, boolean>;
 		credentialModes: Array<'managed' | 'byok'>;
 		dataHandling: DataHandlingContract;
+		companyId: string;
 		headquarteredCountry: string;
 		id: string;
 		name: string;
@@ -114,6 +117,7 @@ export function assertProviderOnboardingContract(
 		aliases: contract.provider.aliases,
 		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
+		companyId: contract.provider.companyId,
 		headquarteredCountry: contract.provider.headquarteredCountry,
 		notes: []
 	};
@@ -123,6 +127,7 @@ export function assertProviderOnboardingContract(
 	const routeNotes = (route: ProviderRouteContract) =>
 		route.notes === undefined ? [] : [{ kind: 'route', id: route.id, text: route.notes }];
 	const routeHandling = (route: ProviderRouteContract) => ({
+		sharedWith: [],
 		...contract.provider.dataHandling,
 		...route.dataHandling
 	});
@@ -172,11 +177,10 @@ export function assertProviderOnboardingContract(
 		);
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
-		// Route IDs, chain hashes, notes and the companies that receive requests name the provider;
-		// everything that the routes serve matches, except the data handling that the cloud changes.
+		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
+		// matches, except the data handling that the cloud changes.
 		const served = (deployment: typeof copy, dataHandling = {}) => ({
 			...deployment,
-			companies: undefined,
 			notes: undefined,
 			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
 				...route,
@@ -199,7 +203,11 @@ export function assertProviderOnboardingContract(
 					routeId,
 					{
 						capabilities: expected.capabilities,
-						dataHandling: expected.dataHandling ?? routeHandling(route),
+						dataHandling: {
+							...routeHandling(route),
+							...expected.dataHandling,
+							...(expected.sharedWith && { sharedWith: expected.sharedWith })
+						},
 						inputModalities: expected.inputModalities.filter((modality) =>
 							route.inputModalities.includes(modality)
 						),
@@ -225,7 +233,6 @@ export function assertProviderOnboardingContract(
 			maxOutputTokens: expected.maxOutputTokens,
 			modelId: expected.modelId,
 			hosting: expected.hosting,
-			companies: [...new Set([providerId, expected.hosting]), ...(expected.sharedWith ?? [])],
 			outputModalities: expected.outputModalities,
 			pricing: expected.pricing,
 			reasoning: expected.modelReasoning ?? 'unsupported',
@@ -240,6 +247,7 @@ export function assertProviderOnboardingContract(
 			),
 			notes: [
 				...expected.routeIds.flatMap((routeId) => routeNotes(routes.get(routeId)!)),
+				...(graph.models[expected.modelId]!.notes as unknown[]),
 				...(expected.notes === undefined
 					? []
 					: [{ kind: 'deployment', id: expected.id, text: expected.notes }])

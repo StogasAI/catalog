@@ -4,7 +4,6 @@
 deployments:
   modelId: claude-haiku-4-5
   routeIds: [aws-claude-platform-messages]
-  hosting: anthropic
   upstream:
     model: claude-haiku-4-5-20251001
   pricing:

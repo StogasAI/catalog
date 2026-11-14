@@ -1,8 +1,8 @@
 /**
  * A catalog is a root and the parts that it names by SHA-256 and size; the gateway, the website and
  * every other reader read the same files. The root holds the locations, the places that data
- * handling names, and summarizes every record of every kind, current or retired: what readers need
- * to list, link, search and resolve selectors. Authors, groups and providers are few and small, so
+ * handling names, and the companies that records name, and summarizes every record of every kind,
+ * current or retired: what readers need to list, link, search and resolve selectors. Authors, groups and providers are few and small, so
  * their summaries are their whole records; a model, route or deployment summary names the part that
  * holds its record, with the record's scheduled versions.
  *
@@ -21,75 +21,11 @@
  * so it never routes to them.
  *
  * The root and its parts share a schema version, and a change to either names a new version of
- * both, so a reader knows from the root alone whether it reads a catalog, and readers that find a
- * newer format keep the newest catalog whose root they read. Readers also read the previous
- * format as the current one, so that a reader without a catalog of its own, such as the website,
- * can ship before the first catalog of a new format does.
+ * both, so a reader knows from the root alone whether it reads a catalog, and readers that find
+ * another format keep the newest catalog whose root they read.
  */
-export const CATALOG_SCHEMA = 'stogas.catalog.v16';
-export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v16';
-const PREVIOUS_CATALOG_SCHEMA = 'stogas.catalog.v15';
-const PREVIOUS_CATALOG_PART_SCHEMA = 'stogas.catalog.part.v15';
-
-/**
- * A root or part of the previous format as one of the current format. The previous format named
- * the companies between a deployment's provider and its hosting in `via`, and a route's hosted
- * tools could name the hostings that ran them. Here a deployment lists in `companies` every
- * company that receives its requests: its provider, those in `via` and its hosting, once each in
- * that order. A route's tools leave out their hostings; each deployment's route still holds the
- * tools that it ran. Any other value comes back as it is, for the reader to check.
- */
-export function currentCatalogFile(value) {
-	if (!isObject(value)) return value;
-	if (value.schema === PREVIOUS_CATALOG_PART_SCHEMA && Array.isArray(value.schedule))
-		return {
-			...value,
-			schema: CATALOG_PART_SCHEMA,
-			graph: currentGraph(value.graph),
-			schedule: value.schedule.map((entry) =>
-				isObject(entry) ? { ...entry, graph: currentGraph(entry.graph) } : entry
-			)
-		};
-	if (value.schema === PREVIOUS_CATALOG_SCHEMA && Array.isArray(value.parts))
-		return { ...value, schema: CATALOG_SCHEMA };
-	return value;
-}
-
-function currentGraph(graph) {
-	if (!isObject(graph)) return graph;
-	const current = { ...graph };
-	if (isObject(graph.deployments))
-		current.deployments = currentRecords(graph.deployments, (id, deployment) => {
-			const { via, ...facts } = deployment;
-			// A deployment's ID starts with its provider's ID and then its model's.
-			const end = typeof facts.modelId === 'string' ? id.indexOf(`-${facts.modelId}`) : -1;
-			if (!Array.isArray(via) || end < 1 || typeof facts.hosting !== 'string') return deployment;
-			return { ...facts, companies: [...new Set([id.slice(0, end), ...via, facts.hosting])] };
-		});
-	if (isObject(graph.routes))
-		current.routes = currentRecords(graph.routes, (_id, route) =>
-			Array.isArray(route.hostedTools)
-				? {
-						...route,
-						hostedTools: route.hostedTools.map((offer) => {
-							if (!isObject(offer)) return offer;
-							const { hostings: _hostings, ...tool } = offer;
-							return tool;
-						})
-					}
-				: route
-		);
-	return current;
-}
-
-function currentRecords(records, convert) {
-	return Object.fromEntries(
-		Object.entries(records).map(([id, record]) => [
-			id,
-			isObject(record) ? convert(id, record) : record
-		])
-	);
-}
+export const CATALOG_SCHEMA = 'stogas.catalog.v1';
+export const CATALOG_PART_SCHEMA = 'stogas.catalog.part.v1';
 
 export const CATALOG_KINDS = Object.freeze([
 	'authors',
@@ -161,6 +97,7 @@ export function checkedCatalogFiles(root, rootSize) {
 		root?.schema !== CATALOG_SCHEMA ||
 		!Array.isArray(root.parts) ||
 		!isObject(root.locations) ||
+		!isObject(root.companies) ||
 		!isObject(root.summaries)
 	)
 		throw new Error('The catalog root is invalid.');
@@ -212,7 +149,7 @@ export function partsOfRecords(root, records) {
 
 /**
  * The catalog from a root and the parts that a reader read: `parts` has one entry for each part
- * that the root names, null for one not read. It keeps the root's locations. The graph holds every
+ * that the root names, null for one not read. It keeps the root's locations and companies. The graph holds every
  * whole record and each record of the parts read, in the root's order, and each schedule entry
  * keeps the root's summaries that differ then, with every such record that differs from the base
  * graph. `summaries` is the root's, so a reader also knows the records that it did not read, and
@@ -224,6 +161,7 @@ export function assembleCatalog(root, parts) {
 		root?.schema !== CATALOG_SCHEMA ||
 		!Array.isArray(root.parts) ||
 		!isObject(root.locations) ||
+		!isObject(root.companies) ||
 		!isObject(root.summaries) ||
 		!Array.isArray(root.schedule)
 	)
@@ -307,6 +245,7 @@ export function assembleCatalog(root, parts) {
 	return {
 		schema: root.schema,
 		locations: root.locations,
+		companies: root.companies,
 		parts: root.parts,
 		read,
 		periods: root.periods,

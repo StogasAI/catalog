@@ -1,14 +1,12 @@
 deployments:
   modelId: claude-mythos-5
   routeIds: [anthropic-message-batches]
-  hosting: anthropic
   upstream:
     model: claude-mythos-5
     inferenceGeo: us
   approvalRequired: true
   overrides:
     dataHandling:
-      processingLocation: US
       retentionDays: 30
   pricing:
     input_tokens:

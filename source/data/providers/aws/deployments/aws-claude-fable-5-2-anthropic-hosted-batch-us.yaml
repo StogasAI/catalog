@@ -4,13 +4,11 @@
 deployments:
   modelId: claude-fable-5-2
   routeIds: [aws-claude-platform-message-batches]
-  hosting: anthropic
   upstream:
     model: claude-fable-5-2
     inferenceGeo: us
   overrides:
     dataHandling:
-      processingLocation: US
       retentionDays: 30
   pricing:
     input_tokens:

@@ -10,6 +10,7 @@
 # https://platform.claude.com/docs/en/about-claude/pricing#batch-processing
 routes:
   providerId: google-cloud
+  hosting: anthropic
   interfaces: [chat_completions, responses]
   batch: true
   inputModalities: [text, image]
@@ -19,7 +20,6 @@ routes:
   dataHandling:
     storageLocation: US
     retentionDays: 29
-  notes: The gateway has no batch API and serves each request as it arrives.
   hostedTools:
     - tool: web_search
       pricing:
@@ -33,6 +33,7 @@ routes:
         storageLocation: unknown
         retentionDays: null
         zeroDataRetention: false
+        sharedWith: [unknown]
   overrides:
     capabilities:
       streaming: false

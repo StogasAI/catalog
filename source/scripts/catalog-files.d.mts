@@ -1,13 +1,7 @@
 import type { Locations } from './locations.mjs';
 
-export const CATALOG_SCHEMA: 'stogas.catalog.v14';
-export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v14';
-/**
- * A root or part of the previous format as one of the current format. The formats differ only in
- * their schema names, so the previous format's facts keep their meaning. Any other value comes back
- * as it is, for the reader to check.
- */
-export function currentCatalogFile(value: unknown): unknown;
+export const CATALOG_SCHEMA: 'stogas.catalog.v1';
+export const CATALOG_PART_SCHEMA: 'stogas.catalog.part.v1';
 export const CATALOG_KINDS: readonly [
 	'authors',
 	'groups',
@@ -84,14 +78,18 @@ export type CatalogSummaries = {
 	deployments: Record<string, DeploymentSummary>;
 };
 
+/** The companies that records name, by ID. */
+export type Companies = Record<string, { name: string; headquarteredCountry: string }>;
+
 /**
- * The root: the locations, a summary of every record, the parts that hold the records of models,
+ * The root: the locations, the companies, a summary of every record, the parts that hold the records of models,
  * routes and deployments, the dated periods, and for each scheduled state the summaries that
  * differ.
  */
 export type CatalogRoot = {
 	schema: typeof CATALOG_SCHEMA;
 	locations: Locations;
+	companies: Companies;
 	summaries: CatalogSummaries;
 	parts: CatalogPartFile[];
 	periods: object[];
@@ -112,6 +110,7 @@ export type CatalogPart = {
 export type Catalog = {
 	schema: typeof CATALOG_SCHEMA;
 	locations: Locations;
+	companies: Companies;
 	parts: CatalogPartFile[];
 	read: number[];
 	periods: object[];

@@ -15,7 +15,6 @@ routes:
   documentFormats:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]
-  notes: The gateway has no batch API and serves each request as it arrives.
   overrides:
     capabilities:
       streaming: false

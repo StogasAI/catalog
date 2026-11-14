@@ -34,7 +34,7 @@ routes:
         storageLocation: unknown
         retentionDays: null
         zeroDataRetention: false
+        sharedWith: [unknown]
   overrides:
     capabilities:
       streaming: false
-  notes: The gateway has no batch API and serves each request as it arrives.

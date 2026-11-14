@@ -3,7 +3,6 @@
 deployments:
   modelId: claude-fable-5-2
   routeIds: [google-cloud-anthropic-managed-messages]
-  hosting: anthropic
   upstream:
     model: claude-fable-5-2
     inferenceGeo: global

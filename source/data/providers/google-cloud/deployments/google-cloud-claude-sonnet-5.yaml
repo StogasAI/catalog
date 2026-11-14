@@ -4,7 +4,6 @@
 deployments:
   modelId: claude-sonnet-5
   routeIds: [google-cloud-agent-platform-messages]
-  hosting: google-cloud
   upstream:
     model: claude-sonnet-5
     inferenceGeo: global

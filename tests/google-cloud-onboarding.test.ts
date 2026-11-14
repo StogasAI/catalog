@@ -110,7 +110,7 @@ function deployment(
 		pricing,
 		retirementDate: null,
 		routeIds: ['google-cloud-agent-platform-messages'],
-		hosting: 'google-cloud',
+		hosting: 'google',
 		// Google shares Fable's prompts and responses with Anthropic to monitor abuse.
 		...(model.startsWith('claude-fable-') ? { sharedWith: ['anthropic'] } : {}),
 		upstream: { ...upstream, model, serviceTier: 'standard' }
@@ -161,7 +161,9 @@ const anthropicHostedTools: ProviderRouteContract['hostedTools'] = [
 			processingLocation: 'unknown',
 			retentionDays: null,
 			storageLocation: 'unknown',
-			zeroDataRetention: false
+			zeroDataRetention: false,
+			// Website publishers receive the URLs that the tool fetches.
+			sharedWith: ['unknown']
 		},
 		tool: 'web_fetch'
 	}
@@ -179,6 +181,7 @@ describe('Google Cloud onboarding contract', () => {
 				capabilities,
 				credentialModes: ['byok'],
 				dataHandling: providerHandling,
+				companyId: 'google',
 				headquarteredCountry: 'US',
 				id: 'google-cloud',
 				name: 'Google Cloud'
@@ -208,7 +211,6 @@ describe('Google Cloud onboarding contract', () => {
 					id: 'google-cloud-anthropic-managed-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					notes: 'The gateway has no batch API and serves each request as it arrives.',
 					batch: true,
 					stogasSupported: false
 				}

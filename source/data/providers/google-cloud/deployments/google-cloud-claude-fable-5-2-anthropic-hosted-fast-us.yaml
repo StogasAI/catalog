@@ -5,14 +5,10 @@
 deployments:
   modelId: claude-fable-5-2
   routeIds: [google-cloud-anthropic-managed-messages]
-  hosting: anthropic
   upstream:
     model: claude-fable-5-2
     serviceTier: fast
     inferenceGeo: us
-  overrides:
-    dataHandling:
-      processingLocation: US
   pricing:
     input_tokens:
       per_mill_tokens: '17.6'

@@ -4,12 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { canonicalJson } from './canonical-json.mjs';
-import {
-	CATALOG_LIMIT,
-	CATALOG_ROOT_LIMIT,
-	checkedCatalogFiles,
-	currentCatalogFile
-} from './catalog-files.mjs';
+import { CATALOG_LIMIT, CATALOG_ROOT_LIMIT, checkedCatalogFiles } from './catalog-files.mjs';
 
 export { canonicalJsonValue, canonicalJson } from './canonical-json.mjs';
 
@@ -37,7 +32,7 @@ function checkSize(name, bytes, limit) {
  */
 export function catalogFileList(rootBytes) {
 	const size = Buffer.byteLength(rootBytes);
-	const root = currentCatalogFile(JSON.parse(Buffer.from(rootBytes).toString('utf8')));
+	const root = JSON.parse(Buffer.from(rootBytes).toString('utf8'));
 	const parts = checkedCatalogFiles(root, size);
 	checkSize('The catalog root', size, CATALOG_ROOT_LIMIT);
 	checkSize(

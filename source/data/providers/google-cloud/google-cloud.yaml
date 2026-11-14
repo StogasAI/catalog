@@ -2,7 +2,7 @@ providers:
   name: Google Cloud
   aliases: [gcp]
   credentialModes: [byok]
-  headquarteredCountry: US
+  companyId: google
   capabilities:
     streaming: true
     functionCalling: true

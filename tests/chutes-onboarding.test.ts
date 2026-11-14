@@ -375,6 +375,7 @@ describe('Chutes provider onboarding contract', () => {
 				capabilities,
 				credentialModes: ['managed', 'byok'],
 				dataHandling,
+				companyId: 'chutes',
 				headquarteredCountry: 'US',
 				id: 'chutes',
 				name: 'Chutes'

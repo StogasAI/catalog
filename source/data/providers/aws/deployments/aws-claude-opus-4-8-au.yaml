@@ -6,13 +6,9 @@
 deployments:
   modelId: claude-opus-4-8
   routeIds: [aws-bedrock-messages]
-  hosting: aws
   upstream:
     model: au.anthropic.claude-opus-4-8
     inferenceGeo: au
-  overrides:
-    dataHandling:
-      processingLocation: AU
   pricing:
     input_tokens:
       per_mill_tokens: '5.5'

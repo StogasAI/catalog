@@ -6,8 +6,9 @@ package catalog
 // The gateway joins these facts with the deployment's for each request that
 // lists the tool, so a field can only make the deployment's value worse: a
 // location joins to the smallest place that holds both, a retention to the
-// longer one, unknown retention wins, and the flags can only turn false, or
-// true for training. An omitted field leaves the deployment's value.
+// longer one, unknown retention wins, the flags can only turn false, or true
+// for training, and sharedWith adds the companies that the tool sends content
+// to. An omitted field leaves the deployment's value.
 #HostedToolDataHandling: close({
 	processingLocation?: #ProcessingLocation
 	storageLocation?:    #ProcessingLocation
@@ -17,6 +18,7 @@ package catalog
 	endToEndEncrypted?:  false
 	tee?:                false
 	teeVerified?:        false
+	sharedWith?: [#CompanyRef, ...#CompanyRef]
 })
 
 #HostedTool: close({

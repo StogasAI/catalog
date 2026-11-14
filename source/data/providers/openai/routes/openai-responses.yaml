@@ -220,3 +220,4 @@ routes:
         storageLocation: unknown
         retentionDays: null
         zeroDataRetention: false
+        sharedWith: [unknown]

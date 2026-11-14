@@ -9,12 +9,8 @@ routes:
   interfaces: [chat_completions]
   batch: true
   inputModalities: [text, image]
-  documentFormats:
-    extensions: []
-    mediaTypes: []
   overrides:
     capabilities:
       streaming: false
   dataHandling:
     retentionDays: null
-  notes: The gateway has no batch API and serves each request as it arrives.

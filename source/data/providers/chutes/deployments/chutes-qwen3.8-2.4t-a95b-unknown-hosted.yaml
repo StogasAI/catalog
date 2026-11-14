@@ -1,7 +1,6 @@
 deployments:
   modelId: qwen3.8-2.4t-a95b
   routeIds: [chutes-standard-chat-completions]
-  hosting: unknown
   upstream:
     model: Qwen/Qwen3.8-2.4T-A95B
     chuteId: d86bda6f-f327-538c-9e23-44f7372e1cb8

@@ -8,7 +8,6 @@ import {
 	CATALOG_SCHEMA,
 	assembleCatalog,
 	checkedCatalogFiles,
-	currentCatalogFile,
 	isRetired,
 	partsInEffect,
 	partsOfRecords,
@@ -25,6 +24,7 @@ import { catalog as built } from './generated-catalog';
 type Nodes = Record<string, Record<string, any>>;
 type Source = {
 	locations: Locations;
+	companies: Record<string, { name: string; headquarteredCountry: string }>;
 	graph: Record<string, Nodes>;
 	schedule: { start: string; graph: Record<string, Nodes> }[];
 	periods: object[];
@@ -36,35 +36,11 @@ const day = (index: number) => new Date(Date.UTC(2027, 0, 1 + index)).toISOStrin
 function source(): Source {
 	return structuredClone({
 		locations: built.locations,
+		companies: built.companies,
 		graph: built.graph,
 		schedule: built.schedule,
 		periods: built.periods
 	});
-}
-
-type Dated = {
-	graph?: Record<string, Nodes>;
-	parts?: Nodes[string][];
-	summaries?: Record<string, Nodes>;
-	schedule: { graph?: Record<string, Nodes>; summaries?: Record<string, Nodes> }[];
-};
-/**
- * A root or part as the previous format wrote it: each deployment names the companies between its
- * provider and its hosting in `via` instead of listing every company in `companies`, and each
- * hosted tool of a route names the hosting that runs it.
- */
-function previousFile<File extends CatalogRoot | CatalogPart>(file: File, schema: string): File {
-	const previous = structuredClone(file) as File & Dated;
-	for (const state of [previous, ...previous.schedule]) {
-		for (const deployment of Object.values(state.graph?.deployments ?? {})) {
-			const [provider, ...after] = deployment.companies as string[];
-			deployment.via = deployment.hosting === provider ? [] : after.slice(0, -1);
-			delete deployment.companies;
-		}
-		for (const route of Object.values(state.graph?.routes ?? {}))
-			for (const offer of route.hostedTools ?? []) offer.hostings = [route.providerId];
-	}
-	return { ...previous, schema };
 }
 
 /** The checkout's catalog with `copies` providers in place of each of its own. */
@@ -105,6 +81,7 @@ function synthetic(
 	const providers = Array.from({ length: 40 }, (_, index) => index);
 	return {
 		locations: { world: { name: 'World', kind: 'world', parentIds: [] } },
+		companies: {},
 		graph: {
 			authors: { author: { aliases: [], name: 'Author' } },
 			groups: {},
@@ -152,12 +129,13 @@ function files({ root, parts }: { root: object; parts: { json: string }[] }) {
 }
 
 /**
- * The locations, graph, schedule and periods of a catalog, as canonical JSON, without the root's
- * summaries.
+ * The locations, companies, graph, schedule and periods of a catalog, as canonical JSON, without
+ * the root's summaries.
  */
-function whole({ locations, graph, schedule, periods }: Source) {
+function whole({ locations, companies, graph, schedule, periods }: Source) {
 	return canonicalJson({
 		locations,
+		companies,
 		graph,
 		schedule: schedule.map(({ start, graph: changed }) => ({ start, graph: changed })),
 		periods
@@ -376,78 +354,6 @@ describe('catalog parts', () => {
 		expect(whole(assembleCatalog<Source>(root, parts))).toBe(whole(catalog));
 	});
 
-	test('read a root and parts of the previous format as the current format', () => {
-		// The previous format could not name the companies that a hosting shares requests with.
-		const catalog = scheduled();
-		for (const { graph } of [catalog, ...catalog.schedule])
-			for (const [id, { companies, hosting, ...facts }] of Object.entries(graph.deployments ?? {}))
-				graph.deployments![id] = {
-					...facts,
-					hosting,
-					companies: companies.slice(0, companies.indexOf(hosting) + 1)
-				};
-		const { root, parts } = files(partitionCatalog(catalog));
-		const previousRoot = previousFile(root, 'stogas.catalog.v15');
-		const previousParts = parts.map((part) => previousFile(part, 'stogas.catalog.part.v15'));
-		expect(JSON.stringify(previousParts)).toContain('"hostings":["aws"]');
-		expect(JSON.stringify(previousParts)).not.toContain('"companies"');
-		const currentRoot = currentCatalogFile(previousRoot) as CatalogRoot;
-		expect(currentRoot).toEqual(root);
-		expect(previousParts.map(currentCatalogFile)).toEqual(parts);
-		expect(checkedCatalogFiles(currentRoot, 1)).toEqual(root.parts);
-		expect(
-			assembleCatalog(currentRoot, previousParts.map(currentCatalogFile) as CatalogPart[])
-		).toEqual(assembleCatalog(root, parts));
-		// Without the conversion, and for anything else, the reader refuses as before.
-		expect(() => assembleCatalog(previousRoot as never, parts)).toThrow('root is invalid');
-		for (const other of [
-			null,
-			'stogas.catalog.v10',
-			{ ...previousRoot, schema: 'stogas.catalog.v10' },
-			{ ...previousRoot, parts: undefined },
-			{ ...parts[0], schema: 'stogas.catalog.part.v10' }
-		])
-			expect(currentCatalogFile(other)).toBe(other);
-		expect(currentCatalogFile(root)).toBe(root);
-		expect(currentCatalogFile(parts[0])).toBe(parts[0]);
-		// The companies follow the provider that the deployment ID names, in request order, once each.
-		expect(
-			currentCatalogFile({
-				schema: 'stogas.catalog.part.v15',
-				graph: {
-					deployments: {
-						'azure-model-via-fireworks-unknown-hosted': {
-							modelId: 'model',
-							hosting: 'unknown',
-							via: ['fireworks']
-						},
-						'azure-model': { modelId: 'model', hosting: 'azure', via: [] }
-					},
-					routes: {
-						'azure-chat': {
-							hostedTools: [{ tool: 'web_search', hostings: ['azure'], pricing: {} }]
-						}
-					}
-				},
-				schedule: []
-			})
-		).toEqual({
-			schema: 'stogas.catalog.part.v16',
-			graph: {
-				deployments: {
-					'azure-model-via-fireworks-unknown-hosted': {
-						modelId: 'model',
-						hosting: 'unknown',
-						companies: ['azure', 'fireworks', 'unknown']
-					},
-					'azure-model': { modelId: 'model', hosting: 'azure', companies: ['azure'] }
-				},
-				routes: { 'azure-chat': { hostedTools: [{ tool: 'web_search', pricing: {} }] } }
-			},
-			schedule: []
-		});
-	});
-
 	test('refuse parts that do not match their root', () => {
 		const { root, parts } = files(partitionCatalog(scheduled()));
 		const { part } = root.summaries.deployments[deploymentId]!;
@@ -663,8 +569,9 @@ describe('catalog limits', () => {
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(
 			JSON.stringify({
-				schema: 'stogas.catalog.v16',
+				schema: 'stogas.catalog.v1',
 				locations: {},
+				companies: {},
 				summaries: {},
 				parts,
 				...fields
@@ -680,6 +587,7 @@ describe('catalog limits', () => {
 			root({}),
 			root([], { schema: 'stogas.catalog.v9' }),
 			root([], { locations: undefined }),
+			root([], { companies: undefined }),
 			root([], { summaries: [] })
 		])
 			expect(() => catalogFileList(invalid)).toThrow('root is invalid');

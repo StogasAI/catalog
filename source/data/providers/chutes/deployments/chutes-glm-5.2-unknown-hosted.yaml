@@ -1,7 +1,6 @@
 deployments:
   modelId: glm-5.2
   routeIds: [chutes-standard-chat-completions]
-  hosting: unknown
   upstream:
     model: zai-org/GLM-5.2-Fast
     chuteId: 3200d3cc-6583-535b-b104-1f87c2397698

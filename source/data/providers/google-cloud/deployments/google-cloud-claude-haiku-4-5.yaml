@@ -6,7 +6,6 @@
 deployments:
   modelId: claude-haiku-4-5
   routeIds: [google-cloud-agent-platform-messages]
-  hosting: google-cloud
   upstream:
     model: claude-haiku-4-5
     inferenceGeo: global

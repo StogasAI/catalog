@@ -303,6 +303,7 @@ describe('compiled catalog', () => {
 			'endToEndEncrypted',
 			'processingLocation',
 			'retentionDays',
+			'sharedWith',
 			'storageLocation',
 			'tee',
 			'teeVerified',
@@ -485,7 +486,8 @@ describe('compiled catalog', () => {
 			retentionDays: 30,
 			zeroDataRetention: false
 		});
-		// Search and fetch run outside inference_geo, and publishers can keep fetched URLs.
+		// Search and fetch run outside inference_geo, and fetch sends URLs to website publishers, who
+		// can keep them.
 		expect(catalog.graph.routes['anthropic-messages'].hostedTools).toEqual([
 			{
 				tool: 'web_search',
@@ -498,7 +500,8 @@ describe('compiled catalog', () => {
 					processingLocation: 'unknown',
 					storageLocation: 'unknown',
 					retentionDays: null,
-					zeroDataRetention: false
+					zeroDataRetention: false,
+					sharedWith: ['unknown']
 				}
 			}
 		]);
@@ -862,7 +865,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps one deterministic catalog without dated states', () => {
-		expect(catalog.schema).toBe('stogas.catalog.v16');
+		expect(catalog.schema).toBe('stogas.catalog.v1');
 		expect(catalog.schedule).toEqual([]);
 	});
 

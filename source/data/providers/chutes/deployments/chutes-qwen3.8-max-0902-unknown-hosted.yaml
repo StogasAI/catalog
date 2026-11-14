@@ -1,7 +1,6 @@
 deployments:
   modelId: qwen3.8-max-0902
   routeIds: [chutes-standard-chat-completions]
-  hosting: unknown
   upstream:
     model: Qwen/Qwen3.8-Max-0902
     chuteId: cb177979-3b79-5508-bcbe-5e7f3f5cec75

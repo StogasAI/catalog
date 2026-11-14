@@ -5,13 +5,9 @@
 deployments:
   modelId: claude-sonnet-4-6
   routeIds: [aws-bedrock-batch-messages]
-  hosting: aws
   upstream:
     model: us.anthropic.claude-sonnet-4-6
     inferenceGeo: us
-  overrides:
-    dataHandling:
-      processingLocation: US
   pricing:
     input_tokens:
       per_mill_tokens: '1.65'

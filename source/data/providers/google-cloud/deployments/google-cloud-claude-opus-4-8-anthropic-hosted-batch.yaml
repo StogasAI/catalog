@@ -5,7 +5,6 @@
 deployments:
   modelId: claude-opus-4-8
   routeIds: [google-cloud-anthropic-managed-message-batches]
-  hosting: anthropic
   upstream:
     model: claude-opus-4-8
     inferenceGeo: global

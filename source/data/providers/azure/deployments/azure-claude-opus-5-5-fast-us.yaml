@@ -1,7 +1,6 @@
 deployments:
   modelId: claude-opus-5-5
   routeIds: [azure-anthropic-messages]
-  hosting: azure
   upstream:
     model: claude-opus-5-5-fast
     modelFormat: Anthropic
@@ -11,8 +10,6 @@ deployments:
   retirementDate: 2027-01-15
   overrides:
     dataHandling:
-      processingLocation: US
-      storageLocation: US
       retentionDays: null
   pricing:
     input_tokens:

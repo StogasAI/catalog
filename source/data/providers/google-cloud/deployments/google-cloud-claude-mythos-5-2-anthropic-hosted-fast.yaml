@@ -5,7 +5,6 @@
 deployments:
   modelId: claude-mythos-5-2
   routeIds: [google-cloud-anthropic-managed-messages]
-  hosting: anthropic
   upstream:
     model: claude-mythos-5-2
     serviceTier: fast

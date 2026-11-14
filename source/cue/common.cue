@@ -18,9 +18,9 @@ package catalog
 
 // One or two plain sentences on one line, at most 300 characters.
 #Sentences: string & =~"^[A-Z][^\\n]{0,298}\\.$"
-// What a reader needs to know about a node that its fields cannot say, such as how a provider
-// relays requests or why Stogas does not serve it. Policies never read it, so it never holds a
-// fact that a field can hold.
+// What a reader needs to know about a node that would surprise them and that no field can say,
+// such as an account setting that a model needs before it answers. Most nodes have none. Policies
+// never read it, so it never holds a fact that a field can hold.
 #Note: #Sentences
 
 #Modality:        "text" | "image" | "audio" | "video"

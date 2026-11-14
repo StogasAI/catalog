@@ -17,6 +17,12 @@ package catalog
 	// teeVerified is true only when Stogas verifies the approved measured
 	// workload for the concrete request target, independent of provider claims.
 	teeVerified?: true
+	// The companies, other than the provider's company and the hosting, that receive requests and
+	// responses: one that passes them on to the hosting, or one that the hosting shares them with,
+	// such as the model's developer for abuse monitoring. A company that only supplies
+	// infrastructure to one of those two under its contract is not listed. Omitted when the provider
+	// documents none.
+	sharedWith?: [#CompanyRef, ...#CompanyRef]
 })
 
 // A route states only what differs from its provider. It may state any fact of a deployment's
@@ -35,4 +41,5 @@ package catalog
 	zeroDataRetention?: bool
 	tee?:               bool
 	teeVerified?:       bool
+	sharedWith?: [...#CompanyRef]
 })

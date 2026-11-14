@@ -6,13 +6,13 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 
 ## Repository
 
-| Path              | Contents                                                                       |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `source/data/`    | One YAML record for each author, group, model, provider, route, and deployment |
-| `source/cue/`     | The schema that every record passes                                            |
-| `source/scripts/` | The compiler and release tools                                                 |
-| `generated/`      | The compiled catalog, committed so that every change is reviewable             |
-| `editor/`         | A local editor for the records                                                 |
+| Path              | Contents                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `source/data/`    | One YAML record for each author, group, model, provider, route, and deployment, and the lists of companies and locations |
+| `source/cue/`     | The schema that every record passes                                                                                      |
+| `source/scripts/` | The compiler and release tools                                                                                           |
+| `generated/`      | The compiled catalog, committed so that every change is reviewable                                                       |
+| `editor/`         | A local editor for the records                                                                                           |
 
 ## Format
 
@@ -21,7 +21,10 @@ The signed catalog of models, providers, deployments, prices, and data-handling 
 - A record can list named, dated periods that change its facts for a time, such as a promotional price. The catalog holds the base graph and, for each dated state, the records that differ from it.
 - Prices are decimal USD strings. `retentionDays: null` and `trainingUse: null` mean unknown, not zero or false.
 - A record states only the guarantees that hold: a provider's `zeroDataRetention`, `tee` and `teeVerified`, and a route's `endToEndEncrypted`. Compiled records state each one, false where the source omits it.
-- A deployment's `hosting` names the company that runs the model, `via` the companies that pass requests on between the provider and the hosting, and `sharedWith` the companies that the hosting shares requests and responses with, such as the model's developer for abuse monitoring. The compiled record lists them all in `companies`, in the order that they receive a request, so one condition covers every company that receives it.
+- `source/data/companies.yaml` lists each company that a record names, with its headquarters. An author and a provider name their company with `companyId`, so one company can own several of them.
+- `hosting` names the company that runs a model, or `unknown`. It is the provider's company unless a route names another for all of its deployments, or a deployment names its own. Every compiled deployment states it.
+- `sharedWith`, a data handling fact, lists every other company that receives requests on its own terms, such as the model's developer for abuse monitoring, or `unknown` for the website publishers that a fetch tool calls. The provider's company, the hosting, and these companies are all that receive a request.
+- A deployment takes the data handling that its upstream fields decide and does not restate it. An inference geography sets where inference runs, an Azure Data Zone that Microsoft runs keeps processing and storage in its zone, and Azure Instant and Flex leave storage, retention and training unknown.
 - A route is one API of a provider. AWS and Google Cloud have a route for each product that serves Claude, such as Amazon Bedrock and Claude Platform on AWS, and each product's company runs every deployment on it.
 - `source/data/locations.yaml` lists places as a graph. Each place has a kind, `world`, `continent`, `region`, `union`, `country` or `subdivision`. A continent, region or union lists every country that it covers, and the build derives the places that directly contain each place from those lists. A record names a place for data handling, a headquarters, or a provider's `accountLocations`, where an account's resources can keep data. A place stays listed only while a record names it or a place inside it.
 
@@ -41,9 +44,9 @@ A record serves until its date ends everywhere on Earth, at 12:00 UTC the next d
 
 ## What Stogas does not serve
 
-The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment says so with `stogasSupported: false`, and its `notes` say why. The answer passes down the same way a retirement date does: from a provider to its routes, and from a route to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
+The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment says so with `stogasSupported: false`. The answer passes down the same way a retirement date does: from a provider to its routes, and from a route to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
 
-Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. Each compiled record lists its `notes` with the record that states each one, such as `{ "kind": "route", "id": "aws-bedrock-batch-messages", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its routes, so an unserved record carries the reason.
+Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. A record's `notes` state a surprising fact that no field can say. Each compiled record lists its notes with the record that states each one, such as `{ "kind": "route", "id": "chutes-chat-completions", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its provider, routes and model.
 
 OpenAI's Batch API, Azure's batch jobs, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier, and on Azure they take a batch deployment type, `global_batch` or `data_zone_batch_us`, because Azure runs batch jobs only on those. The gateway has no batch API, so the schema marks every batch route as unserved.
 

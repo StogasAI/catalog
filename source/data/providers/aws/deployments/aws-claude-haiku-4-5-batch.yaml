@@ -4,7 +4,6 @@
 deployments:
   modelId: claude-haiku-4-5
   routeIds: [aws-bedrock-batch-messages]
-  hosting: aws
   upstream:
     model: global.anthropic.claude-haiku-4-5-20251001-v1:0
     inferenceGeo: global

@@ -1,4 +1,4 @@
-import type { CatalogKind, CatalogRoot } from './catalog-files.mjs';
+import type { CatalogKind, CatalogRoot, Companies } from './catalog-files.mjs';
 import type { Locations } from './locations.mjs';
 
 /** The size of a part on average, in bytes. */
@@ -15,6 +15,7 @@ type PartFile = { json: string; sha256: string; size: number };
  */
 export function partitionCatalog(catalog: {
 	locations: Locations;
+	companies: Companies;
 	graph: Graph;
 	schedule: { start: string; graph: Graph }[];
 	periods: object[];

@@ -153,7 +153,7 @@ describe('catalog build process boundaries', () => {
 		for (const id of ['null', 'true', '123', '1e3']) {
 			writeFileSync(
 				join(root, `source/data/${id}.yaml`),
-				'authors:\n  name: Quoted identifier\n  headquarteredCountry: US\n'
+				'authors:\n  name: Quoted identifier\n  companyId: openai\n'
 			);
 		}
 		expectBuildSuccess(runBuild(root, ['--validate-only']));

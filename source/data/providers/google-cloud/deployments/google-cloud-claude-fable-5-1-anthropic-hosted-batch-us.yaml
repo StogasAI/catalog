@@ -5,13 +5,11 @@
 deployments:
   modelId: claude-fable-5-1
   routeIds: [google-cloud-anthropic-managed-message-batches]
-  hosting: anthropic
   upstream:
     model: claude-fable-5-1
     inferenceGeo: us
   overrides:
     dataHandling:
-      processingLocation: US
       retentionDays: 30
   pricing:
     input_tokens:

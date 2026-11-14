@@ -4,7 +4,6 @@
 deployments:
   modelId: claude-opus-5
   routeIds: [aws-bedrock-batch-messages]
-  hosting: aws
   upstream:
     model: global.anthropic.claude-opus-5
     inferenceGeo: global

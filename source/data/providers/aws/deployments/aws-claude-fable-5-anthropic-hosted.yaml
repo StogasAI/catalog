@@ -4,7 +4,6 @@
 deployments:
   modelId: claude-fable-5
   routeIds: [aws-claude-platform-messages]
-  hosting: anthropic
   upstream:
     model: claude-fable-5
     inferenceGeo: global

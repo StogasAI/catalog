@@ -1,7 +1,6 @@
 deployments:
   modelId: claude-opus-4-1
   routeIds: [anthropic-messages]
-  hosting: anthropic
   upstream:
     model: claude-opus-4-1-20250805
   # Anthropic retired it on August 5, 2026, at these prices.

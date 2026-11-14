@@ -60,7 +60,8 @@ const dataHandlingFields = [
 	'trainingUse',
 	'zeroDataRetention',
 	'tee',
-	'teeVerified'
+	'teeVerified',
+	'sharedWith'
 ];
 // Hosted tools in canonical order, and the call meters that each may charge. A request's content
 // that a tool reads bills as input tokens, so only web search has call meters.
@@ -82,24 +83,8 @@ const canonicalCredentialModeRanks = new Map(
 	canonicalCredentialModes.map((value, index) => [value, index])
 );
 const maxAliasesPerNode = 8;
-// The routes that serve Claude on each cloud, one for each product, and who runs Claude on each:
-// the cloud itself, or Anthropic with the cloud's sign-in and billing.
-const cloudClaudeRoutes = {
-	aws: {
-		'aws-bedrock-messages': 'aws',
-		'aws-bedrock-batch-messages': 'aws',
-		'aws-claude-platform-messages': 'anthropic',
-		'aws-claude-platform-message-batches': 'anthropic'
-	},
-	'google-cloud': {
-		'google-cloud-agent-platform-messages': 'google-cloud',
-		'google-cloud-anthropic-managed-messages': 'anthropic',
-		'google-cloud-anthropic-managed-message-batches': 'anthropic'
-	}
-};
-// Chutes runs the models of an end-to-end encrypted route itself and selects an instance by the
-// GPU count that the encrypted transport attests. It forwards the models of other routes to
-// operators that it does not name.
+// Chutes selects an instance of an end-to-end encrypted route by the GPU count that the encrypted
+// transport attests, and its other routes take none.
 function chutesSelectorKeys(endToEndEncrypted) {
 	return endToEndEncrypted ? ['chuteId', 'gpuCount', 'model'] : ['chuteId', 'model'];
 }
@@ -208,6 +193,33 @@ const INFERENCE_GEO_PROCESSING = {
 // Where each Azure Data Zone keeps processing and storage, by the zone that ends a Data Zone
 // deployment type, as us in data_zone_batch_us.
 const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
+
+/**
+ * The data handling that a deployment's upstream fields decide, which its record takes without
+ * stating it: an inference geography says where inference runs, an Azure Data Zone that Microsoft
+ * runs keeps processing and storage in its zone, and Microsoft's preview terms for Instant and Flex
+ * drop its commitments on storage, retention and training.
+ */
+function selectedDataHandling(graph, providerId, hosting, upstream) {
+	const selected = {};
+	// Anthropic runs a request that names no geography anywhere in the world.
+	const geo = upstream.inferenceGeo ?? (providerId === 'anthropic' ? 'global' : undefined);
+	if (geo !== undefined) selected.processingLocation = INFERENCE_GEO_PROCESSING[geo];
+	if (providerId !== 'azure') return selected;
+	const zone = azureDataZone(upstream.deploymentType);
+	if (zone && hosting === graph.providers.azure.companyId) {
+		if (!Object.hasOwn(AZURE_DATA_ZONE_LOCATIONS, zone))
+			throw new Error(`Azure Data Zone ${zone} has no location`);
+		selected.processingLocation = AZURE_DATA_ZONE_LOCATIONS[zone];
+		selected.storageLocation = AZURE_DATA_ZONE_LOCATIONS[zone];
+	}
+	if (upstream.deploymentType === 'instant' || upstream.serviceTier === 'flex') {
+		selected.storageLocation = 'unknown';
+		selected.retentionDays = null;
+		selected.trainingUse = null;
+	}
+	return selected;
+}
 
 function azureDataZone(deploymentType) {
 	return /^data_zone_(?:standard|batch)_(.+)$/.exec(deploymentType ?? '')?.[1];
@@ -494,14 +506,20 @@ function rejectRedundantOverride(base, override, owner) {
 
 /**
  * A record's own note as the list that compiled records hold, where each note names the record
- * that states it. A route record also holds its provider's notes and a deployment record those of
- * its routes, since their facts shape what it serves.
+ * that states it. A route record also holds its provider's notes, and a deployment record those of
+ * its routes and its model, since their facts shape what it serves.
  */
 function ownNotes(kind, id, text) {
 	return text === undefined ? [] : [{ kind, id, text }];
 }
 
-function normalizeSourceGraph(sourceGraph) {
+function normalizeSourceGraph(sourceGraph, companies) {
+	// An author and a provider take their headquarters from their company.
+	const headquarteredCountry = (kind, id, companyId) => {
+		if (!Object.hasOwn(companies, companyId))
+			throw new Error(`${kind} ${id}: companies does not list ${companyId}`);
+		return companies[companyId].headquarteredCountry;
+	};
 	return {
 		groups: Object.fromEntries(
 			Object.entries(sourceGraph.groups ?? {}).map(([id, group]) => [
@@ -518,6 +536,7 @@ function normalizeSourceGraph(sourceGraph) {
 				id,
 				{
 					...author,
+					headquarteredCountry: headquarteredCountry('author', id, author.companyId),
 					aliases: [...(author.aliases ?? [])],
 					notes: ownNotes('author', id, author.notes)
 				}
@@ -547,13 +566,16 @@ function normalizeSourceGraph(sourceGraph) {
 				id,
 				{
 					...provider,
+					headquarteredCountry: headquarteredCountry('provider', id, provider.companyId),
 					aliases: [...(provider.aliases ?? [])],
 					credentialModes: [...provider.credentialModes],
-					// Source states only the guarantees that a provider gives.
+					// Source states only the guarantees that a provider gives and the companies that it
+					// shares requests with.
 					dataHandling: {
 						zeroDataRetention: false,
 						tee: false,
 						teeVerified: false,
+						sharedWith: [],
 						...provider.dataHandling
 					},
 					notes: ownNotes('provider', id, provider.notes)
@@ -565,7 +587,9 @@ function normalizeSourceGraph(sourceGraph) {
 				id,
 				{
 					...route,
-					// Source states end-to-end encryption only on routes that have it.
+					// Source states document formats only on routes that read some, and end-to-end
+					// encryption only on routes that have it.
+					documentFormats: route.documentFormats ?? { extensions: [], mediaTypes: [] },
 					dataHandling: { endToEndEncrypted: false, ...route.dataHandling }
 				}
 			])
@@ -594,7 +618,26 @@ function validateCanonicalList(values, ranks, owner) {
 	}
 }
 
-function validateDataHandling(owner, value, places) {
+// The companies that a record shares requests with: each one that companies lists, or unknown,
+// once, in order.
+function validateSharedWith(owner, sharedWith, companies) {
+	if (
+		sharedWith.some(
+			(company, index) =>
+				!isCompany(companies, company) || (index > 0 && sharedWith[index - 1] >= company)
+		)
+	)
+		throw new Error(
+			`${owner}: sharedWith must list companies that companies lists, or unknown, in order, once each`
+		);
+}
+
+function isCompany(companies, id) {
+	return id === 'unknown' || Object.hasOwn(companies, id);
+}
+
+function validateDataHandling(owner, value, places, companies) {
+	validateSharedWith(owner, value.sharedWith, companies);
 	if (
 		!isLocation(places, value.processingLocation) ||
 		(value.storageLocation !== 'none' && !isLocation(places, value.storageLocation))
@@ -652,7 +695,7 @@ function providerForDeployment(graph, deploymentId, deployment) {
 // each route the facts that combine the route with the model and deployment, such as the hosted
 // tools that the route runs for it, with their call prices. Facts of the route alone, such as its
 // document formats, stay on the route. A capability needs the route, the model and the deployment.
-function servedFacts(graph, model, deployment) {
+function servedFacts(graph, model, deployment, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const contextWindowTokens = overrides.contextWindowTokens ?? model.contextWindowTokens;
 	const reasoningEfforts = overrides.reasoningEfforts ?? model.reasoningEfforts;
@@ -666,7 +709,13 @@ function servedFacts(graph, model, deployment) {
 			route.interfaces.length === 1
 				? model.reasoningEffortsByInterface[route.interfaces[0]]
 				: undefined;
-		const dataHandling = mergeFacts(route.dataHandling, overrides.dataHandling ?? {});
+		const dataHandling = mergeFacts(
+			mergeFacts(
+				route.dataHandling,
+				selectedDataHandling(graph, route.providerId, hosting, deployment.upstream)
+			),
+			overrides.dataHandling ?? {}
+		);
 		const offers = route.hostedTools;
 		routes[routeId] = {
 			capabilities: Object.fromEntries(
@@ -714,7 +763,7 @@ function servedFacts(graph, model, deployment) {
 
 // A route's hosted tools in canonical order, each tool once, with only its own call meters and
 // places that locations lists. Every deployment of the route runs them.
-function compileHostedTools(routeId, source, places) {
+function compileHostedTools(routeId, source, places, companies) {
 	const offers = (source ?? []).map((offer, index) => {
 		const owner = `${routeId}.hostedTools[${index}]`;
 		if (!hostedToolRanks.has(offer.tool)) throw new Error(`${owner}: unknown tool ${offer.tool}`);
@@ -729,6 +778,8 @@ function compileHostedTools(routeId, source, places) {
 				throw new Error(`${owner}: dataHandling names a place that locations does not list`);
 			}
 		}
+		if (offer.dataHandling?.sharedWith)
+			validateSharedWith(owner, offer.dataHandling.sharedWith, companies);
 		return {
 			tool: offer.tool,
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
@@ -750,7 +801,8 @@ function validateServedFacts(
 	deployment,
 	served,
 	anthropicWire,
-	places
+	places,
+	companies
 ) {
 	const overrides = deployment.overrides ?? {};
 	if (served.contextWindowTokens > model.contextWindowTokens) {
@@ -816,7 +868,7 @@ function validateServedFacts(
 		throw new Error(`${deploymentId}: invalid manual reasoning token limit`);
 	}
 	for (const [routeId, route] of Object.entries(served.routes)) {
-		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling, places);
+		validateDataHandling(`${deploymentId} on ${routeId}`, route.dataHandling, places, companies);
 		for (const offer of graph.routes[routeId].hostedTools) {
 			for (const meter of Object.keys(deployment.pricing)) {
 				if (offer.pricing?.[meter]) {
@@ -847,8 +899,8 @@ function validateServedFacts(
 }
 
 // Every override must change a fact that the deployment serves on at least one route, so the
-// source never states a value that the model or a route already sets.
-function rejectMaskedOverrides(graph, deploymentId, model, deployment, served) {
+// source never states a value that the model, a route or its upstream fields already set.
+function rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const paths = Object.entries(overrides).flatMap(([key, value]) =>
 		key === 'capabilities' || key === 'dataHandling'
@@ -860,7 +912,7 @@ function rejectMaskedOverrides(graph, deploymentId, model, deployment, served) {
 		let target = without.overrides;
 		for (const key of path.slice(0, -1)) target = target[key];
 		delete target[path.at(-1)];
-		if (same(servedFacts(graph, model, without), served)) {
+		if (same(servedFacts(graph, model, without, hosting), served)) {
 			throw new Error(
 				`${deploymentId}.overrides.${path.join('.')} does not change what the deployment serves`
 			);
@@ -902,13 +954,42 @@ export function buildCatalog(source) {
 	}
 	const locations = compileLocations(source.locations);
 	const places = placeIndex(locations);
+	const companies = source.companies;
 	const { base, states, periods } = periodStates(source.graph);
-	requireNamedPlaces(places, [base, ...states.map((state) => state.graph)]);
-	const graph = compileGraph(base, places);
+	const sourceGraphs = [base, ...states.map((state) => state.graph)];
+	requireNamedPlaces(places, [...sourceGraphs, companies]);
+	const graph = compileGraph(base, places, companies);
 	const schedule = [];
-	for (const state of states)
-		addScheduleEntry(schedule, state.start, graph, compileGraph(state.graph, places));
-	return { locations, graph, schedule, periods };
+	const graphs = [graph];
+	for (const state of states) {
+		const compiled = compileGraph(state.graph, places, companies);
+		graphs.push(compiled);
+		addScheduleEntry(schedule, state.start, graph, compiled);
+	}
+	requireNamedCompanies(companies, graphs);
+	return { locations, companies, graph, schedule, periods };
+}
+
+/**
+ * Throws unless a record names each company, in the base graph or a dated state: as the company
+ * of an author or a provider, as a hosting, or as one that requests are shared with.
+ */
+function requireNamedCompanies(companies, graphs) {
+	const named = new Set();
+	for (const graph of graphs) {
+		for (const kind of ['authors', 'providers'])
+			for (const { companyId } of Object.values(graph[kind])) named.add(companyId);
+		for (const { hostedTools } of Object.values(graph.routes))
+			for (const { dataHandling } of hostedTools)
+				for (const company of dataHandling.sharedWith ?? []) named.add(company);
+		for (const { hosting, routes } of Object.values(graph.deployments)) {
+			named.add(hosting);
+			for (const { dataHandling } of Object.values(routes))
+				for (const company of dataHandling.sharedWith) named.add(company);
+		}
+	}
+	for (const id of Object.keys(companies))
+		if (!named.has(id)) throw new Error(`Company ${id}: no record names it, so remove it`);
 }
 
 const PLACE_FIELDS = new Set([
@@ -1045,8 +1126,8 @@ function addScheduleEntry(schedule, start, base, state) {
 	if (!same(graph, schedule.at(-1)?.graph ?? {})) schedule.push({ start, graph });
 }
 
-function compileGraph(source, places) {
-	const sourceGraph = normalizeSourceGraph(source);
+function compileGraph(source, places, companies) {
+	const sourceGraph = normalizeSourceGraph(source, companies);
 	orderModelGroups(sourceGraph.groups);
 	for (const [id, group] of Object.entries(sourceGraph.groups)) {
 		requireNode(sourceGraph.authors, group.authorId, id);
@@ -1066,6 +1147,9 @@ function compileGraph(source, places) {
 			}
 		}
 	}
+	// Who runs the models of each route unless a deployment names another hosting. A deployment's
+	// record states its hosting, so a route's record does not.
+	const hostings = new Map();
 	const graph = {
 		...sourceGraph,
 		routes: Object.fromEntries(
@@ -1106,8 +1190,14 @@ function compileGraph(source, places) {
 						throw new Error(`${routeId}: dataHandling.${field} is unresolved`);
 					}
 				}
-				validateDataHandling(routeId, dataHandling, places);
-				const hostedTools = compileHostedTools(routeId, route.hostedTools, places);
+				validateDataHandling(routeId, dataHandling, places, companies);
+				const hostedTools = compileHostedTools(routeId, route.hostedTools, places, companies);
+				// The provider's company runs the models of a route that names no other hosting.
+				if (route.hosting === provider.companyId)
+					throw new Error(`${routeId}.hosting redundantly repeats its provider's company`);
+				if (route.hosting !== undefined && !isCompany(companies, route.hosting))
+					throw new Error(`${routeId}: companies does not list the hosting ${route.hosting}`);
+				hostings.set(routeId, route.hosting ?? provider.companyId);
 				return [
 					routeId,
 					{
@@ -1172,15 +1262,11 @@ function compileGraph(source, places) {
 
 	validateQualifierAliases(graph.authors, 'author');
 	validateQualifierAliases(graph.providers, 'provider');
-	for (const [kind, nodes] of [
-		['author', graph.authors],
-		['provider', graph.providers]
-	])
-		for (const [id, { headquarteredCountry: country }] of Object.entries(nodes))
-			if (!(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
-				throw new Error(
-					`${kind} ${id}: headquarteredCountry names a country that locations does not list`
-				);
+	for (const [id, { headquarteredCountry: country }] of Object.entries(companies))
+		if (!(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
+			throw new Error(
+				`Company ${id}: headquarteredCountry names a country that locations does not list`
+			);
 	for (const [providerId, provider] of Object.entries(graph.providers)) {
 		validateCanonicalList(
 			provider.credentialModes,
@@ -1196,7 +1282,7 @@ function compileGraph(source, places) {
 			throw new Error(
 				`${providerId}: accountLocations must list places that locations lists, in order, once each`
 			);
-		validateDataHandling(providerId, provider.dataHandling, places);
+		validateDataHandling(providerId, provider.dataHandling, places, companies);
 		validateRetirementDate(providerId, provider.retirementDate);
 	}
 
@@ -1294,9 +1380,16 @@ function compileGraph(source, places) {
 		if (!deployment.upstream?.model) {
 			throw new Error(`${deploymentId}: upstream model is required`);
 		}
-		if (!deployment.hosting) {
-			throw new Error(`${deploymentId}: hosting is required`);
-		}
+		// Its routes say who runs it unless it names its own hosting, which it must when they differ.
+		const providerCompany = graph.providers[providerId].companyId;
+		const routeHostings = [...new Set(deployment.routeIds.map((routeId) => hostings.get(routeId)))];
+		if (deployment.hosting === undefined && routeHostings.length > 1)
+			throw new Error(`${deploymentId}: its routes name different hostings, so name its own`);
+		if (routeHostings.length === 1 && deployment.hosting === routeHostings[0])
+			throw new Error(`${deploymentId}.hosting redundantly repeats its route's hosting`);
+		if (deployment.hosting !== undefined && !isCompany(companies, deployment.hosting))
+			throw new Error(`${deploymentId}: companies does not list the hosting ${deployment.hosting}`);
+		const hosting = deployment.hosting ?? routeHostings[0];
 		validateRetirementDate(deploymentId, deployment.retirementDate);
 		// A deployment retires on its own date, or once every route that serves it has retired.
 		const routeDates = deployment.routeIds.map(
@@ -1329,6 +1422,7 @@ function compileGraph(source, places) {
 					.flatMap((routeId) => graph.routes[routeId].notes)
 					.map((note) => [`${note.kind}:${note.id}`, note])
 			).values(),
+			...model.notes,
 			...ownNotes('deployment', deploymentId, deployment.notes)
 		];
 		// A deployment's token prices hold on all of its routes, and a batch API bills its own, so a
@@ -1371,25 +1465,16 @@ function compileGraph(source, places) {
 						'serviceTier'
 					].includes(key)
 				)) ||
-			// Anthropic takes no inference geography for models before Claude 4.6. The schema allows a
-			// tier only where Anthropic runs Claude on Google Cloud.
+			// Anthropic takes no inference geography for models before Claude 4.6, only global and us
+			// for the others, and Fast only where it runs the model itself.
 			((providerId === 'aws' || providerId === 'google-cloud') &&
-				(selectorKeys.includes('inferenceGeo') || deployment.hosting === 'anthropic') &&
+				(hosting === 'anthropic'
+					? [undefined, 'global', 'us'].includes(deployment.upstream.inferenceGeo)
+					: selectorKeys.includes('inferenceGeo') &&
+						deployment.upstream.serviceTier === undefined) &&
 				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key)));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
-		}
-		// Chutes runs the models of its end-to-end encrypted route itself and forwards those of its
-		// other routes to operators that it does not name.
-		if (providerId === 'chutes') {
-			const expected = graph.routes[deployment.routeIds[0]].dataHandling.endToEndEncrypted
-				? 'chutes'
-				: 'unknown';
-			if (deployment.hosting !== expected) {
-				throw new Error(
-					`${deploymentId}: a deployment on ${deployment.routeIds[0]} requires hosting ${expected}`
-				);
-			}
 		}
 		// Azure sells OpenAI tiers as request modes of one deployment, and Claude Fast as its own model.
 		if (
@@ -1415,22 +1500,10 @@ function compileGraph(source, places) {
 			providerId === 'aws' ||
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
-		// AWS and Google Cloud serve only Claude, and each of their routes is a product that one
-		// company runs.
-		const cloudRoutes = cloudClaudeRoutes[providerId];
-		for (const routeId of cloudRoutes ? deployment.routeIds : []) {
-			if (model.authorId !== 'anthropic' || cloudRoutes[routeId] !== deployment.hosting) {
-				throw new Error(
-					`${deploymentId}: ${providerId} serves Claude on ${Object.entries(cloudRoutes)
-						.map(([id, hosting]) => `${id}, hosted by ${hosting}`)
-						.join('; ')}`
-				);
-			}
-		}
 		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
 		if (
 			providerId === 'aws' &&
-			deployment.hosting === 'aws' &&
+			hosting === providerCompany &&
 			!deployment.upstream.model.startsWith(`${deployment.upstream.inferenceGeo}.anthropic.`)
 		) {
 			throw new Error(
@@ -1456,88 +1529,40 @@ function compileGraph(source, places) {
 		) {
 			throw new Error(`${deploymentId}: fixed reasoning mode requires Responses-only routes`);
 		}
-		const served = servedFacts(graph, model, deployment);
-		validateServedFacts(graph, deploymentId, model, deployment, served, anthropicWire, places);
-		rejectMaskedOverrides(graph, deploymentId, model, deployment, served);
-		const dataHandlingValues = Object.values(served.routes).map((route) => route.dataHandling);
-		const dataZone = azureDataZone(deployment.upstream.deploymentType);
-		if (providerId === 'azure' && deployment.hosting === 'azure' && dataZone) {
-			const location = AZURE_DATA_ZONE_LOCATIONS[dataZone];
-			if (
-				!location ||
-				dataHandlingValues.some(
-					(value) => value.processingLocation !== location || value.storageLocation !== location
-				)
-			) {
+		const served = servedFacts(graph, model, deployment, hosting);
+		validateServedFacts(
+			graph,
+			deploymentId,
+			model,
+			deployment,
+			served,
+			anthropicWire,
+			places,
+			companies
+		);
+		rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting);
+		// Its upstream fields decide these facts, so an override cannot restate or change them.
+		for (const field of Object.keys(
+			selectedDataHandling(graph, providerId, hosting, deployment.upstream)
+		))
+			if (Object.hasOwn(deployment.overrides?.dataHandling ?? {}, field))
 				throw new Error(
-					`${deploymentId}: a Data Zone deployment must keep processing and storage in its zone`
+					`${deploymentId}.overrides.dataHandling.${field} follows from its upstream fields`
 				);
-			}
-		}
-		// Microsoft's preview terms drop its data location, retention and training commitments.
-		if (
-			providerId === 'azure' &&
-			(deployment.upstream.deploymentType === 'instant' ||
-				deployment.upstream.serviceTier === 'flex') &&
-			dataHandlingValues.some(
-				(value) =>
-					value.storageLocation !== 'unknown' ||
-					value.retentionDays !== null ||
-					value.trainingUse !== null
-			)
-		) {
-			throw new Error(
-				`${deploymentId}: Azure Instant and Flex previews must leave storage, retention and training unknown`
-			);
-		}
-		// An upstream inference geo says where inference runs: Anthropic's inference_geo, Bedrock's
-		// inference profile and Google Cloud's endpoint. Anthropic runs a request that names none
-		// anywhere in the world.
-		const geo =
-			deployment.upstream.inferenceGeo ?? (providerId === 'anthropic' ? 'global' : undefined);
-		if (
-			geo !== undefined &&
-			dataHandlingValues.some((value) => value.processingLocation !== INFERENCE_GEO_PROCESSING[geo])
-		) {
-			throw new Error(`${deploymentId}: processingLocation must match upstream inferenceGeo`);
-		}
-		// A provider that runs the model itself sends requests through no one. Each company between
-		// it and the hosting is named once, and unknown, which stands for those that the provider
-		// does not name, adds nothing to a hosting of unknown. A company that the hosting shares
-		// requests with receives them in no other way.
-		const { hosting } = deployment;
-		const via = deployment.via ?? [];
-		const sharedWith = deployment.sharedWith ?? [];
-		if (
-			(via.length > 0 && hosting === providerId) ||
-			new Set(via).size !== via.length ||
-			via.includes(providerId) ||
-			via.includes(hosting)
-		) {
-			throw new Error(
-				`${deploymentId}: via names each company between the provider and the hosting once`
-			);
-		}
-		if (
-			new Set(sharedWith).size !== sharedWith.length ||
-			sharedWith.some(
-				(company) => company === providerId || company === hosting || via.includes(company)
-			)
-		) {
-			throw new Error(
-				`${deploymentId}: sharedWith names each other company that the hosting shares requests with once`
-			);
-		}
+		// The provider's company and the hosting receive every request, so sharedWith names neither.
+		for (const [routeId, route] of Object.entries(served.routes))
+			if (route.dataHandling.sharedWith.some((id) => id === providerCompany || id === hosting))
+				throw new Error(
+					`${deploymentId} on ${routeId}: sharedWith names only companies other than the provider's and the hosting`
+				);
 		// The ID names the provider and model, then each fact that sets the deployment apart from the
-		// provider's own standard one: the companies that requests pass through and who runs it when
-		// not the provider, its reasoning mode, its tier or batch API, and the geography or Azure data
-		// zone where it runs.
+		// provider's own standard one: who runs it when not the provider's company, its reasoning
+		// mode, its tier or batch API, and the geography or Azure data zone where it runs.
 		const { deploymentType, inferenceGeo, reasoningMode, serviceTier } = deployment.upstream;
 		const expectedId = [
 			providerId,
 			deployment.modelId,
-			...via.map((company) => `via-${company}`),
-			hosting !== providerId && `${hosting}-hosted`,
+			hosting !== providerCompany && `${hosting}-hosted`,
 			reasoningMode,
 			serviceTier ?? (deploymentType === 'instant' ? 'instant' : batch[0] && 'batch'),
 			inferenceGeo !== 'global' && inferenceGeo,
@@ -1554,8 +1579,6 @@ function compileGraph(source, places) {
 		deployments[deploymentId] = {
 			modelId: deployment.modelId,
 			hosting,
-			// Every company that receives the deployment's requests, in the order that they reach it.
-			companies: [providerId, ...via, ...(hosting === providerId ? [] : [hosting]), ...sharedWith],
 			upstream,
 			approvalRequired: deployment.approvalRequired ?? false,
 			// Closed models do not disclose how their weights are stored.
@@ -1569,8 +1592,8 @@ function compileGraph(source, places) {
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
 	// provider ran at Standard at, the one deployment of the model on the same route that matches
-	// the companies that receive its requests and these upstream fields. The provider's model name can differ,
-	// as Azure's Claude Fast does.
+	// its hosting and these upstream fields. The provider's model name can differ, as Azure's Claude
+	// Fast does.
 	const siblingFields = [
 		'reasoningMode',
 		'modelFormat',
@@ -1587,7 +1610,7 @@ function compileGraph(source, places) {
 					candidate.upstream.serviceTier === 'standard' &&
 					candidate.modelId === fast.modelId &&
 					Object.hasOwn(candidate.routes, routeId) &&
-					same(candidate.companies, fast.companies) &&
+					candidate.hosting === fast.hosting &&
 					siblingFields.every((field) => candidate.upstream[field] === fast.upstream[field])
 			);
 			if (

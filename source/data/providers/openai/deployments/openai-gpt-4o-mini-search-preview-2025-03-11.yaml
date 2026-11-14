@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-4o-mini-search-preview-2025-03-11
   routeIds: [openai-chat-completions]
-  hosting: openai
   upstream:
     model: gpt-4o-mini-search-preview-2025-03-11
   # OpenAI shut it down on July 23, 2026, at these prices.

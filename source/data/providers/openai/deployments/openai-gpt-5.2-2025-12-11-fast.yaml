@@ -1,7 +1,6 @@
 deployments:
   modelId: gpt-5.2-2025-12-11
   routeIds: [openai-chat-completions, openai-responses]
-  hosting: openai
   upstream:
     model: gpt-5.2-2025-12-11
     serviceTier: fast

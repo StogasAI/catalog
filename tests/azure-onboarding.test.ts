@@ -55,7 +55,7 @@ function gptTargets(
 				tier === 'batch'
 					? routeIds.map((routeId) => routeId.replace('azure-', 'azure-batch-'))
 					: routeIds,
-			hosting: 'azure',
+			hosting: 'microsoft',
 			upstream
 		};
 		return pro
@@ -65,7 +65,7 @@ function gptTargets(
 						id: `azure-${modelId}-pro${suffix}`,
 						modelId,
 						routeIds: ['azure-responses'],
-						hosting: 'azure',
+						hosting: 'microsoft',
 						upstream: { ...upstream, reasoningMode: 'pro' }
 					}
 				]
@@ -101,7 +101,7 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-haiku-5-5', 'claude-haiku-5-5', '2', 'azure', 'global_standard'],
+	['azure-claude-haiku-5-5', 'claude-haiku-5-5', '2', 'microsoft', 'global_standard'],
 	[
 		'azure-claude-haiku-5-5-anthropic-hosted',
 		'claude-haiku-5-5',
@@ -109,7 +109,7 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-haiku-5-5-us', 'claude-haiku-5-5', '2', 'azure', 'data_zone_standard_us'],
+	['azure-claude-haiku-5-5-us', 'claude-haiku-5-5', '2', 'microsoft', 'data_zone_standard_us'],
 	[
 		'azure-claude-mythos-5-anthropic-hosted',
 		'claude-mythos-5',
@@ -131,7 +131,7 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-opus-4-8', 'claude-opus-4-8', '2', 'azure', 'global_standard'],
+	['azure-claude-opus-4-8', 'claude-opus-4-8', '2', 'microsoft', 'global_standard'],
 	[
 		'azure-claude-opus-4-8-anthropic-hosted',
 		'claude-opus-4-8',
@@ -139,8 +139,8 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-opus-4-8-us', 'claude-opus-4-8', '2', 'azure', 'data_zone_standard_us'],
-	['azure-claude-opus-5-5', 'claude-opus-5-5', '2', 'azure', 'global_standard'],
+	['azure-claude-opus-4-8-us', 'claude-opus-4-8', '2', 'microsoft', 'data_zone_standard_us'],
+	['azure-claude-opus-5-5', 'claude-opus-5-5', '2', 'microsoft', 'global_standard'],
 	[
 		'azure-claude-opus-5-5-anthropic-hosted',
 		'claude-opus-5-5',
@@ -148,8 +148,8 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-opus-5-5-us', 'claude-opus-5-5', '2', 'azure', 'data_zone_standard_us'],
-	['azure-claude-sonnet-5-5', 'claude-sonnet-5-5', '2', 'azure', 'global_standard'],
+	['azure-claude-opus-5-5-us', 'claude-opus-5-5', '2', 'microsoft', 'data_zone_standard_us'],
+	['azure-claude-sonnet-5-5', 'claude-sonnet-5-5', '2', 'microsoft', 'global_standard'],
 	[
 		'azure-claude-sonnet-5-5-anthropic-hosted',
 		'claude-sonnet-5-5',
@@ -157,7 +157,7 @@ const otherTargets: AzureTarget[] = [
 		'anthropic',
 		'global_standard'
 	],
-	['azure-claude-sonnet-5-5-us', 'claude-sonnet-5-5', '2', 'azure', 'data_zone_standard_us']
+	['azure-claude-sonnet-5-5-us', 'claude-sonnet-5-5', '2', 'microsoft', 'data_zone_standard_us']
 ].map(([id, modelId, modelVersion, hosting, deploymentType]) => ({
 	id,
 	modelId,
@@ -191,7 +191,7 @@ otherTargets.push(
 		id: `azure-claude-opus-5-5-fast${location === 'global' ? '' : '-us'}`,
 		modelId: 'claude-opus-5-5',
 		routeIds: ['azure-anthropic-messages'],
-		hosting: 'azure',
+		hosting: 'microsoft',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
 			model: 'claude-opus-5-5-fast',
@@ -204,7 +204,7 @@ otherTargets.push(
 		id: `azure-deepseek-v4-flash-0423${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-flash-0423',
 		routeIds: ['azure-chat-completions'],
-		hosting: 'azure',
+		hosting: 'microsoft',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : `data_zone_standard_${location}`,
 			model: 'DeepSeek-V4-Flash',
@@ -216,7 +216,7 @@ otherTargets.push(
 		id: `azure-deepseek-v4-pro${location === 'global' ? '' : `-${location}`}`,
 		modelId: 'deepseek-v4-pro',
 		routeIds: ['azure-chat-completions'],
-		hosting: 'azure',
+		hosting: 'microsoft',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
 			model: 'DeepSeek-V4-Pro',
@@ -228,7 +228,7 @@ otherTargets.push(
 		id: `azure-gpt-oss-120b${location === 'global' ? '' : '-us'}`,
 		modelId: 'gpt-oss-120b',
 		routeIds: ['azure-chat-completions'],
-		hosting: 'azure',
+		hosting: 'microsoft',
 		upstream: {
 			deploymentType: location === 'global' ? 'global_standard' : 'data_zone_standard_us',
 			model: 'gpt-oss-120b',
@@ -391,6 +391,7 @@ describe('Azure provider onboarding contract', () => {
 			],
 			aliases: [],
 			credentialModes: ['byok'],
+			companyId: 'microsoft',
 			headquarteredCountry: 'US',
 			name: 'Azure',
 			notes: []
@@ -608,13 +609,13 @@ describe('Azure provider onboarding contract', () => {
 		for (const [, deployment] of azureDeployments()) {
 			for (const { dataHandling: handling } of Object.values(deployment.routes)) {
 				if (
-					deployment.hosting === 'azure' &&
+					deployment.hosting === 'microsoft' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_us'
 				) {
 					expect(handling).toMatchObject({ processingLocation: 'US', storageLocation: 'US' });
 				}
 				if (
-					deployment.hosting === 'azure' &&
+					deployment.hosting === 'microsoft' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_eu'
 				) {
 					expect(handling).toMatchObject({
