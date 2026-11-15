@@ -7,7 +7,6 @@ import {
 	CATALOG_PART_SCHEMA,
 	CATALOG_SCHEMA,
 	assembleCatalog,
-	checkedCatalogFiles,
 	isRetired,
 	partsInEffect,
 	partsOfRecords,
