@@ -6,6 +6,12 @@ function chains(graph = catalog.graph) {
 	return [...resolvedCatalogChains(graph)];
 }
 
+/** The notes that a record of this kind states itself, or undefined when it states none. */
+function own(record: { notes?: { kind: string }[] }, kind: string) {
+	const notes = record.notes?.filter((note) => note.kind === kind);
+	return notes?.length ? notes : undefined;
+}
+
 test('compiled chain hashes identify individual executable paths and resolved facts', () => {
 	const resolved = chains();
 	expect(resolved).toHaveLength(
@@ -37,13 +43,9 @@ test('compiled chain hashes identify individual executable paths and resolved fa
 		expect(chain.route.data.retirementDate).toBe(
 			catalog.graph.routes[entry.routeId].retirementDate
 		);
-		expect(chain.route.data.notes).toEqual(
-			catalog.graph.routes[entry.routeId].notes.filter(({ kind }) => kind === 'route')
-		);
+		expect(chain.route.data.notes).toEqual(own(catalog.graph.routes[entry.routeId], 'route'));
 		expect(chain.deployment.data.notes).toEqual(
-			catalog.graph.deployments[entry.deploymentId].notes.filter(
-				({ kind }) => kind === 'deployment'
-			)
+			own(catalog.graph.deployments[entry.deploymentId], 'deployment')
 		);
 		// What the deployment doesn't state, the model and the route keep.
 		const {
@@ -68,9 +70,7 @@ test('a chain shows each fact once, as the path runs it', () => {
 	expect(Object.keys(chain.route.data).sort()).toEqual([
 		'batch',
 		'documentFormats',
-		'endpoint',
 		'interfaces',
-		'notes',
 		'providerId',
 		'retirementDate'
 	]);
@@ -111,7 +111,7 @@ test('changes affect only paths containing the changed node and preserve old con
 	const original = chains();
 	const graph = structuredClone(catalog.graph);
 	const routeId = 'openai-responses';
-	graph.routes[routeId].endpoint = 'https://api.openai.com/v2/responses';
+	graph.routes[routeId].documentFormats = { extensions: [], mediaTypes: [] };
 	const updated = chains(graph);
 	for (let index = 0; index < original.length; index++) {
 		if (original[index].routeId === routeId) {

@@ -162,6 +162,9 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 		const kept = /^claude-(fable|mythos)-/.test(model);
 		// Bedrock serves Mythos only to accounts that Anthropic's verification programs approve.
 		const gated = model.startsWith('claude-mythos') ? { approvalRequired: true } : {};
+		// Bedrock caches Claude Opus 4.7 prompts from 4,096 tokens, where Anthropic's API caches
+		// them from 2,048.
+		const cached = model === 'claude-opus-4-7' ? { promptCacheMinimumTokens: 4096 } : {};
 		return [
 			{
 				...deployment(
@@ -171,7 +174,8 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					kept ? { retentionDays: 30, storageLocation: 'world' } : {},
 					global
 				),
-				...gated
+				...gated,
+				...cached
 			},
 			{
 				...deployment(
@@ -184,17 +188,19 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					},
 					us
 				),
-				...gated
+				...gated,
+				...cached
 			},
-			...(geographies[model] ?? []).map((geo) =>
-				deployment(
+			...(geographies[model] ?? []).map((geo) => ({
+				...deployment(
 					`aws-${model}-${geo}`,
 					model,
 					{ inferenceGeo: geo, model: `${geo}.${profile}` },
 					{ processingLocation: GEOGRAPHY_PLACES[geo] },
 					us
-				)
-			)
+				),
+				...cached
+			}))
 		];
 	}
 );
@@ -270,6 +276,7 @@ describe('AWS onboarding contract', () => {
 			provider: {
 				aliases: [],
 				capabilities,
+				sampling: ['temperature', 'topP', 'topK'],
 				credentialModes: ['byok'],
 				dataHandling: providerHandling,
 				companyId: 'amazon',
@@ -280,6 +287,11 @@ describe('AWS onboarding contract', () => {
 			routes: [
 				{
 					documentFormats: formats,
+					inputLimits: {
+						requestBytes: 20000000,
+						images: { bytes: 3750000, count: 600, pixels: 8000 },
+						documents: { pages: 600 }
+					},
 					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
@@ -298,6 +310,11 @@ describe('AWS onboarding contract', () => {
 					dataHandling: { retentionDays: 30 },
 					documentFormats: formats,
 					hostedTools: platformHostedTools,
+					inputLimits: {
+						requestBytes: 32000000,
+						images: { count: 600, pixels: 8000 },
+						documents: { pages: 600 }
+					},
 					id: 'aws-claude-platform-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']

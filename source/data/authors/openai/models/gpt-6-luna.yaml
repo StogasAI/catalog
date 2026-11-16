@@ -11,5 +11,10 @@ models:
   reasoningEfforts: [low, medium, high, xhigh, max]
   reasoningEffortsByInterface:
     chat_completions: [low, medium, high, xhigh]
+  # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/reasoning
+  reasoningDefault: medium
+  openWeights: false
+  # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/prompt-caching
+  promptCacheMinimumTokens: 1024
   releaseDate: 2026-09-22
   knowledgeCutoff: 2026-05-18

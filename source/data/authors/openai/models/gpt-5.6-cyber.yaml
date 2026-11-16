@@ -8,5 +8,8 @@ models:
   inputModalities: [text, image]
   outputModalities: [text]
   reasoning: optional
+  openWeights: false
+  # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/prompt-caching
+  promptCacheMinimumTokens: 1024
   releaseDate: 2026-08-07
   knowledgeCutoff: 2026-02-16

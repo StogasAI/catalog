@@ -7,6 +7,7 @@ models:
   inputModalities: [text]
   outputModalities: [text]
   reasoning: optional
+  openWeights: true
   releaseDate: 2026-03-11
   # The model card's pre-training cutoff; post-training data runs to February 2026.
   knowledgeCutoff: 2025-06-01

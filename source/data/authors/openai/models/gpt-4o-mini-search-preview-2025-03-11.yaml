@@ -13,6 +13,7 @@ models:
     implicitPromptCaching: false
     explicitPromptCaching: false
   reasoning: unsupported
+  openWeights: false
   snapshot: 2025-03-11
   releaseDate: 2025-03-11
   knowledgeCutoff: 2023-10-01

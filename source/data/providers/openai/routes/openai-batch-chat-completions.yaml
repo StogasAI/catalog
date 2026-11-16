@@ -7,16 +7,32 @@
 # retention. Hosted tools stay off until OpenAI prices them for batches.
 routes:
   providerId: openai
-  endpoint: https://api.openai.com/v1/batches
   interfaces: [chat_completions]
   batch: true
   inputModalities: [text, image, audio]
+  capabilities:
+    streaming: false
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of OpenAI's Chat Completions API. Reviewed 2026-11-15:
+  # https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
+  sampling:
+    temperature: true
+    topP: true
+    topK: false
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: false
+    seed: true
+    logitBias: true
   # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs
   documentFormats:
     extensions: [.pdf]
     mediaTypes: [application/pdf]
-  overrides:
-    capabilities:
-      streaming: false
   dataHandling:
     retentionDays: null

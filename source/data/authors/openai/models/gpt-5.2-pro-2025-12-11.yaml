@@ -16,6 +16,7 @@ models:
     structuredOutputs: false
   reasoning: required
   reasoningEfforts: [medium, high, xhigh]
+  openWeights: false
   snapshot: 2025-12-11
   releaseDate: 2025-12-11
   knowledgeCutoff: 2025-08-31

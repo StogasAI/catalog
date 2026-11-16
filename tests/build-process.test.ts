@@ -352,11 +352,11 @@ exit 1
 			error: 'documentFormats'
 		},
 		{
-			name: 'document formats below route overrides',
+			name: 'overrides on a route, which states its own facts in full',
 			path: 'source/data/providers/openai/routes/openai-chat-completions.yaml',
 			from: '  providerId: openai',
-			to: '  providerId: openai\n  overrides:\n    documentFormats: {extensions: [], mediaTypes: []}',
-			error: 'documentFormats'
+			to: '  providerId: openai\n  overrides:\n    capabilities: {streaming: false}',
+			error: 'overrides'
 		},
 		{
 			name: 'Azure upstream fields on an OpenAI deployment',

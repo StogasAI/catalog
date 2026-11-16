@@ -7,10 +7,29 @@
 # their 30 days.
 routes:
   providerId: anthropic
-  endpoint: https://api.anthropic.com/v1/messages/batches
   interfaces: [chat_completions, responses]
   batch: true
   inputModalities: [text, image]
+  capabilities:
+    streaming: false
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: false
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of the Messages API. Reviewed 2026-11-15:
+  # https://platform.claude.com/docs/en/api/messages/create
+  sampling:
+    temperature: true
+    topP: true
+    topK: true
+    frequencyPenalty: false
+    presencePenalty: false
+    repetitionPenalty: false
+    seed: false
+    logitBias: false
   # Native document formats reviewed 2026-10-05: https://platform.claude.com/docs/en/build-with-claude/files
   documentFormats:
     extensions: [.csv, .md, .pdf, .txt]
@@ -35,6 +54,3 @@ routes:
         retentionDays: null
         zeroDataRetention: false
         sharedWith: [unknown]
-  overrides:
-    capabilities:
-      streaming: false

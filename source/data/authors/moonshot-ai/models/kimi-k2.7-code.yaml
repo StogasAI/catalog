@@ -7,4 +7,5 @@ models:
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: required
+  openWeights: true
   releaseDate: 2026-06-12

@@ -2,15 +2,6 @@ providers:
   name: Chutes
   credentialModes: [managed, byok]
   companyId: chutes
-  capabilities:
-    streaming: true
-    functionCalling: true
-    parallelFunctionCalling: false
-    implicitPromptCaching: true
-    explicitPromptCaching: false
-    structuredOutputs: true
-    systemMessages: true
-    toolChoice: true
   # Chutes' terms let it, its network operators and its model providers host, process and cache
   # content for as long as processing needs it, and name no place or period. Chutes does not
   # train on content.

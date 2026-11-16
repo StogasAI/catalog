@@ -2,3 +2,28 @@ routes:
   providerId: azure
   interfaces: [chat_completions]
   inputModalities: [text, image, audio]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of Azure's Chat Completions API, which are OpenAI's. Reviewed 2026-11-15:
+  # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference
+  sampling:
+    temperature: true
+    topP: true
+    topK: false
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: false
+    seed: true
+    logitBias: true
+  # Reviewed 2026-11-15: https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/gpt-with-vision
+  inputLimits:
+    images:
+      count: 10
+      bytes: 20000000

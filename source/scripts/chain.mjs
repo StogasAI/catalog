@@ -9,7 +9,7 @@
 export function catalogChain(graph, deploymentId, routeId) {
 	const { routes, ...deployment } = requireNode(graph.deployments, deploymentId);
 	const { chainHash: _chainHash, ...routeFacts } = requireNode(routes, routeId);
-	const served = { ...deployment, ...routeFacts, notes: ownNotes(deployment.notes, 'deployment') };
+	const served = noted({ ...deployment, ...routeFacts }, ownNotes(deployment.notes, 'deployment'));
 	const {
 		groupIds: _groups,
 		reasoningEffortsByInterface: _efforts,
@@ -18,22 +18,29 @@ export function catalogChain(graph, deploymentId, routeId) {
 	const route = requireNode(graph.routes, routeId);
 	return {
 		author: { id: model.authorId, data: requireNode(graph.authors, model.authorId) },
-		model: { id: deployment.modelId, data: { ...unstated(model, served), notes: model.notes } },
+		model: { id: deployment.modelId, data: noted(unstated(model, served), model.notes) },
 		deployment: { id: deploymentId, data: served },
 		route: {
 			id: routeId,
-			data: {
-				...unstated(route, served),
-				...(Object.hasOwn(route, 'retirementDate') && { retirementDate: route.retirementDate }),
-				...(Object.hasOwn(route, 'notes') && { notes: ownNotes(route.notes, 'route') })
-			}
+			data: noted(
+				{
+					...unstated(route, served),
+					...(Object.hasOwn(route, 'retirementDate') && { retirementDate: route.retirementDate })
+				},
+				ownNotes(route.notes, 'route')
+			)
 		},
 		provider: { id: route.providerId, data: requireNode(graph.providers, route.providerId) }
 	};
 }
 
 function ownNotes(notes, kind) {
-	return notes.filter((note) => note.kind === kind);
+	return notes?.filter((note) => note.kind === kind);
+}
+
+/** A record with these notes, or without the field when there is none. */
+function noted({ notes: _notes, ...facts }, notes) {
+	return notes?.length ? { ...facts, notes } : facts;
 }
 
 function unstated(record, served) {

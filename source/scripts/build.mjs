@@ -52,6 +52,22 @@ const capabilityNames = [
 	'systemMessages',
 	'toolChoice'
 ];
+const samplingNames = [
+	'temperature',
+	'topP',
+	'topK',
+	'frequencyPenalty',
+	'presencePenalty',
+	'repetitionPenalty',
+	'seed',
+	'logitBias'
+];
+const reasoningDefaults = new Set(['none', 'enabled', ...canonicalEffortOrder]);
+// Each kind of input that a provider limits, with the limits that it can state in fixed order.
+const inputLimitFields = {
+	images: ['count', 'bytes', 'totalBytes', 'pixels'],
+	documents: ['count', 'bytes', 'totalBytes', 'pages']
+};
 const dataHandlingFields = [
 	'processingLocation',
 	'storageLocation',
@@ -557,6 +573,10 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					reasoningEfforts: [...(model.reasoningEfforts ?? [])],
 					reasoningEffortsByInterface: model.reasoningEffortsByInterface ?? {},
 					reasoningMaxTokens: model.reasoningMaxTokens ?? null,
+					reasoningDefault: model.reasoningDefault ?? null,
+					sampling: model.sampling ?? {},
+					promptCacheMinimumTokens: model.promptCacheMinimumTokens ?? null,
+					inputLimits: model.inputLimits ?? {},
 					snapshot: model.snapshot ?? null
 				}
 			])
@@ -590,6 +610,7 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					// Source states document formats only on routes that read some, and end-to-end
 					// encryption only on routes that have it.
 					documentFormats: route.documentFormats ?? { extensions: [], mediaTypes: [] },
+					inputLimits: route.inputLimits ?? {},
 					dataHandling: { endToEndEncrypted: false, ...route.dataHandling }
 				}
 			])
@@ -659,28 +680,6 @@ function validateDataHandling(owner, value, places, companies) {
 	}
 }
 
-function validateRouteEndpoint(routeId, endpoint) {
-	if (endpoint === undefined) return;
-	let url;
-	try {
-		url = new URL(endpoint);
-	} catch {
-		throw new Error(`${routeId}: endpoint must be a canonical HTTPS URL`);
-	}
-	if (
-		endpoint !== endpoint.trim() ||
-		/\s/.test(endpoint) ||
-		url.protocol !== 'https:' ||
-		!url.hostname ||
-		url.username ||
-		url.password ||
-		url.search ||
-		url.hash
-	) {
-		throw new Error(`${routeId}: endpoint must be a canonical HTTPS URL`);
-	}
-}
-
 function providerForDeployment(graph, deploymentId, deployment) {
 	const providers = deployment.routeIds.map(
 		(routeId) => requireNode(graph.routes, routeId, deploymentId).providerId
@@ -689,6 +688,76 @@ function providerForDeployment(graph, deploymentId, deployment) {
 		throw new Error(`${deploymentId}: all routes must belong to one provider`);
 	}
 	return providers[0];
+}
+
+// The limits of one request on a route: for each limit, the smallest that the route, the model or
+// the deployment states, and null where none states one.
+function narrowestInputLimits(...sources) {
+	const smallest = (values) => {
+		const stated = values.filter((value) => value !== undefined && value !== null);
+		return stated.length > 0 ? Math.min(...stated) : null;
+	};
+	return {
+		requestBytes: smallest(sources.map((source) => source.requestBytes)),
+		...Object.fromEntries(
+			Object.entries(inputLimitFields).map(([kind, fields]) => [
+				kind,
+				Object.fromEntries(
+					fields.map((field) => [field, smallest(sources.map((source) => source[kind]?.[field]))])
+				)
+			])
+		)
+	};
+}
+
+function validateInputLimits(owner, limits) {
+	for (const [kind, value] of Object.entries(limits)) {
+		if (kind === 'requestBytes') continue;
+		if (!Object.hasOwn(inputLimitFields, kind) || Object.keys(value).length === 0) {
+			throw new Error(`${owner}.inputLimits.${kind} states no limit`);
+		}
+		if (
+			value.bytes !== undefined &&
+			value.totalBytes !== undefined &&
+			value.bytes > value.totalBytes
+		) {
+			throw new Error(`${owner}.inputLimits.${kind}: one file cannot exceed the total`);
+		}
+	}
+}
+
+function validateSamplingRemovals(owner, sampling) {
+	for (const [name, value] of Object.entries(sampling ?? {})) {
+		if (!samplingNames.includes(name) || value !== false) {
+			throw new Error(`${owner}.sampling.${name} may only remove a sampling parameter`);
+		}
+	}
+}
+
+// What a model or deployment does without a reasoning control must be something that it can do:
+// no reasoning only where reasoning is optional, an effort only from its own list, and enabled
+// only where it reasons without one.
+function validateReasoningDefault(owner, value, reasoning, efforts) {
+	if (value === null) return;
+	if (!reasoningDefaults.has(value)) throw new Error(`${owner}: invalid reasoningDefault`);
+	if (reasoning === 'unsupported') {
+		throw new Error(`${owner}: a model without reasoning has no reasoningDefault`);
+	}
+	if (value === 'none') {
+		if (reasoning === 'required') {
+			throw new Error(`${owner}: required reasoning cannot default to none`);
+		}
+		return;
+	}
+	if (value === 'enabled') {
+		if (efforts.length > 0) {
+			throw new Error(`${owner}: reasoningDefault names the effort where the model has efforts`);
+		}
+		return;
+	}
+	if (!efforts.includes(value)) {
+		throw new Error(`${owner}: reasoningDefault ${value} is not one of its reasoning efforts`);
+	}
 }
 
 // What a deployment serves: facts that hold on all its routes, its prices among them, and for
@@ -738,21 +807,47 @@ function servedFacts(graph, model, deployment, hosting) {
 					}
 				])
 			),
+			inputLimits: narrowestInputLimits(
+				route.inputLimits,
+				model.inputLimits,
+				overrides.inputLimits ?? {}
+			),
 			inputModalities: model.inputModalities.filter((modality) =>
 				route.inputModalities.includes(modality)
+			),
+			sampling: Object.fromEntries(
+				samplingNames.map((name) => [
+					name,
+					route.sampling[name] &&
+						model.sampling[name] !== false &&
+						overrides.sampling?.[name] !== false
+				])
 			),
 			reasoningEfforts: reasoningEfforts.filter(
 				(effort) => !interfaceEfforts || interfaceEfforts.includes(effort)
 			)
 		};
 	}
+	// A deployment whose routes cache no prompts has no shortest cached prompt.
+	const cachesPrompts = Object.values(routes).some(
+		(route) => route.capabilities.implicitPromptCaching || route.capabilities.explicitPromptCaching
+	);
 	return {
 		contextWindowTokens,
 		maxInputTokens: Math.min(model.maxInputTokens, contextWindowTokens),
 		maxOutputTokens: overrides.maxOutputTokens ?? model.maxOutputTokens,
 		outputModalities: [...model.outputModalities],
 		pricing: structuredClone(deployment.pricing),
+		promptCacheMinimumTokens: !cachesPrompts
+			? null
+			: overrides.promptCacheMinimumTokens === undefined
+				? model.promptCacheMinimumTokens
+				: overrides.promptCacheMinimumTokens,
 		reasoning: model.reasoning,
+		reasoningDefault:
+			overrides.reasoningDefault === undefined
+				? model.reasoningDefault
+				: overrides.reasoningDefault,
 		reasoningMaxTokens:
 			overrides.reasoningMaxTokens === undefined
 				? model.reasoningMaxTokens
@@ -820,6 +915,23 @@ function validateServedFacts(
 				`${deploymentId}.overrides.capabilities.${name} may only remove a capability`
 			);
 		}
+	}
+	validateSamplingRemovals(`${deploymentId}.overrides`, overrides.sampling);
+	validateInputLimits(`${deploymentId}.overrides`, overrides.inputLimits ?? {});
+	validateReasoningDefault(
+		deploymentId,
+		served.reasoningDefault,
+		served.reasoning,
+		overrides.reasoningEfforts ?? model.reasoningEfforts
+	);
+	if (
+		overrides.promptCacheMinimumTokens !== undefined &&
+		served.promptCacheMinimumTokens === null &&
+		overrides.promptCacheMinimumTokens !== null
+	) {
+		throw new Error(
+			`${deploymentId}: a deployment that caches no prompts has no promptCacheMinimumTokens`
+		);
 	}
 	if (overrides.reasoningEfforts) {
 		let previousRank = -1;
@@ -903,9 +1015,15 @@ function validateServedFacts(
 function rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const paths = Object.entries(overrides).flatMap(([key, value]) =>
-		key === 'capabilities' || key === 'dataHandling'
+		key === 'capabilities' || key === 'dataHandling' || key === 'sampling'
 			? Object.keys(value).map((name) => [key, name])
-			: [[key]]
+			: key === 'inputLimits'
+				? Object.entries(value).flatMap(([kind, limit]) =>
+						kind === 'requestBytes'
+							? [[key, kind]]
+							: Object.keys(limit).map((field) => [key, kind, field])
+					)
+				: [[key]]
 	);
 	for (const path of paths) {
 		const without = structuredClone(deployment);
@@ -1161,7 +1279,6 @@ function compileGraph(source, places, companies) {
 					canonicalModalityRanks,
 					`${routeId}: inputModalities`
 				);
-				validateRouteEndpoint(routeId, route.endpoint);
 				validateDocumentFormats(route.documentFormats, routeId);
 				validateRetirementDate(routeId, route.retirementDate);
 				// A route retires on the date that its provider names for it or for itself.
@@ -1172,13 +1289,8 @@ function compileGraph(source, places, companies) {
 				// Stogas does not serve a route that says so, or any route of a provider that says so.
 				const stogasSupported =
 					route.stogasSupported !== false && provider.stogasSupported !== false;
-				const overrides = route.overrides ?? {};
-				rejectRedundantOverride(
-					provider.capabilities,
-					overrides.capabilities,
-					`${routeId}.overrides.capabilities`
-				);
-				const capabilities = mergeFacts(provider.capabilities, overrides.capabilities ?? {});
+				const { capabilities, sampling } = route;
+				validateInputLimits(routeId, route.inputLimits);
 				rejectRedundantOverride(
 					provider.dataHandling,
 					route.dataHandling,
@@ -1202,13 +1314,16 @@ function compileGraph(source, places, companies) {
 					routeId,
 					{
 						providerId: route.providerId,
-						endpoint: route.endpoint ?? null,
 						interfaces: [...route.interfaces],
 						batch: route.batch === true,
 						inputModalities: [...route.inputModalities],
 						documentFormats: structuredClone(route.documentFormats),
+						inputLimits: narrowestInputLimits(route.inputLimits),
 						capabilities: Object.fromEntries(
 							capabilityNames.map((name) => [name, capabilities[name] === true])
+						),
+						sampling: Object.fromEntries(
+							samplingNames.map((name) => [name, sampling[name] === true])
 						),
 						dataHandling: Object.fromEntries(
 							dataHandlingFields.map((field) => [field, dataHandling[field]])
@@ -1316,6 +1431,8 @@ function compileGraph(source, places, companies) {
 				throw new Error(`${modelId}.capabilities.${name} may only remove a capability`);
 			}
 		}
+		validateSamplingRemovals(modelId, model.sampling);
+		validateInputLimits(modelId, model.inputLimits);
 		if (!reasoningValues.has(model.reasoning)) {
 			throw new Error(`${modelId}: invalid reasoning value`);
 		}
@@ -1336,6 +1453,12 @@ function compileGraph(source, places, companies) {
 				throw new Error(`${owner} redundantly repeats reasoningEfforts`);
 			}
 		}
+		validateReasoningDefault(
+			modelId,
+			model.reasoningDefault,
+			model.reasoning,
+			model.reasoningEfforts
+		);
 		if (
 			model.reasoning === 'unsupported' &&
 			(model.reasoningEfforts.length > 0 || model.reasoningMaxTokens !== null)
@@ -1632,7 +1755,6 @@ function compileGraph(source, places, companies) {
 		providers: Object.fromEntries(
 			Object.entries(graph.providers).map(([id, provider]) => {
 				const {
-					capabilities: _routeDefaults,
 					dataHandling: _dataDefaults,
 					retirementDate: _routesDate,
 					stogasSupported: _routesSupport,
@@ -1644,8 +1766,18 @@ function compileGraph(source, places, companies) {
 		routes: graph.routes,
 		deployments
 	};
+	// A record states every fact, even an empty one, so that a missing field is an error. Notes
+	// are not facts: a record without one leaves the field out.
+	for (const kind of ['authors', 'groups', 'models', 'providers', 'routes', 'deployments']) {
+		compiled[kind] = Object.fromEntries(
+			Object.entries(compiled[kind]).map(([id, { notes, ...facts }]) => [
+				id,
+				notes.length > 0 ? { ...facts, notes } : facts
+			])
+		);
+	}
 	for (const { deploymentId, routeId, hash } of resolvedCatalogChains(compiled)) {
-		deployments[deploymentId].routes[routeId].chainHash = hash;
+		compiled.deployments[deploymentId].routes[routeId].chainHash = hash;
 	}
 	return compiled;
 }

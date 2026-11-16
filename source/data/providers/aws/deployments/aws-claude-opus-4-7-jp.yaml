@@ -9,6 +9,10 @@ deployments:
   upstream:
     model: jp.anthropic.claude-opus-4-7
     inferenceGeo: jp
+  overrides:
+    # Bedrock's own minimum for this model. Reviewed 2026-11-15:
+    # https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+    promptCacheMinimumTokens: 4096
   pricing:
     input_tokens:
       per_mill_tokens: '5.5'

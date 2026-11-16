@@ -373,6 +373,15 @@ describe('Chutes provider onboarding contract', () => {
 			provider: {
 				aliases: [],
 				capabilities,
+				sampling: [
+					'temperature',
+					'topP',
+					'topK',
+					'frequencyPenalty',
+					'presencePenalty',
+					'repetitionPenalty',
+					'seed'
+				],
 				credentialModes: ['managed', 'byok'],
 				dataHandling,
 				companyId: 'chutes',
@@ -382,7 +391,6 @@ describe('Chutes provider onboarding contract', () => {
 			},
 			routes: [
 				{
-					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					id: 'chutes-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
@@ -392,7 +400,6 @@ describe('Chutes provider onboarding contract', () => {
 				},
 				{
 					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },
-					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
 					id: 'chutes-standard-chat-completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],

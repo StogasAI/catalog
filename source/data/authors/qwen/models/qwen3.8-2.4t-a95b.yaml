@@ -9,4 +9,5 @@ models:
   outputModalities: [text]
   reasoning: required
   reasoningEfforts: [low, medium, xhigh]
+  openWeights: true
   releaseDate: 2026-08-12

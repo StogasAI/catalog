@@ -19,17 +19,6 @@ package catalog
 	toolChoice:              bool
 })
 
-#CapabilityOverrides: close({
-	streaming?:               bool
-	functionCalling?:         bool
-	parallelFunctionCalling?: bool
-	implicitPromptCaching?:   bool
-	explicitPromptCaching?:   bool
-	structuredOutputs?:       bool
-	systemMessages?:          bool
-	toolChoice?:              bool
-})
-
 // A model or deployment can only take away what its routes offer.
 #UnsupportedCapabilities: close({
 	streaming?:               false
@@ -44,7 +33,6 @@ package catalog
 
 #Route: close({
 	providerId: #Id
-	endpoint?:  string & =~"^https://"
 	interfaces: [#Interface, ...#Interface]
 	// The route is a provider's batch API, which runs a file of requests within
 	// a window at its batch prices. Its deployments serve no other route and
@@ -59,6 +47,12 @@ package catalog
 	// modalities that both its model and the route accept.
 	inputModalities: [#Modality, ...#Modality]
 	documentFormats?: #DocumentFormats
+	inputLimits?:     #InputLimits
+	// What the route's API offers and which sampling parameters it takes. Every route states both
+	// in full, because they describe an API and one provider's APIs differ: a batch API cannot
+	// stream, and Responses takes no seed.
+	capabilities: #RouteCapabilities
+	sampling:     #Sampling
 	// The company that runs every model of the route, when it is not the provider's company: the
 	// company whose service the provider resells, or unknown when the provider forwards requests
 	// to companies that it does not name. A deployment can name another.
@@ -68,9 +62,6 @@ package catalog
 	// request lists them. Every deployment of the route offers them, and
 	// requests that list a tool route only to deployments that offer it.
 	hostedTools?: [#HostedTool, ...#HostedTool]
-	overrides?: close({
-		capabilities?: #CapabilityOverrides
-	})
 	// The date that the provider names for shutting this route down, such as an
 	// API that it retires. Its deployments stop serving through it then, and a
 	// deployment that no other route serves retires.

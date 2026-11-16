@@ -2,6 +2,27 @@ routes:
   providerId: azure
   interfaces: [responses]
   inputModalities: [text, image]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of Azure's Chat Completions API, which are OpenAI's. Reviewed 2026-11-15:
+  # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference
+  # Responses has no seed and no logit_bias.
+  sampling:
+    temperature: true
+    topP: true
+    topK: false
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: false
+    seed: false
+    logitBias: false
   # Native document formats checked live on 2026-11-13 with gpt-5.6-sol: OpenAI Responses' list and SVG,
   # all read from real files. Microsoft's page lists only PDF:
   # https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#file-input

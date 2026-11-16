@@ -9,4 +9,7 @@ models:
   inputModalities: [text, image]
   outputModalities: [text]
   reasoning: optional
+  # Tencent publishes the weights of Hy4-preview only. Reviewed 2026-11-15:
+  # https://huggingface.co/tencent
+  openWeights: false
   releaseDate: 2026-11-04

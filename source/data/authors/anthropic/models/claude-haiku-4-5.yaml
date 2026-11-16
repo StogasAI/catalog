@@ -11,6 +11,18 @@ models:
   reasoningMaxTokens:
     minimum: 1024
     maximum: 63999
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting
+  reasoningDefault: none
+  openWeights: false
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+  promptCacheMinimumTokens: 4096
+  # Anthropic allows 100 images and 100 PDF pages for a model with a 200,000-token window.
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/vision#request-limits
+  inputLimits:
+    images:
+      count: 100
+    documents:
+      pages: 100
   snapshot: 2025-10-01
   releaseDate: 2025-10-15
   knowledgeCutoff: 2025-02-01

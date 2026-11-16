@@ -11,8 +11,7 @@ package catalog
 	// one. A credential narrows the storage of the deployments that it serves to its resource's
 	// place, so each place must be listed even when no deployment names it.
 	accountLocations?: [#LocationId, ...#LocationId]
-	capabilities:          #RouteCapabilities
-	dataHandling:          #ProviderDataHandling
+	dataHandling: #ProviderDataHandling
 	// The date that the provider names for ending its service. Its routes and
 	// deployments retire then.
 	retirementDate?: #Date

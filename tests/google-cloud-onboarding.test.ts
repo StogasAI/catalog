@@ -179,6 +179,7 @@ describe('Google Cloud onboarding contract', () => {
 			provider: {
 				aliases: ['gcp'],
 				capabilities,
+				sampling: ['temperature', 'topP', 'topK'],
 				credentialModes: ['byok'],
 				dataHandling: providerHandling,
 				companyId: 'google',
@@ -189,6 +190,11 @@ describe('Google Cloud onboarding contract', () => {
 			routes: [
 				{
 					documentFormats: formats,
+					inputLimits: {
+						requestBytes: 30000000,
+						images: { bytes: 7500000, count: 600, pixels: 8000 },
+						documents: { pages: 600 }
+					},
 					id: 'google-cloud-agent-platform-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
@@ -198,6 +204,11 @@ describe('Google Cloud onboarding contract', () => {
 					dataHandling: { retentionDays: 30, storageLocation: 'US' },
 					documentFormats: formats,
 					hostedTools: anthropicHostedTools,
+					inputLimits: {
+						requestBytes: 32000000,
+						images: { count: 600, pixels: 8000 },
+						documents: { pages: 600 }
+					},
 					id: 'google-cloud-anthropic-managed-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']

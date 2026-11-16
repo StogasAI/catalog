@@ -8,5 +8,7 @@ models:
   outputModalities: [text]
   reasoning: required
   reasoningEfforts: [low, medium, high]
+  # Reviewed 2026-11-15: https://huggingface.co/openai/gpt-oss-120b
+  openWeights: true
   releaseDate: 2025-08-05
   knowledgeCutoff: 2024-06-01

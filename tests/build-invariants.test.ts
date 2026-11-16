@@ -21,6 +21,17 @@ const capabilities = {
 	toolChoice: true
 };
 
+const sampling = {
+	temperature: true,
+	topP: true,
+	topK: false,
+	frequencyPenalty: true,
+	presencePenalty: true,
+	repetitionPenalty: false,
+	seed: true,
+	logitBias: true
+};
+
 // Web search as OpenAI's Responses API offers it, with every call meter of its wire.
 function openaiWebSearch(price: string) {
 	return {
@@ -80,7 +91,6 @@ function sourceFixture() {
 					credentialModes: ['byok'],
 					companyId: 'openai',
 					accountLocations: ['DE', 'US'] as string[] | undefined,
-					capabilities: structuredClone(capabilities),
 					dataHandling: {
 						processingLocation: 'world',
 						storageLocation: 'unknown',
@@ -95,9 +105,10 @@ function sourceFixture() {
 			routes: {
 				'openai-responses': {
 					providerId: 'openai',
-					endpoint: 'https://api.openai.com/v1/responses',
 					interfaces: ['responses'],
 					inputModalities: ['text', 'image'],
+					capabilities: structuredClone(capabilities),
+					sampling: structuredClone(sampling),
 					hosting: undefined as string | undefined,
 					documentFormats: undefined as { extensions: string[]; mediaTypes: string[] } | undefined,
 					dataHandling: { endToEndEncrypted: false },
@@ -143,9 +154,10 @@ function setPeriods(node: object, periods: unknown[]) {
 function addSecondOpenAIRoute(source: Source) {
 	source.graph.routes['openai-chat-completions'] = {
 		providerId: 'openai',
-		endpoint: 'https://api.openai.com/v1/chat/completions',
 		interfaces: ['chat_completions'],
 		inputModalities: ['text', 'image'],
+		capabilities: structuredClone(capabilities),
+		sampling: structuredClone(sampling),
 		dataHandling: { endToEndEncrypted: false }
 	};
 }
@@ -305,8 +317,7 @@ describe('catalog source compiler invariants', () => {
 			companyId: 'openai',
 			credentialModes: ['byok'],
 			headquarteredCountry: 'US',
-			name: 'OpenAI',
-			notes: []
+			name: 'OpenAI'
 		});
 	});
 
@@ -333,7 +344,7 @@ describe('catalog source compiler invariants', () => {
 			note('deployment')
 		]);
 		for (const kind of kinds)
-			expect(Object.values(plain[kind]).map((node) => node.notes)).toEqual([[]]);
+			expect(Object.values(plain[kind]).map((node) => node.notes)).toEqual([undefined]);
 	});
 
 	test('accepts aliases that move a word across the version, add or remove the snapshot date, or name a group', () => {
@@ -800,7 +811,7 @@ describe('catalog source compiler invariants', () => {
 		expect(catalog.graph.deployments['openai-gpt-batch'].notes).toEqual([batchNote]);
 		expect(catalog.graph.routes['openai-responses'].stogasSupported).toBe(true);
 		expect(catalog.graph.deployments['openai-gpt-test'].stogasSupported).toBe(true);
-		expect(catalog.graph.deployments['openai-gpt-test'].notes).toEqual([]);
+		expect(catalog.graph.deployments['openai-gpt-test'].notes).toBeUndefined();
 		let files = catalogFiles(catalog);
 		let root = JSON.parse(files.rootJson);
 		// A model goes unserved with its deployments, and a provider with its routes.
@@ -1309,7 +1320,7 @@ describe('catalog source compiler invariants', () => {
 			[
 				'enabled capability',
 				(source: Source) => {
-					source.graph.providers.openai.capabilities.structuredOutputs = false;
+					source.graph.routes['openai-responses'].capabilities.structuredOutputs = false;
 					source.graph.deployments['openai-gpt-test'].overrides = {
 						capabilities: { structuredOutputs: true }
 					};
@@ -1376,9 +1387,7 @@ describe('catalog source compiler invariants', () => {
 		test('keeps facts that differ between routes on each route', () => {
 			const source = sourceFixture();
 			addSecondOpenAIRoute(source);
-			source.graph.routes['openai-chat-completions'].overrides = {
-				capabilities: { streaming: false }
-			};
+			source.graph.routes['openai-chat-completions'].capabilities.streaming = false;
 			source.graph.routes['openai-chat-completions'].inputModalities = ['text'];
 			source.graph.routes['openai-responses'].hostedTools = [openaiWebSearch('10')];
 			source.graph.deployments['openai-gpt-test'].routeIds.push('openai-chat-completions');
@@ -1607,7 +1616,6 @@ describe('catalog source compiler invariants', () => {
 					name: 'Chutes',
 					credentialModes: ['managed'],
 					companyId: 'chutes',
-					capabilities: structuredClone(capabilities),
 					dataHandling: {
 						processingLocation: 'world',
 						storageLocation: 'unknown',
@@ -1620,18 +1628,20 @@ describe('catalog source compiler invariants', () => {
 				} as never;
 				source.graph.routes['chutes-chat-completions'] = {
 					providerId: 'chutes',
-					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					interfaces: ['chat_completions'],
 					inputModalities: ['text'],
+					capabilities: structuredClone(capabilities),
+					sampling: structuredClone(sampling),
 					dataHandling: { endToEndEncrypted: true },
 					hostedTools: []
 				};
 				source.graph.routes['chutes-standard-chat-completions'] = {
 					providerId: 'chutes',
 					hosting: 'unknown',
-					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
 					interfaces: ['chat_completions'],
 					inputModalities: ['text'],
+					capabilities: structuredClone(capabilities),
+					sampling: structuredClone(sampling),
 					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },
 					hostedTools: []
 				};
@@ -1706,31 +1716,18 @@ describe('catalog source compiler invariants', () => {
 		});
 	});
 
-	describe('accepts only canonical route endpoints and provider credential modes', () => {
-		test('accepts an omitted endpoint and canonical credential order', () => {
+	describe('accepts only canonical provider credential modes', () => {
+		test('accepts canonical credential order', () => {
 			const source = changed((candidate) => {
-				delete candidate.graph.routes['openai-responses'].endpoint;
 				candidate.graph.providers.openai.credentialModes = ['managed', 'byok'];
 			});
-			expect(buildCatalog(source).graph.routes['openai-responses'].endpoint).toBeNull();
+			expect(buildCatalog(source).graph.providers.openai.credentialModes).toEqual([
+				'managed',
+				'byok'
+			]);
 		});
 
 		testRejections([
-			...[
-				'not-a-url',
-				'http://api.openai.com/v1/responses',
-				'https://user:secret@api.openai.com/v1/responses',
-				'https://api.openai.com/v1/responses?debug=true',
-				'https://api.openai.com/v1/responses#fragment',
-				' https://api.openai.com/v1/responses',
-				'https://api.openai.com/v1/\nresponses'
-			].map((endpoint): RejectionCase => [
-				`rejects endpoint ${JSON.stringify(endpoint)}`,
-				(source) => {
-					source.graph.routes['openai-responses'].endpoint = endpoint;
-				},
-				'endpoint must be a canonical HTTPS URL'
-			]),
 			...([[], ['byok', 'managed'], ['byok', 'byok'], ['future']] as string[][]).map(
 				(credentialModes): RejectionCase => [
 					`rejects credential modes ${JSON.stringify(credentialModes)}`,

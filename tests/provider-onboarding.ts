@@ -27,7 +27,12 @@ export type ProviderRouteContract = {
 	capabilities?: Record<string, boolean>;
 	dataHandling?: Partial<DataHandlingContract>;
 	documentFormats: { extensions: string[]; mediaTypes: string[] };
-	endpoint?: string;
+	/** The provider's limits on one request; a limit that it does not state is omitted. */
+	inputLimits?: {
+		requestBytes?: number;
+		images?: { bytes?: number; count?: number; pixels?: number; totalBytes?: number };
+		documents?: { bytes?: number; count?: number; pages?: number; totalBytes?: number };
+	};
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
@@ -61,6 +66,8 @@ export type ProviderDeploymentContract = {
 	modelContextWindowTokens?: number;
 	modelId: string;
 	modelMaxOutputTokens?: number;
+	/** The provider's own shortest cached prompt, where it differs from the model's. */
+	promptCacheMinimumTokens?: number | null;
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
@@ -84,6 +91,8 @@ export type ProviderOnboardingContract = {
 	provider: {
 		aliases: string[];
 		capabilities: Record<string, boolean>;
+		/** The sampling parameters that the provider's API takes. */
+		sampling: string[];
 		credentialModes: Array<'managed' | 'byok'>;
 		dataHandling: DataHandlingContract;
 		companyId: string;
@@ -102,6 +111,17 @@ export type ProviderOnboardingContract = {
 	routes: ProviderRouteContract[];
 };
 
+const samplingNames = [
+	'temperature',
+	'topP',
+	'topK',
+	'frequencyPenalty',
+	'presencePenalty',
+	'repetitionPenalty',
+	'seed',
+	'logitBias'
+];
+
 export function assertProviderOnboardingContract(
 	catalog: Catalog,
 	contract: ProviderOnboardingContract
@@ -118,14 +138,15 @@ export function assertProviderOnboardingContract(
 		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
 		companyId: contract.provider.companyId,
-		headquarteredCountry: contract.provider.headquarteredCountry,
-		notes: []
+		headquarteredCountry: contract.provider.headquarteredCountry
 	};
 	expect(graph.providers[providerId]).toEqual(provider);
 
 	const routes = new Map(contract.routes.map((route) => [route.id, route]));
 	const routeNotes = (route: ProviderRouteContract) =>
 		route.notes === undefined ? [] : [{ kind: 'route', id: route.id, text: route.notes }];
+	// A record without a note leaves the field out.
+	const noted = (notes: unknown[]) => (notes.length > 0 ? { notes } : {});
 	const routeHandling = (route: ProviderRouteContract) => ({
 		sharedWith: [],
 		...contract.provider.dataHandling,
@@ -136,7 +157,26 @@ export function assertProviderOnboardingContract(
 			capabilities: { ...contract.provider.capabilities, ...route.capabilities },
 			dataHandling: routeHandling(route),
 			documentFormats: route.documentFormats,
-			endpoint: route.endpoint ?? null,
+			inputLimits: {
+				requestBytes: route.inputLimits?.requestBytes ?? null,
+				images: {
+					bytes: null,
+					count: null,
+					pixels: null,
+					totalBytes: null,
+					...route.inputLimits?.images
+				},
+				documents: {
+					bytes: null,
+					count: null,
+					pages: null,
+					totalBytes: null,
+					...route.inputLimits?.documents
+				}
+			},
+			sampling: Object.fromEntries(
+				samplingNames.map((name) => [name, contract.provider.sampling.includes(name)])
+			),
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
 			batch: route.batch === true,
@@ -144,7 +184,7 @@ export function assertProviderOnboardingContract(
 			providerId,
 			retirementDate: null,
 			stogasSupported: route.stogasSupported !== false,
-			notes: routeNotes(route)
+			...noted(routeNotes(route))
 		});
 	}
 
@@ -160,17 +200,17 @@ export function assertProviderOnboardingContract(
 	const batch = (deployment: { routes: Record<string, unknown> }) =>
 		Object.keys(deployment.routes).some((routeId) => graph.routes[routeId]?.batch === true);
 	for (const id of contract.anthropicHosted ?? []) {
-		const copy = graph.deployments[id] as Record<string, unknown> & {
+		const relayed = graph.deployments[id] as Record<string, unknown> & {
 			routes: Record<string, { chainHash: string }>;
 			upstream: Record<string, string>;
 		};
-		expect(copy.hosting).toBe('anthropic');
+		expect(relayed.hosting).toBe('anthropic');
 		const sorted = (upstream: unknown) =>
 			JSON.stringify(Object.entries(upstream as object).sort(([a], [b]) => a.localeCompare(b)));
 		const sources = Object.entries(graph.deployments).filter(
 			([, deployment]) =>
-				sorted(deployment.upstream) === sorted(copy.upstream) &&
-				batch(deployment) === batch(copy) &&
+				sorted(deployment.upstream) === sorted(relayed.upstream) &&
+				batch(deployment) === batch(relayed) &&
 				Object.keys(deployment.routes).every(
 					(routeId) => graph.routes[routeId]?.providerId === 'anthropic'
 				)
@@ -178,22 +218,28 @@ export function assertProviderOnboardingContract(
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
 		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
-		// matches, except the data handling that the cloud changes.
-		const served = (deployment: typeof copy, dataHandling = {}) => ({
+		// matches, except the data handling that the cloud changes and its own request limits.
+		const served = (deployment: typeof relayed, dataHandling = {}) => ({
 			...deployment,
 			notes: undefined,
 			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
 				...route,
+				inputLimits: undefined,
 				dataHandling: { ...(route as { dataHandling: object }).dataHandling, ...dataHandling }
 			})),
 			upstream: undefined
 		});
-		expect(served(copy)).toEqual(
-			served(source as typeof copy, contract.anthropicHostedDataHandling)
+		expect(served(relayed)).toEqual(
+			served(source as typeof relayed, contract.anthropicHostedDataHandling)
 		);
 	}
 
 	for (const expected of contract.deployments) {
+		const model = graph.models[expected.modelId] as unknown as {
+			promptCacheMinimumTokens: number | null;
+			reasoningDefault: string | null;
+			sampling: Record<string, boolean>;
+		};
 		const servedRoutes = Object.fromEntries(
 			[...expected.routeIds].sort().map((routeId) => {
 				const route = routes.get(routeId);
@@ -208,8 +254,16 @@ export function assertProviderOnboardingContract(
 							...expected.dataHandling,
 							...(expected.sharedWith && { sharedWith: expected.sharedWith })
 						},
+						// The route's limits, narrowed by the model's, which the model's own test states.
+						inputLimits: expect.any(Object),
 						inputModalities: expected.inputModalities.filter((modality) =>
 							route.inputModalities.includes(modality)
+						),
+						sampling: Object.fromEntries(
+							samplingNames.map((name) => [
+								name,
+								contract.provider.sampling.includes(name) && model.sampling[name] !== false
+							])
 						),
 						hostedTools: Object.fromEntries(
 							offers.map((offer) => [
@@ -235,7 +289,17 @@ export function assertProviderOnboardingContract(
 			hosting: expected.hosting,
 			outputModalities: expected.outputModalities,
 			pricing: expected.pricing,
+			// A deployment takes its model's minimum unless its provider states another, and has
+			// none where it caches no prompts.
+			promptCacheMinimumTokens:
+				expected.promptCacheMinimumTokens !== undefined
+					? expected.promptCacheMinimumTokens
+					: expected.capabilities.implicitPromptCaching ||
+						  expected.capabilities.explicitPromptCaching
+						? model.promptCacheMinimumTokens
+						: null,
 			reasoning: expected.modelReasoning ?? 'unsupported',
+			reasoningDefault: model.reasoningDefault,
 			reasoningMaxTokens:
 				expected.reasoningMaxTokens !== undefined
 					? expected.reasoningMaxTokens
@@ -245,13 +309,13 @@ export function assertProviderOnboardingContract(
 			stogasSupported: expected.routeIds.every(
 				(routeId) => routes.get(routeId)?.stogasSupported !== false
 			),
-			notes: [
+			...noted([
 				...expected.routeIds.flatMap((routeId) => routeNotes(routes.get(routeId)!)),
-				...(graph.models[expected.modelId]!.notes as unknown[]),
+				...((graph.models[expected.modelId]!.notes as unknown[] | undefined) ?? []),
 				...(expected.notes === undefined
 					? []
 					: [{ kind: 'deployment', id: expected.id, text: expected.notes }])
-			],
+			]),
 			upstream: expected.upstream,
 			weightPrecision: expected.weightPrecision ?? 'unknown'
 		};

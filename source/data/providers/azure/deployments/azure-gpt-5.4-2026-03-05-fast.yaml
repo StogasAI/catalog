@@ -9,6 +9,9 @@ deployments:
     serviceTier: fast
   retirementDate: 2027-09-02
   overrides:
+    # Azure caches prompts of 1,024 tokens or more on every OpenAI model. Reviewed 2026-11-15:
+    # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/prompt-caching
+    promptCacheMinimumTokens: 1024
     # Microsoft publishes Priority meters for GPT-5.4 prompts up to 272,000 tokens only.
     contextWindowTokens: 272000
   pricing:

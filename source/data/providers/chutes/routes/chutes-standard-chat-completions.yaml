@@ -1,9 +1,27 @@
 routes:
   providerId: chutes
   hosting: unknown
-  endpoint: https://llm.chutes.ai/v1/chat/completions
   interfaces: [chat_completions]
   inputModalities: [text]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: false
+    implicitPromptCaching: true
+    explicitPromptCaching: false
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields that Chutes' OpenAI-compatible API took in our probes, and no logit_bias.
+  sampling:
+    temperature: true
+    topP: true
+    topK: true
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: true
+    seed: true
+    logitBias: false
   dataHandling:
     trainingUse: null
     tee: false

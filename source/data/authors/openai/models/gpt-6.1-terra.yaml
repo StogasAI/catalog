@@ -11,5 +11,8 @@ models:
   reasoningEfforts: [low, medium, high, xhigh, max]
   reasoningEffortsByInterface:
     chat_completions: [low, medium, high, xhigh]
+  openWeights: false
+  # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/prompt-caching
+  promptCacheMinimumTokens: 1024
   releaseDate: 2026-10-26
   knowledgeCutoff: 2026-06-01

@@ -105,7 +105,14 @@ package catalog
 		capabilities?:        #UnsupportedCapabilities
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
-		dataHandling?:       #DeploymentDataHandlingOverride
+		// What this provider's deployment does without a reasoning control, or null when it is
+		// not stated, where that differs from the model's.
+		reasoningDefault?: null | #ReasoningDefault
+		sampling?:         #UnsupportedSampling
+		// The provider's own minimum for this deployment, or null when it states none.
+		promptCacheMinimumTokens?: null | (int & >0)
+		inputLimits?:              #InputLimits
+		dataHandling?:             #DeploymentDataHandlingOverride
 	})
 	pricing: #DeploymentPricing
 	periods?: [#Period, ...#Period]

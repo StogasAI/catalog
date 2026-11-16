@@ -2,15 +2,6 @@ providers:
   name: AWS
   credentialModes: [byok]
   companyId: amazon
-  capabilities:
-    streaming: true
-    functionCalling: true
-    parallelFunctionCalling: true
-    implicitPromptCaching: false
-    explicitPromptCaching: true
-    structuredOutputs: true
-    systemMessages: true
-    toolChoice: true
   # In Bedrock's default data retention mode, retention depends on the model's terms and AWS may keep
   # data for safety and abuse prevention, in the Region where the account uses Bedrock. Zero
   # retention is an account setting, not the default.

@@ -7,6 +7,38 @@ routes:
   providerId: aws
   interfaces: [chat_completions, responses]
   inputModalities: [text, image]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: false
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of the Messages API, which both of its Claude products take. Reviewed
+  # 2026-11-15: https://platform.claude.com/docs/en/api/messages/create
+  sampling:
+    temperature: true
+    topP: true
+    topK: true
+    frequencyPenalty: false
+    presencePenalty: false
+    repetitionPenalty: false
+    seed: false
+    logitBias: false
+  # Bedrock states the image limit as 5 MB of base64 text.
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/api/overview#request-size-limits,
+  # https://platform.claude.com/docs/en/build-with-claude/vision#request-limits and
+  # https://platform.claude.com/docs/en/build-with-claude/pdf-support
+  inputLimits:
+    requestBytes: 20000000
+    images:
+      count: 600
+      bytes: 3750000
+      pixels: 8000
+    documents:
+      pages: 600
   documentFormats:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]

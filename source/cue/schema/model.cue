@@ -24,6 +24,17 @@ package catalog
 	reasoningEffortsByInterface?: close({[#Interface]: [#ReasoningEffort, ...#ReasoningEffort]})
 	// Omitted when the model accepts no reasoning token budget.
 	reasoningMaxTokens?: #ReasoningMaxTokens
+	// Omitted when the author does not state what the model does without a reasoning control.
+	reasoningDefault?: #ReasoningDefault
+	// The author publishes the model's weights for download.
+	openWeights: bool
+	// Sampling parameters that the model refuses on every route.
+	sampling?: #UnsupportedSampling
+	// The shortest prompt, in tokens, that providers cache for this model. Omitted when the author
+	// states none or the model has no prompt caching. A deployment can state its provider's own.
+	promptCacheMinimumTokens?: int & >0
+	// Limits of the model that are narrower than those of its routes.
+	inputLimits?: #InputLimits
 	// The date of the immutable checkpoint that the model's ID pins, which the owner states or
 	// writes into a dated ID whose date it documents as the snapshot's. Omitted otherwise.
 	snapshot?:    #Date

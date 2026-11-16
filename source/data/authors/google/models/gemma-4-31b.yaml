@@ -7,5 +7,6 @@ models:
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: optional
+  openWeights: true
   releaseDate: 2026-04-02
   knowledgeCutoff: 2025-01-01

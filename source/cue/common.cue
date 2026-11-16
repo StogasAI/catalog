@@ -36,6 +36,56 @@ package catalog
 	maximum: int & >=minimum
 })
 
+// What a model does when a request sets no reasoning control: none when it does not reason, the
+// effort that it runs at, or enabled when it reasons without a named effort.
+#ReasoningDefault: "none" | "enabled" | #ReasoningEffort
+
+// The sampling parameters of a request. A route states those that its API takes, and a model or
+// deployment can only take away what its routes take.
+#Sampling: close({
+	temperature:       bool
+	topP:              bool
+	topK:              bool
+	frequencyPenalty:  bool
+	presencePenalty:   bool
+	repetitionPenalty: bool
+	seed:              bool
+	logitBias:         bool
+})
+
+#UnsupportedSampling: close({
+	temperature?:       false
+	topP?:              false
+	topK?:              false
+	frequencyPenalty?:  false
+	presencePenalty?:   false
+	repetitionPenalty?: false
+	seed?:              false
+	logitBias?:         false
+})
+
+// The provider's limits on what one request carries, each omitted when the provider states none.
+// requestBytes is the largest request body. For images and documents, count is the most parts in
+// one request, bytes the largest file before any encoding, and totalBytes the most that all of
+// them hold together; pixels is an image's longest side, and pages the most pages that the
+// request's documents hold together. A megabyte counts as 1,000,000 bytes, the smaller reading,
+// and a limit that the provider states on the base64 text is three quarters of it.
+#InputLimits: close({
+	requestBytes?: int & >0
+	images?: close({
+		count?:      int & >0
+		bytes?:      int & >0
+		totalBytes?: int & >0
+		pixels?:     int & >0
+	})
+	documents?: close({
+		count?:      int & >0
+		bytes?:      int & >0
+		totalBytes?: int & >0
+		pages?:      int & >0
+	})
+})
+
 #WeightPrecision:       "fp32" | "bf16" | "fp16" | "fp8" | "fp6" | "fp4" | "nvfp4" | "mxfp4" | "int8" | "int4"
 
 // A dotted path to a field of the node that owns the period, such as

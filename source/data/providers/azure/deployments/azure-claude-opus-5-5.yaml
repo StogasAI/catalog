@@ -7,9 +7,14 @@ deployments:
     modelVersion: '2'
     deploymentType: global_standard
   retirementDate: 2027-09-18
+  # Anthropic operates Claude on Azure's systems as an independent data processor, under its own
+  # retention terms. Reviewed 2026-11-16:
+  # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
+  # and https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   overrides:
     dataHandling:
-      retentionDays: null
+      retentionDays: 30
+      sharedWith: [anthropic]
   pricing:
     input_tokens:
       per_mill_tokens: '4'

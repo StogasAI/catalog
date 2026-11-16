@@ -9,5 +9,17 @@ models:
   outputModalities: [text]
   reasoning: required
   reasoningEfforts: [low, medium, high, xhigh, max]
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting
+  # and https://platform.claude.com/docs/en/build-with-claude/effort
+  reasoningDefault: high
+  openWeights: false
+  # Any value but the default returns 400. Reviewed 2026-11-15:
+  # https://platform.claude.com/docs/en/build-with-claude/thinking
+  sampling:
+    temperature: false
+    topP: false
+    topK: false
+  # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+  promptCacheMinimumTokens: 512
   releaseDate: 2026-06-09
   knowledgeCutoff: 2026-01-01

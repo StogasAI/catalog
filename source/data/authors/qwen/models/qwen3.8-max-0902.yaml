@@ -10,5 +10,8 @@ models:
   inputModalities: [text, image, video]
   outputModalities: [text]
   reasoning: optional
+  # Alibaba serves it from Model Studio and publishes no weights. Reviewed 2026-11-15:
+  # https://huggingface.co/Qwen
+  openWeights: false
   snapshot: 2026-09-02
   releaseDate: 2026-09-02

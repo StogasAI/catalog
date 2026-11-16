@@ -2,15 +2,6 @@ providers:
   name: Anthropic
   credentialModes: [byok]
   companyId: anthropic
-  capabilities:
-    streaming: true
-    functionCalling: true
-    parallelFunctionCalling: true
-    implicitPromptCaching: false
-    explicitPromptCaching: true
-    structuredOutputs: true
-    systemMessages: true
-    toolChoice: true
   # Anthropic deletes API inputs and outputs within 30 days, names no place where it stores them,
   # and keeps content that its safety systems flag for up to 2 years. Its API retention page also
   # says that content is not retained by default, so 30 days is the most that either page allows.

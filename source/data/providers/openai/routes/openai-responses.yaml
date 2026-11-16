@@ -1,8 +1,37 @@
 routes:
   providerId: openai
-  endpoint: https://api.openai.com/v1/responses
   interfaces: [responses]
   inputModalities: [text, image]
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+  # The sampling fields of OpenAI's Chat Completions API. Reviewed 2026-11-15:
+  # https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
+  # Responses has no seed and no logit_bias.
+  sampling:
+    temperature: true
+    topP: true
+    topK: false
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: false
+    seed: false
+    logitBias: false
+  # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/images-vision and
+  # https://developers.openai.com/api/docs/guides/file-inputs
+  inputLimits:
+    images:
+      count: 1500
+      totalBytes: 512000000
+    documents:
+      bytes: 50000000
+      totalBytes: 50000000
   # Native document formats reviewed 2026-10-05: https://developers.openai.com/api/docs/guides/file-inputs#supported-file-types
   # Live checks on 2026-11-13 also read text/tab-separated-values, which the page omits.
   documentFormats:

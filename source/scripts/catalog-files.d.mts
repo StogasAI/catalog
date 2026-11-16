@@ -65,7 +65,7 @@ export type RouteSummary = Summary & { interfaces: string[]; providerId: string 
 export type DeploymentSummary = Summary & { modelId: string; routeIds: string[] };
 /** An author, group or provider: its whole record, its retirement date, and whether Stogas serves it. */
 export type WholeSummary = Record<string, unknown> & {
-	notes: CatalogNote[];
+	notes?: CatalogNote[];
 	retirementDate: string | null;
 } & Supported;
 

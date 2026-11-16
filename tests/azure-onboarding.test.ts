@@ -393,8 +393,7 @@ describe('Azure provider onboarding contract', () => {
 			credentialModes: ['byok'],
 			companyId: 'microsoft',
 			headquarteredCountry: 'US',
-			name: 'Azure',
-			notes: []
+			name: 'Azure'
 		});
 		expect(
 			Object.entries(catalog.graph.routes)
@@ -567,8 +566,12 @@ describe('Azure provider onboarding contract', () => {
 					longPromptMultiplier: deployment.modelId === 'claude-haiku-5-5' ? 5n : undefined
 				})
 			);
-			// Anthropic keeps what it runs for 30 days. Microsoft states no retention for what it runs.
-			expect(route.dataHandling.retentionDays).toBe(deployment.hosting === 'anthropic' ? 30 : null);
+			// Anthropic operates Claude on both hostings under its own retention terms, so it also
+			// receives what Microsoft's systems run.
+			expect(route.dataHandling.retentionDays).toBe(30);
+			expect(route.dataHandling.sharedWith).toEqual(
+				deployment.hosting === 'anthropic' ? [] : ['anthropic']
+			);
 			// Foundry offers no max effort for Claude Fable and Mythos.
 			const fableOrMythos = /^claude-(?:fable|mythos)-/.test(deployment.modelId);
 			expect(route.reasoningEfforts.includes('max')).toBe(
