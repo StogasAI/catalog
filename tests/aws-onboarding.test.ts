@@ -133,6 +133,32 @@ const geographies: Partial<Record<ClaudeModelId, (keyof typeof GEOGRAPHY_PLACES)
 	'claude-sonnet-5-5': ['eu', 'au']
 };
 
+// The models of the AWS GovCloud (US) profile, which costs 20 percent more than the global one.
+// Stogas serves none of them, because the GovCloud Regions take only their own partition's accounts.
+const govCloud: ClaudeModelId[] = [
+	'claude-fable-5-1',
+	'claude-fable-5-2',
+	'claude-haiku-5-5',
+	'claude-mythos-5-2',
+	'claude-opus-4-8',
+	'claude-opus-5',
+	'claude-opus-5-5',
+	'claude-sonnet-5',
+	'claude-sonnet-5-5'
+];
+const fifthMore = (prices: Prices): Prices =>
+	Object.fromEntries(
+		Object.entries(prices).map(([meter, rates]) => [
+			meter,
+			Object.fromEntries(
+				Object.entries(rates).map(([rate, usd]) => [
+					rate,
+					String(Number((Number(usd) * 1.2).toFixed(6)))
+				])
+			)
+		])
+	);
+
 function deployment(
 	id: string,
 	model: ClaudeModelId,
@@ -200,7 +226,25 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					us
 				),
 				...cached
-			}))
+			})),
+			...(govCloud.includes(model)
+				? [
+						{
+							...deployment(
+								`aws-${model}-us-gov`,
+								model,
+								{ inferenceGeo: 'us-gov', model: `us-gov.${profile}` },
+								{
+									processingLocation: 'US',
+									...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
+								},
+								fifthMore(global)
+							),
+							...gated,
+							stogasSupported: false as const
+						}
+					]
+				: [])
 		];
 	}
 );

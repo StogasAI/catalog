@@ -1,0 +1,31 @@
+# Bedrock's inference profile of the AWS GovCloud (US) Regions, a separate AWS partition with its
+# own accounts and hosts, at 20 percent over the price of the global profile. From either GovCloud
+# Region it runs only in the two of them.
+# Under the aws_review data retention mode that this model requires, AWS keeps prompts and
+# completions inside AWS for up to 30 days and may review them.
+# Prices from the AWS Price List of us-gov-west-1 and us-gov-east-1 ("Standard"), reviewed 2026-11-16:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/us-gov-west-1/index.json
+# Regions and retention reviewed 2026-11-16: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-2.html
+# Profile ID prefix reviewed 2026-11-16: https://aws.amazon.com/govcloud-us/newsletter/newsletter-issue-04/
+deployments:
+  modelId: claude-fable-5-2
+  routeIds: [aws-bedrock-messages]
+  upstream:
+    model: us-gov.anthropic.claude-fable-5-2
+    inferenceGeo: us-gov
+  stogasSupported: false
+  overrides:
+    dataHandling:
+      storageLocation: US
+      retentionDays: 30
+  pricing:
+    input_tokens:
+      per_mill_tokens: '9.6'
+    cached_input_tokens:
+      per_mill_tokens: '0.24'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '12'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '19.2'
+    output_tokens:
+      per_mill_tokens: '48'

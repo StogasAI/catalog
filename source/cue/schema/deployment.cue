@@ -45,16 +45,16 @@ package catalog
 // inferenceGeo is the geography of Bedrock's inference profile, the prefix of its ID, or
 // Anthropic's inference geography on Claude Platform on AWS, which models before Claude 4.6 do
 // not take. The build requires it for Bedrock and checks the geographies that Anthropic takes.
+// us-gov is the profile of the AWS GovCloud (US) Regions, a separate AWS partition.
 #AWSUpstream: close({
 	model:         #UpstreamId
 	inferenceGeo?: #InferenceGeography
 })
 
-// Every inference geography: Bedrock's inference profiles name global and
-// those that keep inference in one country or union, which include each
-// geography that Anthropic and Google Cloud name, and OpenAI's data residency
-// regions add ae.
-#InferenceGeography: "global" | "us" | "eu" | "jp" | "au" | "in" | "ca" | "ae"
+// Every inference geography: Bedrock's inference profiles name global, those that keep
+// inference in one country or union, which include each geography that Anthropic and Google
+// Cloud name, and us-gov. OpenAI's data residency regions add ae.
+#InferenceGeography: "global" | "us" | "us-gov" | "eu" | "jp" | "au" | "in" | "ca" | "ae"
 
 // inferenceGeo is Google's endpoint location on Agent Platform, global or the us or eu
 // multi-region, or Anthropic's inference geography where Anthropic runs Claude, which has no eu

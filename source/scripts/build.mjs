@@ -202,7 +202,8 @@ const INFERENCE_GEO_PROCESSING = {
 	global: 'world',
 	in: 'IN',
 	jp: 'JP',
-	us: 'US'
+	us: 'US',
+	'us-gov': 'US'
 };
 
 // Where each OpenAI data residency endpoint that runs inference in its region keeps processing
@@ -1645,6 +1646,10 @@ function compileGraph(source, places, companies) {
 			providerId === 'aws' ||
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
+		// The GovCloud Regions are a partition of their own, whose accounts the gateway cannot use.
+		if (deployment.upstream.inferenceGeo === 'us-gov' && deployment.stogasSupported !== false) {
+			throw new Error(`${deploymentId}: Stogas does not serve the AWS GovCloud (US) Regions`);
+		}
 		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
 		if (
 			providerId === 'aws' &&

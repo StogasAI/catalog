@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 601 });
+		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 610 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -546,6 +546,7 @@ describe('compiled catalog', () => {
 			'aws-claude-mythos-5-1-us',
 			'aws-claude-mythos-5-2',
 			'aws-claude-mythos-5-2-us',
+			'aws-claude-mythos-5-2-us-gov',
 			'azure-claude-mythos-5-1-anthropic-hosted',
 			'azure-claude-mythos-5-2-anthropic-hosted',
 			'azure-claude-mythos-5-2-anthropic-hosted-fast',

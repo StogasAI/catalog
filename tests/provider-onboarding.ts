@@ -83,6 +83,8 @@ export type ProviderDeploymentContract = {
 	reasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	retirementDate: string | null;
 	routeIds: string[];
+	/** Stogas does not serve the deployment, though it serves the deployment's routes. */
+	stogasSupported?: false;
 	upstream: Record<string, number | string>;
 	weightPrecision?: string;
 };
@@ -306,9 +308,9 @@ export function assertProviderOnboardingContract(
 					: (expected.modelReasoningMaxTokens ?? null),
 			retirementDate: expected.retirementDate,
 			routes: servedRoutes,
-			stogasSupported: expected.routeIds.every(
-				(routeId) => routes.get(routeId)?.stogasSupported !== false
-			),
+			stogasSupported:
+				expected.stogasSupported !== false &&
+				expected.routeIds.every((routeId) => routes.get(routeId)?.stogasSupported !== false),
 			...noted([
 				...expected.routeIds.flatMap((routeId) => routeNotes(routes.get(routeId)!)),
 				...((graph.models[expected.modelId]!.notes as unknown[] | undefined) ?? []),
