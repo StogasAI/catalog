@@ -3,9 +3,12 @@ deployments:
   routeIds: [openai-batch-responses]
   upstream:
     model: gpt-5.5-pro-2026-04-23
-  # OpenAI lists no long context price for this tier. Its batch and flex prices are half of the
-  # standard ones, which give 30 and 135 for prompts over 272,000 tokens.
-  # Reviewed 2026-11-12: https://developers.openai.com/api/docs/pricing
+  # OpenAI's pricing page lists no long context price for this tier. Its Batch guide gives batch
+  # half the synchronous price, and its flex guide prices flex at Batch rates, which gives 30 and
+  # 135 for prompts over 272,000 tokens.
+  # Reviewed 2026-11-16: https://developers.openai.com/api/docs/pricing,
+  # https://developers.openai.com/api/docs/guides/batch
+  # and https://developers.openai.com/api/docs/guides/flex-processing
   overrides:
     # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
     # 2026-11-15: https://developers.openai.com/api/docs/guides/latest-model

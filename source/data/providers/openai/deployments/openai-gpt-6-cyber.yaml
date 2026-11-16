@@ -5,9 +5,11 @@ deployments:
     model: gpt-6-cyber
   approvalRequired: true
   notes: OpenAI accepts its requests only from IP addresses that your project allowlists, so allowlist the gateway's address.
-  # OpenAI lists no long context cache write price for this model. Every GPT-6 cache write costs
-  # 1.25 times the input price at both context sizes, which gives 50.
-  # Reviewed 2026-11-10: https://developers.openai.com/api/docs/pricing
+  # OpenAI's pricing page lists no long context cache write price for this model. Its prompt
+  # caching guide prices a cache write of GPT-5.6 and later at 1.25 times the uncached input price,
+  # which gives 50 at the long context input price of 40.
+  # Reviewed 2026-11-16: https://developers.openai.com/api/docs/pricing
+  # and https://developers.openai.com/api/docs/guides/prompt-caching
   pricing:
     input_tokens:
       per_mill_tokens: '20'
