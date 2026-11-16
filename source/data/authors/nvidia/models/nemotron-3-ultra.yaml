@@ -1,6 +1,6 @@
 models:
   authorId: nvidia
-  name: NVIDIA Nemotron 3 Ultra 550B A55B
+  name: Nemotron 3 Ultra
   groupIds: [nemotron-3]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576

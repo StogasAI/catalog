@@ -1,0 +1,26 @@
+# OpenAI's data residency endpoint for Europe (eu.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+# OpenAI publishes no prices for these endpoints, only the rule that they cost 10% more for models
+# released on or after March 5, 2026 (https://developers.openai.com/api/docs/pricing), so these
+# are the standard prices with that rule applied.
+deployments:
+  modelId: gpt-5.5-pro-2026-04-23
+  routeIds: [openai-responses]
+  upstream:
+    model: gpt-5.5-pro-2026-04-23
+    inferenceGeo: eu
+  stogasSupported: false
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
+  overrides:
+    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
+    # 2026-11-15: https://developers.openai.com/api/docs/guides/latest-model
+    sampling:
+      temperature: false
+      topP: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '33'
+      per_mill_context_gt_272k: '66'
+    output_tokens:
+      per_mill_tokens: '198'
+      per_mill_context_gt_272k: '297'

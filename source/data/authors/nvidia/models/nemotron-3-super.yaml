@@ -1,6 +1,6 @@
 models:
   authorId: nvidia
-  name: NVIDIA Nemotron 3 Super 120B A12B
+  name: Nemotron 3 Super
   groupIds: [nemotron-3]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576

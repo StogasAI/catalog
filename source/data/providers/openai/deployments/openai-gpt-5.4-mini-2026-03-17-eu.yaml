@@ -1,0 +1,20 @@
+# OpenAI's data residency endpoint for Europe (eu.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+# OpenAI publishes no prices for these endpoints, only the rule that they cost 10% more for models
+# released on or after March 5, 2026 (https://developers.openai.com/api/docs/pricing), so these
+# are the standard prices with that rule applied.
+deployments:
+  modelId: gpt-5.4-mini-2026-03-17
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-5.4-mini-2026-03-17
+    inferenceGeo: eu
+  stogasSupported: false
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.825'
+    cached_input_tokens:
+      per_mill_tokens: '0.0825'
+    output_tokens:
+      per_mill_tokens: '4.95'

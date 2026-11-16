@@ -1,6 +1,6 @@
 models:
   authorId: nvidia
-  name: Nemotron 3 Nano Omni 30B A3B Reasoning
+  name: Nemotron 3 Nano Omni 30B
   groupIds: [nemotron-3]
   contextWindowTokens: 262144
   maxOutputTokens: 262144

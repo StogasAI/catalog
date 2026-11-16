@@ -2,7 +2,7 @@ models:
   authorId: anthropic
   name: Claude Mythos 5.1
   aliases: [claude-5.1-mythos]
-  groupIds: [claude-mythos]
+  groupIds: [claude-mythos-5]
   contextWindowTokens: 1000000
   maxOutputTokens: 128000
   inputModalities: [text, image]

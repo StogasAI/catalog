@@ -206,13 +206,26 @@ const INFERENCE_GEO_PROCESSING = {
 	us: 'US'
 };
 
+// Where each OpenAI data residency endpoint that runs inference in its region keeps processing
+// and storage. OpenAI's Europe is the European Economic Area and Switzerland, which only the
+// continent contains.
+const OPENAI_RESIDENCY_LOCATIONS = {
+	ae: 'AE',
+	au: 'AU',
+	eu: 'europe',
+	in: 'IN',
+	jp: 'JP',
+	us: 'US'
+};
+
 // Where each Azure Data Zone keeps processing and storage, by the zone that ends a Data Zone
 // deployment type, as us in data_zone_batch_us.
 const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
 
 /**
  * The data handling that a deployment's upstream fields decide, which its record takes without
- * stating it: an inference geography says where inference runs, an Azure Data Zone that Microsoft
+ * stating it: an inference geography says where inference runs, an OpenAI data residency region also stores
+ * there, an Azure Data Zone that Microsoft
  * runs keeps processing and storage in its zone, and Microsoft's preview terms for Instant and Flex
  * drop its commitments on storage, retention and training.
  */
@@ -220,6 +233,12 @@ function selectedDataHandling(graph, providerId, hosting, upstream) {
 	const selected = {};
 	// Anthropic runs a request that names no geography anywhere in the world.
 	const geo = upstream.inferenceGeo ?? (providerId === 'anthropic' ? 'global' : undefined);
+	if (providerId === 'openai') {
+		if (geo === undefined) return selected;
+		selected.processingLocation = OPENAI_RESIDENCY_LOCATIONS[geo];
+		selected.storageLocation = OPENAI_RESIDENCY_LOCATIONS[geo];
+		return selected;
+	}
 	if (geo !== undefined) selected.processingLocation = INFERENCE_GEO_PROCESSING[geo];
 	if (providerId !== 'azure') return selected;
 	const zone = azureDataZone(upstream.deploymentType);
@@ -1563,8 +1582,12 @@ function compileGraph(source, places, companies) {
 		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
+			// The gateway sends OpenAI requests to one host, so it serves no data residency endpoint.
 			(providerId === 'openai' &&
-				selectorKeys.every((key) => ['model', 'reasoningMode', 'serviceTier'].includes(key))) ||
+				(deployment.upstream.inferenceGeo === undefined || deployment.stogasSupported === false) &&
+				selectorKeys.every((key) =>
+					['inferenceGeo', 'model', 'reasoningMode', 'serviceTier'].includes(key)
+				)) ||
 			(providerId === 'anthropic' &&
 				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key))) ||
 			(providerId === 'chutes' &&

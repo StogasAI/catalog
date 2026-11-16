@@ -34,7 +34,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 562 });
+		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 601 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -127,10 +127,10 @@ describe('compiled catalog', () => {
 		expect(groups.has('gpt-6')).toBe(true);
 		expect(selectors.has('claude-haiku-latest')).toBe(false);
 		// A model names its own groups, and readers add their ancestors.
-		expect(catalog.graph.models['claude-haiku-4-5'].groupIds).toEqual(['claude-haiku']);
+		expect(catalog.graph.models['claude-haiku-4-5'].groupIds).toEqual(['claude-haiku-4']);
 		expect(
 			ancestorGroupIds(catalog.graph.groups, catalog.graph.models['claude-haiku-4-5'].groupIds)
-		).toEqual(['claude', 'claude-haiku']);
+		).toEqual(['claude', 'claude-4', 'claude-haiku', 'claude-haiku-4']);
 		expect(selectors.size).toBeGreaterThan(50);
 		expect(catalog).not.toHaveProperty('aliases');
 		expect(catalog.graph.authors.openai.aliases).toEqual(['open-ai']);
@@ -556,10 +556,15 @@ describe('compiled catalog', () => {
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast',
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast-us',
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-us',
+			// OpenAI opens its India and United Arab Emirates endpoints through sales.
+			'openai-gpt-5.2-2025-12-11-ae',
+			'openai-gpt-5.5-2026-04-23-ae',
+			'openai-gpt-5.5-pro-2026-04-23-ae',
 			'openai-gpt-5.6-cyber',
-			'openai-gpt-6-cyber'
+			'openai-gpt-5.6-luna-ae',
+			'openai-gpt-6-cyber',
+			'openai-gpt-6-luna-in'
 		];
-		expect(gated(catalog.graph.deployments)).toEqual(expected);
 		expect(gated(catalog.graph.deployments)).toEqual(expected);
 	});
 
@@ -821,8 +826,12 @@ describe('compiled catalog', () => {
 			const batch = Object.keys(deployment.routes).some(
 				(routeId) => catalog.graph.routes[routeId].batch
 			);
-			const [numerator, denominator] =
+			const [tierNumerator, tierDenominator] =
 				tierScale[batch ? 'batch' : (deployment.upstream.serviceTier as keyof typeof tierScale)];
+			// A data residency endpoint costs 10% more for a model released since March 5, 2026.
+			const regional = 'inferenceGeo' in deployment.upstream;
+			const numerator = tierNumerator * (regional ? 11n : 1n);
+			const denominator = tierDenominator * (regional ? 10n : 1n);
 			// Cache writes cost 1.25x input. Prompts over 272K double input rates and raise output by half.
 			for (const [meter, short, long] of [
 				['input_tokens', input, input * 2n],
@@ -841,7 +850,7 @@ describe('compiled catalog', () => {
 			if (chat) expect(chat.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh']);
 			checked.push(deploymentId);
 		}
-		expect(checked).toHaveLength(42);
+		expect(checked).toHaveLength(55);
 	});
 
 	test('puts each place in every place that holds all of its countries, and in no other', () => {

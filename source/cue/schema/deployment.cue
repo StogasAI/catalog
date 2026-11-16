@@ -4,10 +4,13 @@ package catalog
 // geography or mode that a request field selects, and the identifiers of a customer's target.
 // Who runs the model is the deployment's hosting, not an upstream field.
 // serviceTier names a provider-neutral tier; the compiler records an omitted tier as standard.
+// inferenceGeo is the region of an OpenAI data residency endpoint that both stores and runs
+// requests there, the prefix of its host.
 #OpenAIUpstream: close({
 	model:          #UpstreamId
 	reasoningMode?: "pro"
 	serviceTier?:   "flex" | "fast" | "ultrafast"
+	inferenceGeo?:  "us" | "eu" | "au" | "jp" | "in" | "ae"
 })
 
 #AnthropicUpstream: close({
@@ -49,8 +52,9 @@ package catalog
 
 // Every inference geography: Bedrock's inference profiles name global and
 // those that keep inference in one country or union, which include each
-// geography that Anthropic and Google Cloud name.
-#InferenceGeography: "global" | "us" | "eu" | "jp" | "au" | "in" | "ca"
+// geography that Anthropic and Google Cloud name, and OpenAI's data residency
+// regions add ae.
+#InferenceGeography: "global" | "us" | "eu" | "jp" | "au" | "in" | "ca" | "ae"
 
 // inferenceGeo is Google's endpoint location on Agent Platform, global or the us or eu
 // multi-region, or Anthropic's inference geography where Anthropic runs Claude, which has no eu

@@ -1,0 +1,16 @@
+# OpenAI's data residency endpoint for the United States (us.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+deployments:
+  modelId: gpt-5.2-2025-12-11
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-5.2-2025-12-11
+    inferenceGeo: us
+  stogasSupported: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1.75'
+    cached_input_tokens:
+      per_mill_tokens: '0.175'
+    output_tokens:
+      per_mill_tokens: '14'

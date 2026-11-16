@@ -1,0 +1,24 @@
+# OpenAI's data residency endpoint for the United Arab Emirates (ae.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+# OpenAI publishes no prices for these endpoints, only the rule that they cost 10% more for models
+# released on or after March 5, 2026 (https://developers.openai.com/api/docs/pricing), so these
+# are the standard prices with that rule applied.
+deployments:
+  modelId: gpt-5.5-2026-04-23
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-5.5-2026-04-23
+    inferenceGeo: ae
+  approvalRequired: true
+  stogasSupported: false
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5.5'
+      per_mill_context_gt_272k: '11'
+    cached_input_tokens:
+      per_mill_tokens: '0.55'
+      per_mill_context_gt_272k: '1.1'
+    output_tokens:
+      per_mill_tokens: '33'
+      per_mill_context_gt_272k: '49.5'

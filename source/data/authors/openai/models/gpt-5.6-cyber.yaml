@@ -1,7 +1,7 @@
 models:
   authorId: openai
   name: GPT-5.6 Cyber
-  groupIds: [gpt-5.6]
+  groupIds: [gpt-5.6, gpt-cyber]
   contextWindowTokens: 400000
   maxInputTokens: 272000
   maxOutputTokens: 128000

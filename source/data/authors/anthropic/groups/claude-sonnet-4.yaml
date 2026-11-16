@@ -1,0 +1,4 @@
+groups:
+  authorId: anthropic
+  name: 'Claude Sonnet 4'
+  parentIds: [claude-sonnet, claude-4]

@@ -1,0 +1,4 @@
+groups:
+  authorId: anthropic
+  name: 'Claude Haiku 5'
+  parentIds: [claude-haiku, claude-5]

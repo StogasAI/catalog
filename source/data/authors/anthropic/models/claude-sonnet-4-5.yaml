@@ -2,7 +2,7 @@ models:
   authorId: anthropic
   name: Claude Sonnet 4.5
   aliases: [claude-sonnet-4-5-20250929, claude-4.5-sonnet]
-  groupIds: [claude-sonnet]
+  groupIds: [claude-sonnet-4]
   contextWindowTokens: 200000
   maxOutputTokens: 64000
   inputModalities: [text, image]

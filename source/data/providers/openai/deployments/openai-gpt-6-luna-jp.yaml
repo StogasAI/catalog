@@ -1,0 +1,26 @@
+# OpenAI's data residency endpoint for Japan (jp.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+# OpenAI publishes no prices for these endpoints, only the rule that they cost 10% more for models
+# released on or after March 5, 2026 (https://developers.openai.com/api/docs/pricing), so these
+# are the standard prices with that rule applied.
+deployments:
+  modelId: gpt-6-luna
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-6-luna
+    inferenceGeo: jp
+  stogasSupported: false
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026. OpenAI runs no hosted tools here and sells only the Standard tier.
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.11'
+      per_mill_context_gt_272k: '0.22'
+    cached_input_tokens:
+      per_mill_tokens: '0.011'
+      per_mill_context_gt_272k: '0.022'
+    cache_write_input_tokens:
+      per_mill_tokens: '0.1375'
+      per_mill_context_gt_272k: '0.275'
+    output_tokens:
+      per_mill_tokens: '0.55'
+      per_mill_context_gt_272k: '0.825'

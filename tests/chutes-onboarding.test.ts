@@ -55,7 +55,7 @@ const deployments: ProviderDeploymentContract[] = [
 	deployment(
 		'chutes-qwen3.5-27b',
 		'qwen3.5-27b',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.5-27B-TEE',
 		262144,
 		262144,
@@ -73,7 +73,7 @@ const deployments: ProviderDeploymentContract[] = [
 	deployment(
 		'chutes-qwen3.5-397b-a17b',
 		'qwen3.5-397b-a17b',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.5-397B-A17B-TEE',
 		262144,
 		65536,
@@ -163,7 +163,7 @@ const deployments: ProviderDeploymentContract[] = [
 	deployment(
 		'chutes-qwen3.6-27b',
 		'qwen3.6-27b',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.6-27B-TEE',
 		262144,
 		65536,
@@ -181,7 +181,7 @@ const deployments: ProviderDeploymentContract[] = [
 	deployment(
 		'chutes-qwen3.8-27b',
 		'qwen3.8-27b',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.8-27B-TEE',
 		262144,
 		65536,
@@ -330,7 +330,7 @@ const deployments: ProviderDeploymentContract[] = [
 	standard(
 		'chutes-qwen3.8-2.4t-a95b-unknown-hosted',
 		'qwen3.8-2.4t-a95b',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.8-2.4T-A95B',
 		'd86bda6f-f327-538c-9e23-44f7372e1cb8',
 		{ contextWindowTokens: 1_000_000, maxOutputTokens: 131072 },
@@ -347,7 +347,7 @@ const deployments: ProviderDeploymentContract[] = [
 	standard(
 		'chutes-qwen3.8-max-0902-unknown-hosted',
 		'qwen3.8-max-0902',
-		'qwen',
+		'alibaba',
 		'Qwen/Qwen3.8-Max-0902',
 		'cb177979-3b79-5508-bcbe-5e7f3f5cec75',
 		{ contextWindowTokens: 1000000, maxInputTokens: 991808, maxOutputTokens: 131072 },

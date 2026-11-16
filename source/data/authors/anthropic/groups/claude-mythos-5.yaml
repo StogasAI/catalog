@@ -1,0 +1,4 @@
+groups:
+  authorId: anthropic
+  name: 'Claude Mythos 5'
+  parentIds: [claude-mythos, claude-5]

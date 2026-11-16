@@ -1,0 +1,32 @@
+# OpenAI's data residency endpoint for the United States (us.api.openai.com), which stores and runs
+# requests there. Reviewed 2026-11-16: https://developers.openai.com/api/docs/guides/data-residency
+# OpenAI publishes no prices for these endpoints, only the rule that they cost 10% more for models
+# released on or after March 5, 2026 (https://developers.openai.com/api/docs/pricing), so these
+# are the standard prices with that rule applied.
+deployments:
+  modelId: gpt-6.1-sol
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-6.1-sol
+    inferenceGeo: us
+  stogasSupported: false
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
+  overrides:
+    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
+    # 2026-11-15: https://developers.openai.com/api/docs/guides/latest-model
+    sampling:
+      temperature: false
+      topP: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.2'
+      per_mill_context_gt_272k: '4.4'
+    cached_input_tokens:
+      per_mill_tokens: '0.11'
+      per_mill_context_gt_272k: '0.22'
+    cache_write_input_tokens:
+      per_mill_tokens: '2.75'
+      per_mill_context_gt_272k: '5.5'
+    output_tokens:
+      per_mill_tokens: '11'
+      per_mill_context_gt_272k: '16.5'

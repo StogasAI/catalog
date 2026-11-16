@@ -1,0 +1,4 @@
+groups:
+  authorId: anthropic
+  name: 'Claude Opus 4'
+  parentIds: [claude-opus, claude-4]

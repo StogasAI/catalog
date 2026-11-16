@@ -1,7 +1,7 @@
 models:
   authorId: deepseek
   name: DeepSeek V4 Pro
-  groupIds: [deepseek-v4]
+  groupIds: [deepseek-v4-pro]
   contextWindowTokens: 1048576
   # DeepSeek's API reference caps output at 384K (393216). Reviewed 2026-11-09:
   # https://api-docs.deepseek.com/quick_start/pricing

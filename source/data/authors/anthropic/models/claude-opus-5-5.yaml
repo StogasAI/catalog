@@ -2,7 +2,7 @@ models:
   authorId: anthropic
   name: Claude Opus 5.5
   aliases: [claude-5.5-opus]
-  groupIds: [claude-opus]
+  groupIds: [claude-opus-5]
   contextWindowTokens: 1000000
   maxOutputTokens: 128000
   inputModalities: [text, image]

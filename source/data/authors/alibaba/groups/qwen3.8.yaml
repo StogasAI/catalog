@@ -1,0 +1,4 @@
+groups:
+  authorId: alibaba
+  name: 'Qwen3.8'
+  parentIds: [qwen]
