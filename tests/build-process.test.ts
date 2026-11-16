@@ -410,8 +410,8 @@ exit 1
 		{
 			name: 'legacy route moderation field',
 			path: 'source/data/providers/openai/routes/openai-responses.yaml',
-			from: '  dataHandling:',
-			to: '  moderated: true\n  dataHandling:',
+			from: '  hostedTools:',
+			to: '  moderated: true\n  hostedTools:',
 			error: 'moderated'
 		},
 		{

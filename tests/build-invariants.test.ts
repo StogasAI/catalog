@@ -1825,7 +1825,7 @@ describe('catalog source compiler invariants', () => {
 				'hosted tool data handling in an unlisted place',
 				(source: Source) => {
 					source.graph.routes['openai-responses'].hostedTools = [
-						{ tool: 'mcp', dataHandling: { processingLocation: 'mars' } }
+						{ tool: 'web_fetch', dataHandling: { processingLocation: 'mars' } }
 					];
 				},
 				'openai-responses.hostedTools[0]: dataHandling names a place that locations does not list'
@@ -2129,15 +2129,16 @@ describe('catalog source compiler invariants', () => {
 		test('lists the companies that a hosted tool sends content to', () => {
 			const source = changed((candidate) => {
 				candidate.graph.routes['openai-responses'].hostedTools = [
-					{ tool: 'mcp', dataHandling: { sharedWith: ['unknown'] } }
+					{ tool: 'web_fetch', dataHandling: { sharedWith: ['unknown'] } }
 				];
 			});
 			const { graph } = buildCatalog(source);
 			expect(
-				graph.deployments['openai-gpt-test'].routes['openai-responses'].hostedTools.mcp.dataHandling
+				graph.deployments['openai-gpt-test'].routes['openai-responses'].hostedTools.web_fetch
+					.dataHandling
 			).toEqual({ sharedWith: ['unknown'] });
 			source.graph.routes['openai-responses'].hostedTools = [
-				{ tool: 'mcp', dataHandling: { sharedWith: ['fireworks'] } }
+				{ tool: 'web_fetch', dataHandling: { sharedWith: ['fireworks'] } }
 			];
 			expect(() => buildCatalog(source)).toThrow(
 				'openai-responses.hostedTools[0]: sharedWith must list companies'

@@ -81,7 +81,7 @@ const dataHandlingFields = [
 ];
 // Hosted tools in canonical order, and the call meters that each may charge. A request's content
 // that a tool reads bills as input tokens, so only web search has call meters.
-const hostedToolIds = ['web_search', 'web_fetch', 'mcp'];
+const hostedToolIds = ['web_search', 'web_fetch'];
 const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
 const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
 const openaiWebSearchMeters = [
@@ -91,8 +91,7 @@ const openaiWebSearchMeters = [
 ];
 const hostedToolMeters = {
 	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
-	web_fetch: [],
-	mcp: []
+	web_fetch: []
 };
 const canonicalCredentialModes = ['managed', 'byok'];
 const canonicalCredentialModeRanks = new Map(

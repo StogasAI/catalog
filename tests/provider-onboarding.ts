@@ -47,7 +47,7 @@ export type ProviderRouteContract = {
 type HostedToolContract = {
 	dataHandling: Partial<DataHandlingContract>;
 	pricing?: Record<string, Record<string, string>>;
-	tool: 'mcp' | 'web_fetch' | 'web_search';
+	tool: 'web_fetch' | 'web_search';
 };
 
 export type ProviderDeploymentContract = {
