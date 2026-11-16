@@ -2,7 +2,10 @@
 # Google prices this model on no multi-region, only on the global endpoint and single regions,
 # which the gateway does not call.
 # Vertex AI lists no SKUs for this model, so these prices come from the partner model pricing page.
+# That page lists no one-hour cache write price, and Google's Claude prompt caching page prices one
+# at twice the base input price.
 # Reviewed 2026-11-03: https://cloud.google.com/model-garden/partner-models/pricing
+# Reviewed 2026-11-16: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/claude/prompt-caching
 deployments:
   modelId: claude-opus-4-5
   routeIds: [google-cloud-agent-platform-messages]
