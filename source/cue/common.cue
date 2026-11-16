@@ -26,7 +26,6 @@ package catalog
 #Modality:        "text" | "image" | "audio" | "video"
 #ReasoningEffort: "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 #Reasoning:       "unsupported" | "optional" | "required"
-#CredentialMode:  "managed" | "byok"
 #Interface:       "chat_completions" | "responses"
 #ProcessingLocation: "unknown" | #LocationId
 #StorageLocation:    "none" | #ProcessingLocation

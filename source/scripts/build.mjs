@@ -15,6 +15,7 @@ import { availableParallelism, homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './canonical-json.mjs';
+import { STOGAS_MODES } from './catalog-files.mjs';
 import { earliest, partitionCatalog } from './catalog-parts.mjs';
 import { CATALOG_PARTS_DIRECTORY, CATALOG_ROOT, catalogFileList } from './release-format.mjs';
 import { WORLD, isLocation, isPlaceId, placeIndex } from './locations.mjs';
@@ -93,10 +94,6 @@ const hostedToolMeters = {
 	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
 	web_fetch: []
 };
-const canonicalCredentialModes = ['managed', 'byok'];
-const canonicalCredentialModeRanks = new Map(
-	canonicalCredentialModes.map((value, index) => [value, index])
-);
 const maxAliasesPerNode = 8;
 // Chutes selects an instance of an end-to-end encrypted route by the GPU count that the encrypted
 // transport attests, and its other routes take none.
@@ -607,7 +604,6 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					...provider,
 					headquarteredCountry: headquarteredCountry('provider', id, provider.companyId),
 					aliases: [...(provider.aliases ?? [])],
-					credentialModes: [...provider.credentialModes],
 					// Source states only the guarantees that a provider gives and the companies that it
 					// shares requests with.
 					dataHandling: {
@@ -1305,9 +1301,17 @@ function compileGraph(source, places, companies) {
 					route.retirementDate ?? null,
 					provider.retirementDate ?? null
 				);
-				// Stogas does not serve a route that says so, or any route of a provider that says so.
-				const stogasSupported =
-					route.stogasSupported !== false && provider.stogasSupported !== false;
+				// A route offers each way of serving that its provider offers and it does not withdraw.
+				// The gateway has no batch API, so a batch route offers none and states neither.
+				for (const mode of STOGAS_MODES)
+					if (route[mode] === false && (provider[mode] !== true || route.batch === true))
+						throw new Error(`${routeId}: ${mode} is false already`);
+				const modes = Object.fromEntries(
+					STOGAS_MODES.map((mode) => [
+						mode,
+						provider[mode] === true && route[mode] !== false && route.batch !== true
+					])
+				);
 				const { capabilities, sampling } = route;
 				validateInputLimits(routeId, route.inputLimits);
 				rejectRedundantOverride(
@@ -1349,7 +1353,7 @@ function compileGraph(source, places, companies) {
 						),
 						hostedTools,
 						retirementDate,
-						stogasSupported,
+						...modes,
 						notes: [...provider.notes, ...ownNotes('route', routeId, route.notes)]
 					}
 				];
@@ -1402,11 +1406,6 @@ function compileGraph(source, places, companies) {
 				`Company ${id}: headquarteredCountry names a country that locations does not list`
 			);
 	for (const [providerId, provider] of Object.entries(graph.providers)) {
-		validateCanonicalList(
-			provider.credentialModes,
-			canonicalCredentialModeRanks,
-			`${providerId}: credentialModes`
-		);
 		const accountLocations = provider.accountLocations ?? [];
 		if (
 			accountLocations.some(
@@ -1546,17 +1545,26 @@ function compileGraph(source, places, companies) {
 		if (retirementDate !== null && retirementDate < model.releaseDate) {
 			throw new Error(`${deploymentId}: retirementDate precedes model releaseDate`);
 		}
-		// Stogas serves a deployment on every route that serves it or on none, so the gateway
-		// loads whole records.
-		const routesSupported = deployment.routeIds.map(
-			(routeId) => graph.routes[routeId].stogasSupported
-		);
-		if (new Set(routesSupported).size > 1) {
-			throw new Error(
-				`${deploymentId}: split the routes that Stogas serves from those that it does not`
-			);
+		// A deployment's token prices hold on all of its routes, and a batch API bills its own, so a
+		// batch deployment serves only batch routes and names no service tier.
+		const batch = deployment.routeIds.map((routeId) => graph.routes[routeId].batch === true);
+		if (new Set(batch).size > 1) {
+			throw new Error(`${deploymentId}: split the batch routes from the others`);
 		}
-		const stogasSupported = deployment.stogasSupported !== false && routesSupported[0];
+		// Stogas serves a deployment in the same ways on every route, so the gateway loads whole
+		// records, and a deployment withdraws only a way that its routes offer.
+		const modes = Object.fromEntries(
+			STOGAS_MODES.map((mode) => {
+				const offered = new Set(deployment.routeIds.map((routeId) => graph.routes[routeId][mode]));
+				if (offered.size > 1)
+					throw new Error(`${deploymentId}: split the routes that offer ${mode} from the others`);
+				const [routes] = offered;
+				if (deployment[mode] === false && !routes)
+					throw new Error(`${deploymentId}: ${mode} is false already`);
+				return [mode, routes && deployment[mode] !== false];
+			})
+		);
+		const stogasServes = modes.stogasByok || modes.stogasManaged;
 		// Routes of one provider repeat its notes, so each note shows once, in route order.
 		const notes = [
 			...new Map(
@@ -1567,12 +1575,6 @@ function compileGraph(source, places, companies) {
 			...model.notes,
 			...ownNotes('deployment', deploymentId, deployment.notes)
 		];
-		// A deployment's token prices hold on all of its routes, and a batch API bills its own, so a
-		// batch deployment serves only batch routes and names no service tier.
-		const batch = deployment.routeIds.map((routeId) => graph.routes[routeId].batch === true);
-		if (new Set(batch).size > 1) {
-			throw new Error(`${deploymentId}: split the batch routes from the others`);
-		}
 		if (batch[0] && deployment.upstream.serviceTier !== undefined) {
 			throw new Error(`${deploymentId}: a batch deployment names no service tier`);
 		}
@@ -1584,7 +1586,7 @@ function compileGraph(source, places, companies) {
 		const selectorKeysValid =
 			// The gateway sends OpenAI requests to one host, so it serves no data residency endpoint.
 			(providerId === 'openai' &&
-				(deployment.upstream.inferenceGeo === undefined || deployment.stogasSupported === false) &&
+				(deployment.upstream.inferenceGeo === undefined || !stogasServes) &&
 				selectorKeys.every((key) =>
 					['inferenceGeo', 'model', 'reasoningMode', 'serviceTier'].includes(key)
 				)) ||
@@ -1647,7 +1649,7 @@ function compileGraph(source, places, companies) {
 			providerId === 'google-cloud' ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
 		// The GovCloud Regions are a partition of their own, whose accounts the gateway cannot use.
-		if (deployment.upstream.inferenceGeo === 'us-gov' && deployment.stogasSupported !== false) {
+		if (deployment.upstream.inferenceGeo === 'us-gov' && stogasServes) {
 			throw new Error(`${deploymentId}: Stogas does not serve the AWS GovCloud (US) Regions`);
 		}
 		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
@@ -1734,7 +1736,7 @@ function compileGraph(source, places, companies) {
 			// Closed models do not disclose how their weights are stored.
 			weightPrecision: deployment.weightPrecision ?? 'unknown',
 			retirementDate,
-			stogasSupported,
+			...modes,
 			notes,
 			...served
 		};
@@ -1767,7 +1769,7 @@ function compileGraph(source, places, companies) {
 				!standard ||
 				(standard.retirementDate !== null &&
 					(fast.retirementDate === null || standard.retirementDate < fast.retirementDate)) ||
-				(!standard.stogasSupported && fast.stogasSupported)
+				STOGAS_MODES.some((mode) => fast[mode] && !standard[mode])
 			) {
 				throw new Error(`${deploymentId}: Fast needs a Standard deployment on ${routeId}`);
 			}
@@ -1784,7 +1786,8 @@ function compileGraph(source, places, companies) {
 				const {
 					dataHandling: _dataDefaults,
 					retirementDate: _routesDate,
-					stogasSupported: _routesSupport,
+					stogasByok: _routesByok,
+					stogasManaged: _routesManaged,
 					...facts
 				} = provider;
 				return [id, facts];

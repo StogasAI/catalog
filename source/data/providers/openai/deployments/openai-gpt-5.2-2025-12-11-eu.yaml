@@ -6,7 +6,7 @@ deployments:
   upstream:
     model: gpt-5.2-2025-12-11
     inferenceGeo: eu
-  stogasSupported: false
+  stogasByok: false
   pricing:
     input_tokens:
       per_mill_tokens: '1.75'

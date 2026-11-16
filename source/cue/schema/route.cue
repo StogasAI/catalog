@@ -39,9 +39,6 @@ package catalog
 	// name no service tier. The gateway has no batch API, so Stogas serves no
 	// batch route.
 	batch?: true
-	if batch != _|_ {
-		stogasSupported: false
-	}
 
 	// Content the route carries to the provider. A deployment accepts the
 	// modalities that both its model and the route accept.
@@ -66,8 +63,10 @@ package catalog
 	// API that it retires. Its deployments stop serving through it then, and a
 	// deployment that no other route serves retires.
 	retirementDate?: #Date
-	// Stogas does not serve this route, so none of its deployments either.
-	stogasSupported?: false
+	// Stogas does not serve this route, or its deployments, with a customer's own credential or
+	// with its own account, although its provider does.
+	stogasByok?:    false
+	stogasManaged?: false
 	notes?:           #Note
 	periods?: [#Period, ...#Period]
 })

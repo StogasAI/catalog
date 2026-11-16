@@ -9,7 +9,7 @@ deployments:
   upstream:
     model: gpt-6-astra
     inferenceGeo: eu
-  stogasSupported: false
+  stogasByok: false
   notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
   overrides:
     # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed

@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import {
 	CATALOG_LIMIT,
 	CATALOG_PART_LIMIT,
-	CATALOG_ROOT_LIMIT
+	CATALOG_ROOT_LIMIT,
+	stogasServes
 } from '../source/scripts/catalog-files.mjs';
 import { ancestorGroupIds } from '../source/scripts/model-groups.mjs';
 import { countriesIn, placeIndex } from '../source/scripts/locations.mjs';
@@ -881,7 +882,7 @@ describe('compiled catalog', () => {
 
 	test('orders parts so that they retire as a whole', () => {
 		// Parts of what Stogas does not serve come last, and the gateway never reads them.
-		const served = catalogRoot.parts.filter((part) => part.stogasSupported);
+		const served = catalogRoot.parts.filter(stogasServes);
 		expect(catalogRoot.parts.slice(0, served.length)).toEqual(served);
 		for (const parts of [served, catalogRoot.parts.slice(served.length)]) {
 			const dates = parts.map(({ through }) => through);

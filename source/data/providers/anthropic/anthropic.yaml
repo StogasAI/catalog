@@ -1,6 +1,6 @@
 providers:
   name: Anthropic
-  credentialModes: [byok]
+  stogasByok: true
   companyId: anthropic
   # Anthropic deletes API inputs and outputs within 30 days, names no place where it stores them,
   # and keeps content that its safety systems flag for up to 2 years. Its API retention page also

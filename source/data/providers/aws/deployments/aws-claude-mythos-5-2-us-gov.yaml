@@ -16,7 +16,7 @@ deployments:
   upstream:
     model: us-gov.anthropic.claude-mythos-5-2
     inferenceGeo: us-gov
-  stogasSupported: false
+  stogasByok: false
   approvalRequired: true
   overrides:
     dataHandling:

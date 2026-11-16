@@ -9,7 +9,7 @@ deployments:
   upstream:
     model: gpt-5.4-mini-2026-03-17
     inferenceGeo: eu
-  stogasSupported: false
+  stogasByok: false
   notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
   pricing:
     input_tokens:

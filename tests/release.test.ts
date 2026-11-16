@@ -344,7 +344,8 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 				sha256: digest(bytes),
 				size: bytes.byteLength,
 				through: null,
-				stogasSupported: true
+				stogasByok: true,
+				stogasManaged: false
 			})
 		);
 		return `${digest(bytes)}.json`;

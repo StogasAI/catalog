@@ -1,4 +1,4 @@
-import type { CatalogKind, CatalogRoot, Companies } from './catalog-files.mjs';
+import type { CatalogKind, CatalogRoot, Companies, Serving } from './catalog-files.mjs';
 import type { Locations } from './locations.mjs';
 
 /** The size of a part on average, in bytes. */
@@ -24,5 +24,5 @@ export function partitionCatalog(catalog: {
 /** Each record's retirement date, by kind and ID, or null. */
 export function retirementDates(graph: Graph): Record<CatalogKind, Record<string, string | null>>;
 
-/** Whether Stogas serves each record, by kind and ID. */
-export function supportedRecords(graph: Graph): Record<CatalogKind, Record<string, boolean>>;
+/** How Stogas serves each record, by kind and ID. */
+export function stogasServing(graph: Graph): Record<CatalogKind, Record<string, Serving>>;

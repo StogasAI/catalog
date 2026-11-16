@@ -16,7 +16,7 @@ type Catalog = {
 
 /** A build's root and its whole catalog, with what Stogas does not serve. */
 export const readCatalog = (directory: string) =>
-	readGeneratedCatalog<Catalog>({ directory, unsupported: true });
+	readGeneratedCatalog<Catalog>({ directory, unserved: true });
 
 /** The checkout's root and whole catalog, with what Stogas does not serve. */
-export const { root: catalogRoot, catalog } = readGeneratedCatalog<Catalog>({ unsupported: true });
+export const { root: catalogRoot, catalog } = readGeneratedCatalog<Catalog>({ unserved: true });

@@ -98,9 +98,11 @@ package catalog
 	// it never retires before its provider stops it; omitted when no date is
 	// announced.
 	retirementDate?: #Date
-	// Stogas does not serve this deployment. A deployment that Stogas serves on one route serves on
-	// all of them, so a deployment on a route that Stogas does not serve is not served either.
-	stogasSupported?: false
+	// Stogas does not serve this deployment with a customer's own credential or with its own
+	// account, although its routes do. Its routes agree on both, so it serves on all of them in
+	// the same ways.
+	stogasByok?:    false
+	stogasManaged?: false
 	notes?:           #Note
 	// Narrower facts than the deployment inherits from its model and routes.
 	overrides?: close({

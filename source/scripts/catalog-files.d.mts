@@ -41,8 +41,7 @@ export type CatalogPartFile = {
 	sha256: string;
 	size: number;
 	through: string | null;
-	stogasSupported: boolean;
-};
+} & Serving;
 
 /** A note of a compiled record, with the record that states it. */
 export type CatalogNote = {
@@ -51,9 +50,15 @@ export type CatalogNote = {
 	text: string;
 };
 
-/** Whether Stogas serves a record. */
-type Supported = { stogasSupported: boolean };
-type Summary = { part: number; retirementDate: string | null } & Supported;
+/**
+ * How Stogas serves a record: with a customer's own credential, and with its own account, which it
+ * bills the customer for.
+ */
+export type Serving = { stogasByok: boolean; stogasManaged: boolean };
+export const STOGAS_MODES: readonly (keyof Serving)[];
+/** Whether Stogas serves a record, summary or part in either way. */
+export function stogasServes(record: Serving): boolean;
+type Summary = { part: number; retirementDate: string | null } & Serving;
 export type ModelSummary = Summary & {
 	aliases: string[];
 	authorId: string;
@@ -63,11 +68,11 @@ export type ModelSummary = Summary & {
 };
 export type RouteSummary = Summary & { interfaces: string[]; providerId: string };
 export type DeploymentSummary = Summary & { modelId: string; routeIds: string[] };
-/** An author, group or provider: its whole record, its retirement date, and whether Stogas serves it. */
+/** An author, group or provider: its whole record, its retirement date, and how Stogas serves it. */
 export type WholeSummary = Record<string, unknown> & {
 	notes?: CatalogNote[];
 	retirementDate: string | null;
-} & Supported;
+} & Serving;
 
 export type CatalogSummaries = {
 	authors: Record<string, WholeSummary>;
@@ -129,7 +134,7 @@ export function recordSummary(
 	record: object,
 	part: number | undefined,
 	retirementDate: string | null,
-	stogasSupported: boolean
+	modes: Serving
 ): object;
 
 /**
@@ -140,12 +145,12 @@ export function checkedCatalogFiles(root: unknown, rootSize: number): CatalogPar
 
 /**
  * The positions of the parts that hold a record that has not retired at `at`. Without
- * `unsupported`, it leaves out the parts of the records that Stogas does not serve.
+ * `unserved`, it leaves out the parts of the records that Stogas does not serve.
  */
 export function partsInEffect(
 	root: { parts: readonly CatalogPartFile[] },
 	at?: Date | number,
-	options?: { unsupported?: boolean }
+	options?: { unserved?: boolean }
 ): number[];
 
 /** The positions of the parts that hold the records of the given kinds and IDs, once each. */

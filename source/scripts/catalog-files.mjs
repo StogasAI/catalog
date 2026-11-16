@@ -69,13 +69,25 @@ export function isRetired(date, at = Date.now()) {
 }
 
 /**
- * What the root keeps of a record that a part holds, or of a whole record, with whether Stogas
- * serves it.
+ * The ways that Stogas serves a record: with a customer's own credential, and with its own account,
+ * which it bills the customer for. Every route, deployment, summary and part states both.
  */
-export function recordSummary(kind, record, part, retirementDate, stogasSupported) {
+export const STOGAS_MODES = Object.freeze(['stogasByok', 'stogasManaged']);
+
+/** Whether Stogas serves a record, summary or part in either way. */
+export function stogasServes(record) {
+	return record.stogasByok || record.stogasManaged;
+}
+
+/**
+ * What the root keeps of a record that a part holds, or of a whole record, with how Stogas serves
+ * it.
+ */
+export function recordSummary(kind, record, part, retirementDate, modes) {
+	const serving = Object.fromEntries(STOGAS_MODES.map((mode) => [mode, modes[mode]]));
 	const fields = Object.hasOwn(PART_KINDS, kind) ? PART_KINDS[kind] : null;
-	if (!fields) return { ...record, retirementDate, stogasSupported };
-	const summary = { part, retirementDate, stogasSupported };
+	if (!fields) return { ...record, retirementDate, ...serving };
+	const summary = { part, retirementDate, ...serving };
 	for (const field of fields) if (Object.hasOwn(record, field)) summary[field] = record[field];
 	if (kind === 'deployments') summary.routeIds = Object.keys(record.routes).sort();
 	return summary;
@@ -83,7 +95,12 @@ export function recordSummary(kind, record, part, retirementDate, stogasSupporte
 
 /** A whole record from its summary in the root. */
 function wholeRecord(summary) {
-	const { retirementDate: _retirementDate, stogasSupported: _supported, ...record } = summary;
+	const {
+		retirementDate: _retirementDate,
+		stogasByok: _byok,
+		stogasManaged: _managed,
+		...record
+	} = summary;
 	return record;
 }
 
@@ -107,8 +124,8 @@ export function checkedCatalogFiles(root, rootSize) {
 	let bytes = rootSize;
 	for (const file of root.parts) {
 		if (
-			!hasKeys(file, ['sha256', 'size', 'through', 'stogasSupported']) ||
-			typeof file.stogasSupported !== 'boolean' ||
+			!hasKeys(file, ['sha256', 'size', 'through', ...STOGAS_MODES]) ||
+			STOGAS_MODES.some((mode) => typeof file[mode] !== 'boolean') ||
 			typeof file.sha256 !== 'string' ||
 			!/^[0-9a-f]{64}$/.test(file.sha256) ||
 			seen.has(file.sha256) ||
@@ -128,12 +145,12 @@ export function checkedCatalogFiles(root, rootSize) {
 
 /**
  * The positions of the parts that hold a record that has not retired at `at`, which is every part
- * whose records do not all retire by then. Without `unsupported`, it leaves out the parts of the
+ * whose records do not all retire by then. Without `unserved`, it leaves out the parts of the
  * records that Stogas does not serve, as the gateway does.
  */
-export function partsInEffect(root, at = Date.now(), { unsupported = false } = {}) {
-	return root.parts.flatMap(({ through, stogasSupported }, index) =>
-		isRetired(through, at) || !(stogasSupported || unsupported) ? [] : [index]
+export function partsInEffect(root, at = Date.now(), { unserved = false } = {}) {
+	return root.parts.flatMap((part, index) =>
+		isRetired(part.through, at) || !(stogasServes(part) || unserved) ? [] : [index]
 	);
 }
 
@@ -287,13 +304,7 @@ function partMembers(root) {
 
 /** The record, after checking that the summary repeats its fields. */
 function matching(kind, id, record, summary) {
-	const expected = recordSummary(
-		kind,
-		record,
-		summary.part,
-		summary.retirementDate,
-		summary.stogasSupported
-	);
+	const expected = recordSummary(kind, record, summary.part, summary.retirementDate, summary);
 	if (canonical(expected) !== canonical(summary))
 		throw new Error(`${kind} ${id} differs from its summary.`);
 	return record;

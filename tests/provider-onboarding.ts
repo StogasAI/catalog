@@ -39,8 +39,9 @@ export type ProviderRouteContract = {
 	/** The route is a batch API. */
 	batch?: true;
 	hostedTools?: HostedToolContract[];
-	/** Stogas does not serve the route or its deployments. */
-	stogasSupported?: false;
+	/** The ways of serving that the route withdraws from what its provider offers. */
+	stogasByok?: false;
+	stogasManaged?: false;
 	notes?: string;
 };
 
@@ -83,8 +84,9 @@ export type ProviderDeploymentContract = {
 	reasoningMaxTokens?: { maximum: number; minimum: number } | null;
 	retirementDate: string | null;
 	routeIds: string[];
-	/** Stogas does not serve the deployment, though it serves the deployment's routes. */
-	stogasSupported?: false;
+	/** The ways of serving that the deployment withdraws from what its routes offer. */
+	stogasByok?: false;
+	stogasManaged?: false;
 	upstream: Record<string, number | string>;
 	weightPrecision?: string;
 };
@@ -95,7 +97,9 @@ export type ProviderOnboardingContract = {
 		capabilities: Record<string, boolean>;
 		/** The sampling parameters that the provider's API takes. */
 		sampling: string[];
-		credentialModes: Array<'managed' | 'byok'>;
+		/** Whether Stogas serves the provider with a customer's credential and with its own account. */
+		stogasByok: boolean;
+		stogasManaged: boolean;
 		dataHandling: DataHandlingContract;
 		companyId: string;
 		headquarteredCountry: string;
@@ -135,9 +139,13 @@ export function assertProviderOnboardingContract(
 		.map(([id]) => id)
 		.sort();
 	expect(providerRoutes).toEqual(contract.routes.map(({ id }) => id).sort());
+	// A route offers what its provider offers and it does not withdraw, and a batch route nothing.
+	const routeServing = (route: ProviderRouteContract) => ({
+		stogasByok: contract.provider.stogasByok && route.stogasByok !== false && !route.batch,
+		stogasManaged: contract.provider.stogasManaged && route.stogasManaged !== false && !route.batch
+	});
 	const provider = {
 		aliases: contract.provider.aliases,
-		credentialModes: contract.provider.credentialModes,
 		name: contract.provider.name,
 		companyId: contract.provider.companyId,
 		headquarteredCountry: contract.provider.headquarteredCountry
@@ -185,7 +193,7 @@ export function assertProviderOnboardingContract(
 			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),
 			providerId,
 			retirementDate: null,
-			stogasSupported: route.stogasSupported !== false,
+			...routeServing(route),
 			...noted(routeNotes(route))
 		});
 	}
@@ -308,9 +316,13 @@ export function assertProviderOnboardingContract(
 					: (expected.modelReasoningMaxTokens ?? null),
 			retirementDate: expected.retirementDate,
 			routes: servedRoutes,
-			stogasSupported:
-				expected.stogasSupported !== false &&
-				expected.routeIds.every((routeId) => routes.get(routeId)?.stogasSupported !== false),
+			...Object.fromEntries(
+				(['stogasByok', 'stogasManaged'] as const).map((mode) => [
+					mode,
+					expected[mode] !== false &&
+						expected.routeIds.every((routeId) => routeServing(routes.get(routeId)!)[mode])
+				])
+			),
 			...noted([
 				...expected.routeIds.flatMap((routeId) => routeNotes(routes.get(routeId)!)),
 				...((graph.models[expected.modelId]!.notes as unknown[] | undefined) ?? []),

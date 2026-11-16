@@ -180,7 +180,8 @@ describe('Google Cloud onboarding contract', () => {
 				aliases: ['gcp'],
 				capabilities,
 				sampling: ['temperature', 'topP', 'topK'],
-				credentialModes: ['byok'],
+				stogasByok: true,
+				stogasManaged: false,
 				dataHandling: providerHandling,
 				companyId: 'google',
 				headquarteredCountry: 'US',
@@ -222,8 +223,7 @@ describe('Google Cloud onboarding contract', () => {
 					id: 'google-cloud-anthropic-managed-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					batch: true,
-					stogasSupported: false
+					batch: true
 				}
 			],
 			deployments,

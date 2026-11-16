@@ -30,15 +30,17 @@ Deployments, routes, and providers take a `retirementDate` from their provider, 
 
 A record serves until its date ends everywhere on Earth, at 12:00 UTC the next day.
 
-## What Stogas does not serve
+## How Stogas serves
 
-The catalog lists the whole market, including what Stogas does not serve. A provider, route, or deployment says so with `stogasSupported: false`. The answer passes down the same way a retirement date does: from a provider to its routes, and from a route to its deployments. A deployment serves on all of its routes or on none of them, so a route without Stogas support needs deployments of its own. A model, provider, author, or group goes unserved once all of its records in the table above do.
+The catalog lists the whole market, including what Stogas does not serve. Stogas serves a record in up to two ways: with the customer's own credential for the provider, and with Stogas's own provider account. A provider offers each way with `stogasByok: true` and `stogasManaged: true`. A route or deployment withdraws a way that its parents offer with `stogasByok: false` or `stogasManaged: false`, and the build rejects a `false` that withdraws nothing. A deployment's routes must agree on each way, so a route that differs needs deployments of its own.
 
-Compiled route and deployment records, and every summary in the root, state `stogasSupported` as `true` or `false`. A record's `notes` state a surprising fact that no field can say. Each compiled record lists its notes with the record that states each one, such as `{ "kind": "route", "id": "chutes-chat-completions", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its provider, routes and model.
+A record that offers neither way is unserved. A model, provider, author, or group offers a way once one of its records in the retirement table above does, and a part once one of the records in it does. Compiled route and deployment records, every summary in the root, and every part that the root names state `stogasByok` and `stogasManaged` as `true` or `false`.
 
-OpenAI's Batch API, Azure's batch jobs, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed this way, on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier, and on Azure they take a batch deployment type, `global_batch` or `data_zone_batch_us`, because Azure runs batch jobs only on those. The gateway has no batch API, so the schema marks every batch route as unserved.
+A record's `notes` state a surprising fact that no field can say. Each compiled record lists its notes with the record that states each one, such as `{ "kind": "route", "id": "chutes-chat-completions", "text": "…" }`. A route record also lists its provider's notes, and a deployment record those of its provider, routes and model.
 
-Unserved records sit in their own parts, which the root marks with `stogasSupported: false`. The gateway never reads those parts, so it never routes to these records. A request that names one fails.
+OpenAI's Batch API, Azure's batch jobs, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier, and on Azure they take a batch deployment type, `global_batch` or `data_zone_batch_us`, because Azure runs batch jobs only on those. The gateway has no batch API, so a batch route offers neither way and states neither flag.
+
+Unserved records sit in their own parts. The gateway never reads those parts, so it never routes to these records, and a request that names one fails.
 
 ## Releases
 

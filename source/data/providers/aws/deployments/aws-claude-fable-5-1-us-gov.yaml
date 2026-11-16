@@ -13,7 +13,7 @@ deployments:
   upstream:
     model: us-gov.anthropic.claude-fable-5-1
     inferenceGeo: us-gov
-  stogasSupported: false
+  stogasByok: false
   overrides:
     dataHandling:
       storageLocation: US

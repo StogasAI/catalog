@@ -1,6 +1,7 @@
 providers:
   name: Chutes
-  credentialModes: [managed, byok]
+  stogasByok: true
+  stogasManaged: true
   companyId: chutes
   # Chutes' terms let it, its network operators and its model providers host, process and cache
   # content for as long as processing needs it, and name no place or period. Chutes does not

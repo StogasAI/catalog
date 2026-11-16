@@ -99,7 +99,12 @@ function synthetic(
 			routes: Object.fromEntries(
 				providers.map((index) => [
 					`route-${index}`,
-					{ interfaces: ['responses'], providerId: `provider-${index}`, stogasSupported: true }
+					{
+						interfaces: ['responses'],
+						providerId: `provider-${index}`,
+						stogasByok: true,
+						stogasManaged: false
+					}
 				])
 			),
 			deployments: Object.fromEntries(
@@ -108,7 +113,8 @@ function synthetic(
 					{
 						modelId: 'model',
 						retirementDate: date(index),
-						stogasSupported: true,
+						stogasByok: true,
+						stogasManaged: false,
 						routes: { [`route-${index % providers.length}`]: { notes: 'x'.repeat(bytes) } }
 					}
 				])
@@ -169,7 +175,8 @@ describe('catalog parts', () => {
 				sha256: part.sha256,
 				size: part.size,
 				through: root.parts[index]!.through,
-				stogasSupported: true
+				stogasByok: true,
+				stogasManaged: false
 			});
 		});
 		deploymentsOf(parts).forEach((ids, index) => {
@@ -563,7 +570,8 @@ describe('catalog limits', () => {
 		sha256,
 		size,
 		through,
-		stogasSupported: true
+		stogasByok: true,
+		stogasManaged: false
 	});
 	const root = (parts: unknown, fields: object = {}) =>
 		Buffer.from(

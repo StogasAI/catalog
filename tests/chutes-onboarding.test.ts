@@ -382,7 +382,8 @@ describe('Chutes provider onboarding contract', () => {
 					'repetitionPenalty',
 					'seed'
 				],
-				credentialModes: ['managed', 'byok'],
+				stogasByok: true,
+				stogasManaged: true,
 				dataHandling,
 				companyId: 'chutes',
 				headquarteredCountry: 'US',

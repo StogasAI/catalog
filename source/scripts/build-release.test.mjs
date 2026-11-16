@@ -21,7 +21,8 @@ function fixture(t, probe = '', part = null) {
 					sha256: digest(part),
 					size: Buffer.byteLength(part),
 					through: null,
-					stogasSupported: true
+					stogasByok: true,
+					stogasManaged: false
 				}
 			]
 		: [];

@@ -6,7 +6,7 @@ deployments:
   upstream:
     model: gpt-5-nano-2025-08-07
     inferenceGeo: us
-  stogasSupported: false
+  stogasByok: false
   # Reviewed 2026-11-13: https://developers.openai.com/api/docs/deprecations
   retirementDate: 2026-12-11
   overrides:

@@ -390,24 +390,24 @@ describe('Azure provider onboarding contract', () => {
 				...['SG', 'TW', 'US', 'ZA', 'apac', 'europe']
 			],
 			aliases: [],
-			credentialModes: ['byok'],
 			companyId: 'microsoft',
 			headquarteredCountry: 'US',
 			name: 'Azure'
 		});
+		// Stogas serves Azure only with your own credential, and no batch route at all.
 		expect(
-			Object.entries(catalog.graph.routes)
-				.filter(([, route]) => route.providerId === 'azure')
-				.map(([id]) => id)
-				.sort()
-		).toEqual([
-			'azure-anthropic-messages',
-			'azure-batch-chat-completions',
-			'azure-batch-responses',
-			'azure-chat-completions',
-			'azure-responses'
-		]);
-		expect(catalog.graph.providers.azure.credentialModes).toEqual(['byok']);
+			Object.fromEntries(
+				Object.entries(catalog.graph.routes)
+					.filter(([, route]) => route.providerId === 'azure')
+					.map(([id, route]) => [id, [route.stogasByok, route.stogasManaged]])
+			)
+		).toEqual({
+			'azure-anthropic-messages': [true, false],
+			'azure-batch-chat-completions': [false, false],
+			'azure-batch-responses': [false, false],
+			'azure-chat-completions': [true, false],
+			'azure-responses': [true, false]
+		});
 	});
 
 	test('pins GPT prices and retirement for every Azure location, tier, and reasoning mode', () => {

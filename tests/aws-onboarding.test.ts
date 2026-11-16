@@ -241,7 +241,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 								fifthMore(global)
 							),
 							...gated,
-							stogasSupported: false as const
+							stogasByok: false as const
 						}
 					]
 				: [])
@@ -321,7 +321,8 @@ describe('AWS onboarding contract', () => {
 				aliases: [],
 				capabilities,
 				sampling: ['temperature', 'topP', 'topK'],
-				credentialModes: ['byok'],
+				stogasByok: true,
+				stogasManaged: false,
 				dataHandling: providerHandling,
 				companyId: 'amazon',
 				headquarteredCountry: 'US',
@@ -346,8 +347,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-bedrock-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					batch: true,
-					stogasSupported: false
+					batch: true
 				},
 				{
 					// Anthropic deletes inputs and outputs within 30 days.
@@ -372,8 +372,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-claude-platform-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
-					batch: true,
-					stogasSupported: false
+					batch: true
 				}
 			],
 			deployments,

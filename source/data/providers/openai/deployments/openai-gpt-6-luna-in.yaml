@@ -10,7 +10,7 @@ deployments:
     model: gpt-6-luna
     inferenceGeo: in
   approvalRequired: true
-  stogasSupported: false
+  stogasByok: false
   notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026. OpenAI runs no hosted tools here and sells only the Standard tier.
   pricing:
     input_tokens:
