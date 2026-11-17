@@ -11,6 +11,8 @@ models:
   reasoningEfforts: [low, medium, high, xhigh, max]
   reasoningEffortsByInterface:
     chat_completions: [low, medium, high, xhigh]
+  # Reviewed 2026-11-17: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+  reasoningDefault: medium
   openWeights: false
   # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/prompt-caching
   promptCacheMinimumTokens: 1024

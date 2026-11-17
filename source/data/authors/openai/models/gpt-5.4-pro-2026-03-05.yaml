@@ -16,6 +16,8 @@ models:
     structuredOutputs: false
   reasoning: required
   reasoningEfforts: [medium, high, xhigh]
+  # Reviewed 2026-11-17: https://developers.openai.com/api/docs/models/gpt-5.4-pro
+  reasoningDefault: medium
   openWeights: false
   snapshot: 2026-03-05
   releaseDate: 2026-03-05
