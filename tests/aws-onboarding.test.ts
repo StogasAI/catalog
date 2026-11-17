@@ -22,7 +22,8 @@ const capabilities = {
 	streaming: true,
 	structuredOutputs: true,
 	systemMessages: true,
-	toolChoice: true
+	toolChoice: true,
+	toolResultAttachments: true
 };
 // In Bedrock's default data retention mode, AWS may keep data for safety and abuse prevention for
 // a period that it does not state.

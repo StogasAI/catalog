@@ -20,6 +20,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolResultAttachments: true
   # The sampling fields of the Messages API. Reviewed 2026-11-15:
   # https://platform.claude.com/docs/en/api/messages/create
   sampling:

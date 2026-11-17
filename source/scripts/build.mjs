@@ -51,7 +51,8 @@ const capabilityNames = [
 	'explicitPromptCaching',
 	'structuredOutputs',
 	'systemMessages',
-	'toolChoice'
+	'toolChoice',
+	'toolResultAttachments'
 ];
 const samplingNames = [
 	'temperature',

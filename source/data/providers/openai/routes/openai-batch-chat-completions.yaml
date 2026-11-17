@@ -20,6 +20,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolResultAttachments: false
   # The sampling fields of OpenAI's Chat Completions API. Reviewed 2026-11-15:
   # https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
   sampling:

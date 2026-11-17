@@ -11,6 +11,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolResultAttachments: false
   # The sampling fields of Azure's Chat Completions API, which are OpenAI's. Reviewed 2026-11-15:
   # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference
   sampling:

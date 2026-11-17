@@ -18,7 +18,8 @@ const capabilities = {
 	explicitPromptCaching: true,
 	structuredOutputs: true,
 	systemMessages: true,
-	toolChoice: true
+	toolChoice: true,
+	toolResultAttachments: true
 };
 
 const sampling = {
