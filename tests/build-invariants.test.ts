@@ -626,6 +626,31 @@ describe('catalog source compiler invariants', () => {
 				'releaseDate is invalid'
 			],
 			[
+				'a weights link on a closed model',
+				(source: Source) =>
+					Object.assign(source.graph.models['gpt-test'], {
+						weightsUrl: 'https://huggingface.co/openai/gpt-test'
+					}),
+				'state weightsUrl exactly when openWeights is true'
+			],
+			[
+				'an open model without a weights link',
+				(source: Source) => Object.assign(source.graph.models['gpt-test'], { openWeights: true }),
+				'state weightsUrl exactly when openWeights is true'
+			],
+			[
+				'a model that succeeds itself',
+				(source: Source) =>
+					Object.assign(source.graph.models['gpt-test'], { succeeds: 'gpt-test' }),
+				'succeeds must name a model of the same author that was released earlier'
+			],
+			[
+				'a model that succeeds a missing model',
+				(source: Source) =>
+					Object.assign(source.graph.models['gpt-test'], { succeeds: 'gpt-none' }),
+				'succeeds must name a model of the same author that was released earlier'
+			],
+			[
 				'invalid knowledge cutoff',
 				(source: Source) => (source.graph.models['gpt-test'].knowledgeCutoff = '2026-13-01'),
 				'knowledgeCutoff is invalid'

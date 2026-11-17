@@ -341,6 +341,26 @@ describe('compiled catalog', () => {
 		});
 	});
 
+	test('links each version to the one before it and derives the ones after it', () => {
+		const { models } = catalog.graph;
+		expect(models['claude-opus-5']).toMatchObject({
+			succeeds: 'claude-opus-4-8',
+			successorIds: ['claude-opus-5-5'],
+			weightsUrl: null
+		});
+		expect(models['claude-opus-4-1']).toMatchObject({ succeeds: null });
+		expect(models['kimi-k3']).toMatchObject({
+			succeeds: 'kimi-k2.6',
+			successorIds: [],
+			weightsUrl: 'https://huggingface.co/moonshotai/Kimi-K3'
+		});
+		for (const [modelId, model] of Object.entries(models)) {
+			expect(model.weightsUrl !== null, `${modelId} weightsUrl`).toBe(model.openWeights);
+			for (const successorId of model.successorIds)
+				expect(models[successorId]!.succeeds, successorId).toBe(modelId);
+		}
+	});
+
 	test('keeps GPT-5.6 release dates separate from provider checkpoint selectors', () => {
 		for (const tier of ['luna', 'sol', 'terra'] as const) {
 			const modelId = `gpt-5.6-${tier}`;

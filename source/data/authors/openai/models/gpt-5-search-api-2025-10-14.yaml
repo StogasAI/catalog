@@ -16,3 +16,4 @@ models:
   openWeights: false
   snapshot: 2025-10-14
   releaseDate: 2025-10-14
+  succeeds: gpt-4o-search-preview-2025-03-11

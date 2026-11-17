@@ -11,5 +11,7 @@ models:
   reasoning: optional
   reasoningEfforts: [low, high, max]
   openWeights: true
+  weightsUrl: https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813
   snapshot: 2026-08-13
   releaseDate: 2026-08-13
+  succeeds: deepseek-v4-pro

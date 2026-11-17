@@ -28,6 +28,8 @@ package catalog
 	reasoningDefault?: #ReasoningDefault
 	// The author publishes the model's weights for download.
 	openWeights: bool
+	// The author's page for the published weights. Stated exactly when openWeights is true.
+	weightsUrl?: =~"^https://[^\\s]+$"
 	// Sampling parameters that the model refuses on every route.
 	sampling?: #UnsupportedSampling
 	// The shortest prompt, in tokens, that providers cache for this model. Omitted when the author
@@ -39,6 +41,9 @@ package catalog
 	// writes into a dated ID whose date it documents as the snapshot's. Omitted otherwise.
 	snapshot?:    #Date
 	releaseDate:  #Date
+	// The listed model that this one follows in its line, by the author's version names: the
+	// version before it that the catalog lists. Omitted for the first listed version of a line.
+	succeeds?: #Id
 	// Omitted when the model owner has not disclosed it. When the owner states several, the one for
 	// the data that gives the model its general knowledge, such as the pretraining cutoff.
 	knowledgeCutoff?: #Date

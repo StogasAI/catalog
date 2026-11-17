@@ -17,4 +17,5 @@ models:
   # Reviewed 2026-11-15: https://developers.openai.com/api/docs/guides/prompt-caching
   promptCacheMinimumTokens: 1024
   releaseDate: 2026-09-29
+  succeeds: gpt-6-sol
   knowledgeCutoff: 2026-04-30

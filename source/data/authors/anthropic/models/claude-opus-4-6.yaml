@@ -18,4 +18,5 @@ models:
   # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
   promptCacheMinimumTokens: 4096
   releaseDate: 2026-02-05
+  succeeds: claude-opus-4-5
   knowledgeCutoff: 2025-05-01

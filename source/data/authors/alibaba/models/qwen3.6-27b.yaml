@@ -8,4 +8,6 @@ models:
   outputModalities: [text]
   reasoning: optional
   openWeights: true
+  weightsUrl: https://huggingface.co/Qwen/Qwen3.6-27B
   releaseDate: 2026-04-22
+  succeeds: qwen3.5-27b

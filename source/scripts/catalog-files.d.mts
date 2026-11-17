@@ -65,6 +65,8 @@ export type ModelSummary = Summary & {
 	groupIds: string[];
 	name: string;
 	releaseDate: string;
+	/** The listed model that this one follows in its line. */
+	succeeds: string | null;
 };
 export type RouteSummary = Summary & { interfaces: string[]; providerId: string };
 export type DeploymentSummary = Summary & { modelId: string; routeIds: string[] };

@@ -620,7 +620,14 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					sampling: model.sampling ?? {},
 					promptCacheMinimumTokens: model.promptCacheMinimumTokens ?? null,
 					inputLimits: model.inputLimits ?? {},
-					snapshot: model.snapshot ?? null
+					snapshot: model.snapshot ?? null,
+					succeeds: model.succeeds ?? null,
+					// The models that name this one in `succeeds`, which no record states.
+					successorIds: Object.entries(sourceGraph.models)
+						.filter(([, other]) => other.succeeds === id)
+						.map(([otherId]) => otherId)
+						.sort(),
+					weightsUrl: model.weightsUrl ?? null
 				}
 			])
 		),
@@ -1523,6 +1530,22 @@ function compileGraph(source, places, companies) {
 			`${modelId}: outputModalities`
 		);
 		if (!validDate(model.releaseDate)) throw new Error(`${modelId}: releaseDate is invalid`);
+		if ((model.openWeights === true) !== (model.weightsUrl !== null)) {
+			throw new Error(`${modelId}: state weightsUrl exactly when openWeights is true`);
+		}
+		if (model.succeeds !== null) {
+			const earlier = graph.models[model.succeeds];
+			// A version follows an earlier one of its author, so the links form no loop.
+			if (
+				!earlier ||
+				earlier.authorId !== model.authorId ||
+				!(earlier.releaseDate < model.releaseDate)
+			) {
+				throw new Error(
+					`${modelId}: succeeds must name a model of the same author that was released earlier`
+				);
+			}
+		}
 		for (const field of ['snapshot', 'knowledgeCutoff']) {
 			if (model[field] !== null && !validDate(model[field])) {
 				throw new Error(`${modelId}: ${field} is invalid`);

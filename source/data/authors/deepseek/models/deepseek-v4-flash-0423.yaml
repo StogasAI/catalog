@@ -11,4 +11,5 @@ models:
   reasoning: optional
   reasoningEfforts: [high, max]
   openWeights: true
+  weightsUrl: https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash
   releaseDate: 2026-04-24

@@ -22,4 +22,5 @@ models:
   # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
   promptCacheMinimumTokens: 1024
   releaseDate: 2026-06-30
+  succeeds: claude-sonnet-4-6
   knowledgeCutoff: 2026-01-01

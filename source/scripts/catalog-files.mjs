@@ -39,7 +39,7 @@ export const CATALOG_KINDS = Object.freeze([
 export const WHOLE_KINDS = Object.freeze(['authors', 'groups', 'providers']);
 /** The kinds whose records parts hold, and the record fields that their summaries repeat. */
 export const PART_KINDS = Object.freeze({
-	models: Object.freeze(['aliases', 'authorId', 'groupIds', 'name', 'releaseDate']),
+	models: Object.freeze(['aliases', 'authorId', 'groupIds', 'name', 'releaseDate', 'succeeds']),
 	routes: Object.freeze(['interfaces', 'providerId']),
 	deployments: Object.freeze(['modelId', 'retirementDate'])
 });

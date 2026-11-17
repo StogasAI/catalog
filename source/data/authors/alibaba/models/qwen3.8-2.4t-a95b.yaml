@@ -10,4 +10,5 @@ models:
   reasoning: required
   reasoningEfforts: [low, medium, xhigh]
   openWeights: true
+  weightsUrl: https://huggingface.co/Qwen/Qwen3.8-2.4T-A95B
   releaseDate: 2026-08-12

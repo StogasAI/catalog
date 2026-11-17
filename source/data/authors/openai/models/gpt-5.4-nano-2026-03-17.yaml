@@ -17,4 +17,5 @@ models:
   openWeights: false
   snapshot: 2026-03-17
   releaseDate: 2026-03-17
+  succeeds: gpt-5-nano-2025-08-07
   knowledgeCutoff: 2025-08-31
