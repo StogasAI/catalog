@@ -1,5 +1,6 @@
 routes:
   providerId: openai
+  endpoint: https://api.openai.com/v1/responses
   interfaces: [responses]
   inputModalities: [text, image]
   capabilities:

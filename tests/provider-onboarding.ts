@@ -33,6 +33,8 @@ export type ProviderRouteContract = {
 		images?: { bytes?: number; count?: number; pixels?: number; totalBytes?: number };
 		documents?: { bytes?: number; count?: number; pages?: number; totalBytes?: number };
 	};
+	/** The URL that every account calls, omitted where it names an account's region, project or resource. */
+	endpoint?: string;
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
@@ -192,6 +194,7 @@ export function assertProviderOnboardingContract(
 			batch: route.batch === true,
 			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),
 			providerId,
+			endpoint: route.endpoint ?? null,
 			retirementDate: null,
 			...routeServing(route),
 			...noted(routeNotes(route))

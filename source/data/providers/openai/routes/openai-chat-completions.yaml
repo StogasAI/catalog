@@ -1,5 +1,6 @@
 routes:
   providerId: openai
+  endpoint: https://api.openai.com/v1/chat/completions
   interfaces: [chat_completions]
   inputModalities: [text, image, audio]
   capabilities:

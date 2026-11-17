@@ -1337,6 +1337,7 @@ function compileGraph(source, places, companies) {
 					routeId,
 					{
 						providerId: route.providerId,
+						endpoint: route.endpoint ?? null,
 						interfaces: [...route.interfaces],
 						batch: route.batch === true,
 						inputModalities: [...route.inputModalities],

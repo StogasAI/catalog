@@ -393,6 +393,7 @@ describe('Chutes provider onboarding contract', () => {
 			routes: [
 				{
 					id: 'chutes-chat-completions',
+					endpoint: 'https://api.chutes.ai/e2e/invoke',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
 					interfaces: ['chat_completions'],
@@ -402,6 +403,7 @@ describe('Chutes provider onboarding contract', () => {
 				{
 					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },
 					id: 'chutes-standard-chat-completions',
+					endpoint: 'https://llm.chutes.ai/v1/chat/completions',
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
 					interfaces: ['chat_completions']

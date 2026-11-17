@@ -33,6 +33,11 @@ package catalog
 
 #Route: close({
 	providerId: #Id
+	// The URL that every account calls for the route. A route whose URL names an account's
+	// region, project or resource states none. An OpenAI deployment with upstream.inferenceGeo
+	// calls the same path on its data residency host, the endpoint's host behind the geography,
+	// such as eu.api.openai.com. The gateway calls the hosts in its own code and never reads it.
+	endpoint?: string & =~"^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(/[A-Za-z0-9._~-]+)+$"
 	interfaces: [#Interface, ...#Interface]
 	// The route is a provider's batch API, which runs a file of requests within
 	// a window at its batch prices. Its deployments serve no other route and

@@ -1,5 +1,6 @@
 routes:
   providerId: chutes
+  endpoint: https://llm.chutes.ai/v1/chat/completions
   hosting: unknown
   interfaces: [chat_completions]
   inputModalities: [text]

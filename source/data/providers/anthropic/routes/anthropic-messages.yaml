@@ -1,5 +1,6 @@
 routes:
   providerId: anthropic
+  endpoint: https://api.anthropic.com/v1/messages
   interfaces: [chat_completions, responses]
   inputModalities: [text, image]
   capabilities:
