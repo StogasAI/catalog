@@ -1,0 +1,4 @@
+groups:
+  authorId: deepseek
+  name: 'DeepSeek Pro'
+  parentIds: [deepseek]

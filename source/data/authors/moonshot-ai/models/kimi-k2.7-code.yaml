@@ -1,7 +1,7 @@
 models:
   authorId: moonshot-ai
   name: Kimi K2.7 Code
-  groupIds: [kimi-k2]
+  groupIds: [kimi-k2, kimi-code]
   contextWindowTokens: 262144
   maxOutputTokens: 262144
   inputModalities: [text, image, video]

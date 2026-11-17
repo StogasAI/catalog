@@ -1,8 +1,8 @@
 models:
   authorId: openai
-  name: GPT-5 Nano
+  name: GPT-5 nano
   aliases: [gpt-5-nano]
-  groupIds: [gpt-5]
+  groupIds: [gpt-5, gpt-nano]
   contextWindowTokens: 400000
   maxInputTokens: 272000
   maxOutputTokens: 128000

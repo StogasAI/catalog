@@ -2,7 +2,7 @@ models:
   authorId: openai
   name: GPT-5 Search API
   aliases: [gpt-5-search-api]
-  groupIds: [gpt-5]
+  groupIds: [gpt-5, gpt-search]
   contextWindowTokens: 200000
   # OpenAI's API refuses a request for more than 100,000 completion tokens. Probed 2026-11-09.
   maxOutputTokens: 100000

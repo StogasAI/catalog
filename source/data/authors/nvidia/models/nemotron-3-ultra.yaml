@@ -1,7 +1,7 @@
 models:
   authorId: nvidia
   name: Nemotron 3 Ultra
-  groupIds: [nemotron-3]
+  groupIds: [nemotron-3, nemotron-ultra]
   contextWindowTokens: 1048576
   maxOutputTokens: 1048576
   inputModalities: [text]

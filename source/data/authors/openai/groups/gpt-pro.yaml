@@ -1,0 +1,5 @@
+groups:
+  authorId: openai
+  name: 'GPT Pro'
+  parentIds: [gpt]
+  notes: From GPT-5.6, Pro is a reasoning mode of a model, so this group holds only the earlier models that OpenAI released as Pro models of their own.
