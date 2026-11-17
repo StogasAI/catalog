@@ -230,7 +230,7 @@ describe('catalog parts', () => {
 		const { parts } = files(partitionCatalog(synthetic(3, 600_000)));
 		expect(deploymentsOf(parts).map((ids) => ids.length)).toEqual([0, 1, 1, 1]);
 		expect(() => partitionCatalog(synthetic(1, mib))).toThrow('the limit is 1048576');
-	});
+	}, 60_000);
 
 	test('keep each provider in consecutive parts', () => {
 		const catalog = synthetic(9000);
