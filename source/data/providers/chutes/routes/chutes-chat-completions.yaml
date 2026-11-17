@@ -24,4 +24,4 @@ routes:
     logitBias: false
   dataHandling:
     endToEndEncrypted: true
-  notes: Independent network operators supply the GPUs, and Chutes runs each model in a TEE that is designed to keep request content from them.
+  notes: Independent network operators supply the GPUs, and Chutes runs each model in a TEE that is designed to keep request content from them. A model on several Hopper GPUs sends data between them over NVLink without encryption, through switches that Chutes' evidence does not cover.
