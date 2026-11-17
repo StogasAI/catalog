@@ -103,12 +103,22 @@ package catalog
 	// the same ways.
 	stogasByok?:    false
 	stogasManaged?: false
-	notes?:           #Note
-	// Narrower facts than the deployment inherits from its model and routes.
+	notes?:         #Note
+	// Narrower facts than the deployment inherits from its model and routes, on all of its routes.
+	// Any fact that a provider's offer of a model can change has one: limits, modalities,
+	// capabilities, sampling, reasoning and hosted tools only narrow, and the provider's own values
+	// replace the model's. What the model is, such as its release date, and what a route's API
+	// accepts, such as its interfaces and document formats, have none: a different checkpoint is
+	// another model, and a different API is another route.
 	overrides?: close({
 		contextWindowTokens?: int & >0
+		maxInputTokens?:      int & >0
 		maxOutputTokens?:     int & >0
-		capabilities?:        #UnsupportedCapabilities
+		inputModalities?: [#Modality, ...#Modality]
+		outputModalities?: [#Modality, ...#Modality]
+		capabilities?: #UnsupportedCapabilities
+		// Optional reasoning that the provider always uses, or never uses, for this deployment.
+		reasoning?: "required" | "unsupported"
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
 		// What this provider's deployment does without a reasoning control, or null when it is
@@ -119,6 +129,8 @@ package catalog
 		promptCacheMinimumTokens?: null | (int & >0)
 		inputLimits?:              #InputLimits
 		dataHandling?:             #DeploymentDataHandlingOverride
+		// Hosted tools of its routes that the provider does not run for this deployment's model.
+		hostedTools?: close({[#HostedToolId]: false})
 	})
 	pricing: #DeploymentPricing
 	periods?: [#Period, ...#Period]

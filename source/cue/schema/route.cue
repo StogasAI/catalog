@@ -61,8 +61,9 @@ package catalog
 	hosting?:      #CompanyRef
 	dataHandling?: #RouteDataHandling
 	// Tools that run at the provider, or at a service that it calls, when a
-	// request lists them. Every deployment of the route offers them, and
-	// requests that list a tool route only to deployments that offer it.
+	// request lists them. Every deployment of the route offers them unless its
+	// overrides leave one out, and requests that list a tool route only to
+	// deployments that offer it.
 	hostedTools?: [#HostedTool, ...#HostedTool]
 	// The date that the provider names for shutting this route down, such as an
 	// API that it retires. Its deployments stop serving through it then, and a
@@ -72,6 +73,6 @@ package catalog
 	// with its own account, although its provider does.
 	stogasByok?:    false
 	stogasManaged?: false
-	notes?:           #Note
+	notes?:         #Note
 	periods?: [#Period, ...#Period]
 })

@@ -1320,6 +1320,29 @@ describe('catalog source compiler invariants', () => {
 			});
 		});
 
+		test('narrows input, modalities, reasoning and hosted tools', () => {
+			const valid = changed((source) => {
+				source.graph.models['gpt-test'].outputModalities = ['text', 'image'];
+				source.graph.routes['openai-responses'].hostedTools = [openaiWebSearch('10')];
+				source.graph.deployments['openai-gpt-test'].overrides = {
+					maxInputTokens: 600,
+					inputModalities: ['text'],
+					outputModalities: ['text'],
+					reasoning: 'unsupported',
+					reasoningEfforts: [],
+					hostedTools: { web_search: false }
+				};
+			});
+			const deployment = buildCatalog(valid).graph.deployments['openai-gpt-test'];
+			expect(deployment).toMatchObject({
+				maxInputTokens: 600,
+				outputModalities: ['text'],
+				reasoning: 'unsupported',
+				routes: { 'openai-responses': { inputModalities: ['text'], reasoningEfforts: [] } }
+			});
+			expect(deployment.routes['openai-responses'].hostedTools).toEqual({});
+		});
+
 		testRejections([
 			[
 				'redundant context',
@@ -1328,6 +1351,52 @@ describe('catalog source compiler invariants', () => {
 						contextWindowTokens: 1000
 					}),
 				'overrides.contextWindowTokens does not change what the deployment serves'
+			],
+			[
+				'wider input',
+				(source: Source) => {
+					source.graph.models['gpt-test'].maxInputTokens = 900;
+					source.graph.deployments['openai-gpt-test'].overrides = { maxInputTokens: 950 };
+				},
+				'input limit may only narrow'
+			],
+			[
+				'modality the model lacks',
+				(source: Source) =>
+					(source.graph.deployments['openai-gpt-test'].overrides = {
+						outputModalities: ['text', 'image']
+					}),
+				'overrides.outputModalities may only remove a modality'
+			],
+			[
+				'modality the route lacks',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].inputModalities = ['text'];
+					source.graph.deployments['openai-gpt-test'].overrides = { inputModalities: ['text'] };
+				},
+				'overrides.inputModalities does not change what the deployment serves'
+			],
+			[
+				'tool the route does not run',
+				(source: Source) =>
+					(source.graph.deployments['openai-gpt-test'].overrides = {
+						hostedTools: { web_fetch: false }
+					}),
+				'overrides.hostedTools.web_fetch does not change what the deployment serves'
+			],
+			[
+				'reasoning that the model requires',
+				(source: Source) => {
+					source.graph.models['gpt-test'].reasoning = 'required';
+					source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'unsupported' };
+				},
+				'overrides.reasoning may only narrow optional reasoning'
+			],
+			[
+				'unsupported reasoning with efforts',
+				(source: Source) =>
+					(source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'unsupported' }),
+				'unsupported reasoning cannot expose controls'
 			],
 			[
 				'capability the model already lacks',

@@ -800,7 +800,9 @@ function servedFacts(graph, model, deployment, hosting) {
 			),
 			overrides.dataHandling ?? {}
 		);
-		const offers = route.hostedTools;
+		const offers = route.hostedTools.filter(
+			(offer) => overrides.hostedTools?.[offer.tool] !== false
+		);
 		routes[routeId] = {
 			capabilities: Object.fromEntries(
 				capabilityNames.map((name) => [
@@ -827,7 +829,7 @@ function servedFacts(graph, model, deployment, hosting) {
 				model.inputLimits,
 				overrides.inputLimits ?? {}
 			),
-			inputModalities: model.inputModalities.filter((modality) =>
+			inputModalities: (overrides.inputModalities ?? model.inputModalities).filter((modality) =>
 				route.inputModalities.includes(modality)
 			),
 			sampling: Object.fromEntries(
@@ -849,16 +851,16 @@ function servedFacts(graph, model, deployment, hosting) {
 	);
 	return {
 		contextWindowTokens,
-		maxInputTokens: Math.min(model.maxInputTokens, contextWindowTokens),
+		maxInputTokens: Math.min(overrides.maxInputTokens ?? model.maxInputTokens, contextWindowTokens),
 		maxOutputTokens: overrides.maxOutputTokens ?? model.maxOutputTokens,
-		outputModalities: [...model.outputModalities],
+		outputModalities: [...(overrides.outputModalities ?? model.outputModalities)],
 		pricing: structuredClone(deployment.pricing),
 		promptCacheMinimumTokens: !cachesPrompts
 			? null
 			: overrides.promptCacheMinimumTokens === undefined
 				? model.promptCacheMinimumTokens
 				: overrides.promptCacheMinimumTokens,
-		reasoning: model.reasoning,
+		reasoning: overrides.reasoning ?? model.reasoning,
 		reasoningDefault:
 			overrides.reasoningDefault === undefined
 				? model.reasoningDefault
@@ -872,7 +874,7 @@ function servedFacts(graph, model, deployment, hosting) {
 }
 
 // A route's hosted tools in canonical order, each tool once, with only its own call meters and
-// places that locations lists. Every deployment of the route runs them.
+// places that locations lists. Each deployment of the route runs those that its overrides keep.
 function compileHostedTools(routeId, source, places, companies) {
 	const offers = (source ?? []).map((offer, index) => {
 		const owner = `${routeId}.hostedTools[${index}]`;
@@ -923,6 +925,34 @@ function validateServedFacts(
 	}
 	if (served.maxOutputTokens > served.contextWindowTokens) {
 		throw new Error(`${deploymentId}: output limit must fit inside the context window`);
+	}
+	if (served.maxInputTokens > model.maxInputTokens) {
+		throw new Error(`${deploymentId}: input limit may only narrow the model limit`);
+	}
+	for (const field of ['inputModalities', 'outputModalities']) {
+		if (!overrides[field]) continue;
+		validateCanonicalList(overrides[field], canonicalModalityRanks, `${deploymentId}: ${field}`);
+		for (const modality of overrides[field]) {
+			if (!model[field].includes(modality)) {
+				throw new Error(`${deploymentId}.overrides.${field} may only remove a modality`);
+			}
+		}
+	}
+	for (const [tool, value] of Object.entries(overrides.hostedTools ?? {})) {
+		if (!hostedToolRanks.has(tool) || value !== false) {
+			throw new Error(`${deploymentId}.overrides.hostedTools.${tool} may only remove a tool`);
+		}
+	}
+	// A provider can always reason, or never, where the model leaves it to the request.
+	if (overrides.reasoning !== undefined && model.reasoning !== 'optional') {
+		throw new Error(`${deploymentId}.overrides.reasoning may only narrow optional reasoning`);
+	}
+	if (
+		served.reasoning === 'unsupported' &&
+		((overrides.reasoningEfforts ?? model.reasoningEfforts).length > 0 ||
+			served.reasoningMaxTokens !== null)
+	) {
+		throw new Error(`${deploymentId}: unsupported reasoning cannot expose controls`);
 	}
 	for (const [name, value] of Object.entries(overrides.capabilities ?? {})) {
 		if (!capabilityNames.includes(name) || value !== false) {
@@ -1030,7 +1060,7 @@ function validateServedFacts(
 function rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const paths = Object.entries(overrides).flatMap(([key, value]) =>
-		key === 'capabilities' || key === 'dataHandling' || key === 'sampling'
+		key === 'capabilities' || key === 'dataHandling' || key === 'hostedTools' || key === 'sampling'
 			? Object.keys(value).map((name) => [key, name])
 			: key === 'inputLimits'
 				? Object.entries(value).flatMap(([kind, limit]) =>
