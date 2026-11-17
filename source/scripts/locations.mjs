@@ -3,7 +3,8 @@
  * their subdivisions. Each place but world lists the places that directly contain it, and a
  * continent, region or union lists every country that it covers, including countries that the
  * catalog does not list. A data handling location is a place, `unknown` when the provider does
- * not say where, or, for storage only, `none` when the provider keeps nothing.
+ * not say where, or, for storage only, `none` when the provider keeps nothing. Nothing kept is kept
+ * nowhere, so `none` lies within every place.
  */
 export const WORLD = 'world';
 const PLACE_ID = /^(?:[A-Z]{2}(?:-[A-Z0-9]{1,3})?|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/;
@@ -16,9 +17,9 @@ export function isPlaceId(id) {
 
 /**
  * Each place with every place that contains it, and each place with every place inside it, each
- * list in order and holding the place itself, and each region with the countries that it lists.
- * Throws unless world contains every other place, no place contains itself and no two IDs differ
- * only in case.
+ * list in order and holding the place itself, each region with the countries that it lists, and
+ * the locations that contain `none`. Throws unless world contains every other place, no place
+ * contains itself and no two IDs differ only in case.
  */
 export function placeIndex(locations) {
 	const own = (id) => Object.hasOwn(locations, id);
@@ -61,7 +62,7 @@ export function placeIndex(locations) {
 	const countries = new Map(
 		ids.flatMap((id) => (locations[id].countries ? [[id, locations[id].countries]] : []))
 	);
-	return { within, inside, countries };
+	return { within, inside, countries, all: [...ids, 'none'].sort(compare) };
 }
 
 /** Whether a data handling location is a place that the index lists, or `unknown`. */
@@ -72,12 +73,13 @@ export function isLocation(places, location) {
 /**
  * A data handling location and every place that contains it, in order, as policies read them.
  * A country that the catalog does not list lies in world, in each region that lists it and in the
- * places that contain those. `unknown`, `none` and any other place that the catalog does not list
- * hold only themselves.
+ * places that contain those. `none` lies in every place, and `unknown` and any other place that
+ * the catalog does not list hold only themselves.
  */
 export function locationWithin(places, location) {
 	const within = places.within.get(location);
 	if (within) return within;
+	if (location === 'none') return places.all;
 	if (!COUNTRY.test(location)) return [location];
 	const holding = new Set([location, WORLD]);
 	for (const [region, countries] of places.countries)

@@ -446,6 +446,8 @@ describe('catalog source compiler invariants', () => {
 		expect(locationWithin(places, 'FR')).toEqual(['FR', 'eu', 'europe', 'world']);
 		expect(locationWithin(places, 'JP')).toEqual(['JP', 'world']);
 		expect(locationWithin(places, 'unknown')).toEqual(['unknown']);
+		// Nothing kept lies within every place.
+		expect(locationWithin(places, 'none')).toEqual([...places.within.keys(), 'none'].sort());
 		const place = (parentIds: string[]) => ({ name: 'Place', parentIds });
 		for (const [locations, message] of [
 			[{ world: place(['eu']), eu: place(['world']) }, 'Locations must have world'],

@@ -13,13 +13,15 @@ export type Location = {
 };
 export type Locations = Record<string, Location>;
 /**
- * Each place with the places that contain it, and with the places inside it, in order, and each
- * region with the countries that it lists.
+ * Each place with the places that contain it, and with the places inside it, in order, each
+ * region with the countries that it lists, and the locations that contain `none`: every place and
+ * `none` itself.
  */
 export type PlaceIndex = {
 	within: ReadonlyMap<string, readonly string[]>;
 	inside: ReadonlyMap<string, readonly string[]>;
 	countries: ReadonlyMap<string, readonly string[]>;
+	all: readonly string[];
 };
 
 export const WORLD: 'world';
