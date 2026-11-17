@@ -1664,7 +1664,8 @@ describe('catalog source compiler invariants', () => {
 			zeroDataRetention: false,
 			tee: false,
 			teeVerified: false,
-			sharedWith: []
+			sharedWith: [],
+			certifications: []
 		});
 		expect(
 			graph.deployments['openai-gpt-test'].routes['openai-responses'].dataHandling
@@ -2237,6 +2238,63 @@ describe('catalog source compiler invariants', () => {
 			];
 			expect(() => buildCatalog(source)).toThrow(
 				'openai-responses.hostedTools[0]: sharedWith must list companies'
+			);
+		});
+
+		test('lists the certifications of the company that runs a deployment', () => {
+			const certifications = (source: Source, id = 'azure-gpt-test') =>
+				buildCatalog(source).graph.deployments[id].routes['azure-responses'].dataHandling
+					.certifications;
+			const listed = (list: string[], hosting?: string, id = 'azure-gpt-test') =>
+				hosted(hosting, id, (source) => {
+					Object.assign(source.graph.providers.azure.dataHandling, { certifications: list });
+				});
+			// A record that states none has an empty list, and a provider's list holds on its
+			// deployments.
+			expect(certifications(hosted(undefined, 'azure-gpt-test'))).toEqual([]);
+			const government = ['soc2-type2', 'fedramp-moderate', 'fedramp-high', 'dod-il2', 'dod-il4'];
+			expect(certifications(listed(government))).toEqual(government);
+			for (const [list, message] of [
+				[['iso-27001', 'soc2-type2'], 'certifications must use canonical order'],
+				[['soc2-type2', 'soc2-type2'], 'certifications must use canonical order'],
+				[['soc-2'], 'certifications must use canonical order'],
+				[['fedramp-high'], 'certifications lists fedramp-high, which includes fedramp-moderate'],
+				[['dod-il2', 'dod-il5'], 'certifications lists dod-il5, which includes dod-il4']
+			] as const)
+				expect(() => buildCatalog(listed([...list]))).toThrow(message);
+			// An audit covers the company that runs the service, so a deployment that another
+			// company runs states its own list, which can be empty.
+			const id = 'azure-gpt-test-anthropic-hosted';
+			const other = listed(['soc2-type2'], 'anthropic', id);
+			expect(() => buildCatalog(other)).toThrow(
+				`${id} on azure-responses: state the certifications of anthropic, which runs it`
+			);
+			other.graph.deployments[id].overrides = { dataHandling: { certifications: [] } };
+			expect(certifications(other, id)).toEqual([]);
+			other.graph.deployments[id].overrides = {
+				dataHandling: { certifications: ['iso-27001', 'iso-42001'] }
+			};
+			expect(certifications(other, id)).toEqual(['iso-27001', 'iso-42001']);
+		});
+
+		test('lets a hosted tool remove only certifications that its route lists', () => {
+			const source = changed((candidate) => {
+				Object.assign(candidate.graph.providers.openai.dataHandling, {
+					certifications: ['soc2-type2', 'hipaa-eligible']
+				});
+				candidate.graph.routes['openai-responses'].hostedTools = [
+					{ tool: 'web_fetch', dataHandling: { withoutCertifications: ['hipaa-eligible'] } }
+				];
+			});
+			expect(
+				buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses']
+					.hostedTools.web_fetch.dataHandling
+			).toEqual({ withoutCertifications: ['hipaa-eligible'] });
+			source.graph.routes['openai-responses'].hostedTools = [
+				{ tool: 'web_fetch', dataHandling: { withoutCertifications: ['pci-dss'] } }
+			];
+			expect(() => buildCatalog(source)).toThrow(
+				'openai-responses.hostedTools[0]: withoutCertifications removes only what its route lists'
 			);
 		});
 	});

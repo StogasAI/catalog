@@ -2,12 +2,20 @@
 # AWS partition with its own accounts and hosts, at half of the profile's on-demand prices.
 # Prices from the AWS Price List of us-gov-west-1 and us-gov-east-1 ("Batch"), reviewed 2026-11-17:
 # https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/us-gov-west-1/index.json
+# AWS names Amazon Bedrock in its FedRAMP High authorization and in its DoD provisional
+# authorizations up to Impact Level 5 for the AWS GovCloud (US) Regions. Its other audits name the
+# service without naming these Regions. Certifications reviewed 2026-11-17:
+# https://aws.amazon.com/compliance/services-in-scope/FedRAMP/ and
+# https://aws.amazon.com/compliance/services-in-scope/DoD_CC_SRG/
 deployments:
   modelId: claude-opus-5
   routeIds: [aws-bedrock-batch-messages]
   upstream:
     model: us-gov.anthropic.claude-opus-5
     inferenceGeo: us-gov
+  overrides:
+    dataHandling:
+      certifications: [fedramp-moderate, fedramp-high, dod-il2, dod-il4, dod-il5]
   pricing:
     input_tokens:
       per_mill_tokens: '3'

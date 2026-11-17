@@ -17,6 +17,8 @@ deployments:
       structuredOutputs: false
     dataHandling:
       processingLocation: US
+      # Fireworks AI runs the model, and Microsoft names no audit of it for this deployment.
+      certifications: []
       retentionDays: null
       trainingUse: null
   pricing:

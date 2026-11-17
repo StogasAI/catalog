@@ -7,8 +7,13 @@ providers:
   # says that content is not retained by default, so 30 days is the most that either page allows.
   # Reviewed 2026-11-09: https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data
   # and https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
+  # Anthropic lists the audits of its commercial products, which name the Anthropic API, and signs a
+  # business associate agreement for the API. Certifications reviewed 2026-11-17:
+  # https://support.claude.com/en/articles/10015870 and
+  # https://privacy.claude.com/en/articles/8114513-business-associate-agreements-baa-for-commercial-customers
   dataHandling:
     processingLocation: world
     storageLocation: unknown
     retentionDays: 30
     trainingUse: false
+    certifications: [soc2-type2, iso-27001, iso-42001, hipaa-eligible]

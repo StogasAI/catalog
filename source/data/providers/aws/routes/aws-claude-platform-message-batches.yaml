@@ -35,8 +35,12 @@ routes:
   documentFormats:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]
+  # Anthropic runs this API, so its audits apply and the provider's do not. Its business associate
+  # agreement does not name this product. Certifications reviewed 2026-11-17:
+  # https://support.claude.com/en/articles/10015870
   dataHandling:
     retentionDays: 29
+    certifications: [soc2-type2, iso-27001, iso-42001]
   hostedTools:
     - tool: web_search
       pricing:

@@ -10,6 +10,11 @@
 # Regions, access and retention reviewed 2026-11-16: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-2.html
 # and https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
 # Profile ID prefix reviewed 2026-11-16: https://aws.amazon.com/govcloud-us/newsletter/newsletter-issue-04/
+# AWS names Amazon Bedrock in its FedRAMP High authorization and in its DoD provisional
+# authorizations up to Impact Level 5 for the AWS GovCloud (US) Regions. Its other audits name the
+# service without naming these Regions. Certifications reviewed 2026-11-17:
+# https://aws.amazon.com/compliance/services-in-scope/FedRAMP/ and
+# https://aws.amazon.com/compliance/services-in-scope/DoD_CC_SRG/
 deployments:
   modelId: claude-mythos-5-2
   routeIds: [aws-bedrock-messages]
@@ -22,6 +27,7 @@ deployments:
     dataHandling:
       storageLocation: US
       retentionDays: 30
+      certifications: [fedramp-moderate, fedramp-high, dod-il2, dod-il4, dod-il5]
   pricing:
     input_tokens:
       per_mill_tokens: '9.6'

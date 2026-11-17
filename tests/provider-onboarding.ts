@@ -21,6 +21,8 @@ export type DataHandlingContract = {
 	teeVerified: boolean;
 	/** The companies, other than the provider's and the hosting, that receive requests. */
 	sharedWith?: string[];
+	/** The audits and authorizations that name the service. */
+	certifications?: string[];
 };
 
 export type ProviderRouteContract = {
@@ -161,6 +163,7 @@ export function assertProviderOnboardingContract(
 	const noted = (notes: unknown[]) => (notes.length > 0 ? { notes } : {});
 	const routeHandling = (route: ProviderRouteContract) => ({
 		sharedWith: [],
+		certifications: [],
 		...contract.provider.dataHandling,
 		...route.dataHandling
 	});
@@ -232,14 +235,42 @@ export function assertProviderOnboardingContract(
 		const [, source] = sources[0]!;
 		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
 		// matches, except the data handling that the cloud changes and its own request limits.
+		// A hosted tool removes only the certifications that its route lists, so the cloud's route
+		// states none of the removals that its own list makes moot.
+		type Served = {
+			dataHandling: { certifications: string[] };
+			hostedTools: Record<string, { dataHandling: { withoutCertifications?: string[] } }>;
+		};
 		const served = (deployment: typeof relayed, dataHandling = {}) => ({
 			...deployment,
 			notes: undefined,
-			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => ({
-				...route,
-				inputLimits: undefined,
-				dataHandling: { ...(route as { dataHandling: object }).dataHandling, ...dataHandling }
-			})),
+			routes: Object.values(deployment.routes).map(({ chainHash: _, ...route }) => {
+				const { dataHandling: own, hostedTools } = route as unknown as Served;
+				const handling = { ...own, ...dataHandling };
+				return {
+					...route,
+					inputLimits: undefined,
+					dataHandling: handling,
+					hostedTools: Object.fromEntries(
+						Object.entries(hostedTools).map(([tool, offer]) => {
+							const { withoutCertifications = [], ...effect } = offer.dataHandling;
+							const removed = withoutCertifications.filter((id) =>
+								handling.certifications.includes(id)
+							);
+							return [
+								tool,
+								{
+									...offer,
+									dataHandling: {
+										...effect,
+										...(removed.length > 0 && { withoutCertifications: removed })
+									}
+								}
+							];
+						})
+					)
+				};
+			}),
 			upstream: undefined
 		});
 		expect(served(relayed)).toEqual(

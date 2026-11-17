@@ -25,7 +25,21 @@ const capabilities = {
 	toolChoice: true
 };
 // Request and response logging is a project setting that no request can turn off.
+// Anthropic runs its managed routes under its own audits.
+const anthropicCertifications = ['soc2-type2', 'iso-27001', 'iso-42001'];
 const providerHandling: DataHandlingContract = {
+	// The audits in whose scope Google Cloud names generative AI on Agent Platform, which still
+	// apply to a partner model that it runs as a managed API.
+	certifications: [
+		'soc2-type2',
+		'iso-27001',
+		'iso-27017',
+		'iso-27018',
+		'iso-27701',
+		'iso-42001',
+		'pci-dss',
+		'csa-star-level-2'
+	],
 	endToEndEncrypted: false,
 	processingLocation: 'world',
 	retentionDays: null,
@@ -202,7 +216,11 @@ describe('Google Cloud onboarding contract', () => {
 				},
 				{
 					// Anthropic stores data in the US and deletes inputs and outputs within 30 days.
-					dataHandling: { retentionDays: 30, storageLocation: 'US' },
+					dataHandling: {
+						certifications: anthropicCertifications,
+						retentionDays: 30,
+						storageLocation: 'US'
+					},
 					documentFormats: formats,
 					hostedTools: anthropicHostedTools,
 					inputLimits: {
@@ -217,7 +235,11 @@ describe('Google Cloud onboarding contract', () => {
 				{
 					capabilities: { streaming: false },
 					// Message Batches results stay available for 29 days.
-					dataHandling: { retentionDays: 29, storageLocation: 'US' },
+					dataHandling: {
+						certifications: anthropicCertifications,
+						retentionDays: 29,
+						storageLocation: 'US'
+					},
 					documentFormats: formats,
 					hostedTools: anthropicHostedTools,
 					id: 'google-cloud-anthropic-managed-message-batches',
@@ -233,8 +255,12 @@ describe('Google Cloud onboarding contract', () => {
 				'claude-mythos-5-2',
 				'claude-opus-5-5'
 			]),
-			// Claude Models on Google Cloud (Anthropic managed) stores data in the US.
-			anthropicHostedDataHandling: { storageLocation: 'US' }
+			// Claude Models on Google Cloud (Anthropic managed) stores data in the US, and Anthropic's
+			// business associate agreement does not name it.
+			anthropicHostedDataHandling: {
+				certifications: anthropicCertifications,
+				storageLocation: 'US'
+			}
 		});
 	});
 });

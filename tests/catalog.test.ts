@@ -301,6 +301,7 @@ describe('compiled catalog', () => {
 			expect(provider).not.toHaveProperty('dataHandling');
 		}
 		const dataHandlingFields = [
+			'certifications',
 			'endToEndEncrypted',
 			'processingLocation',
 			'retentionDays',
@@ -502,7 +503,9 @@ describe('compiled catalog', () => {
 					storageLocation: 'unknown',
 					retentionDays: null,
 					zeroDataRetention: false,
-					sharedWith: ['unknown']
+					sharedWith: ['unknown'],
+					// Anthropic's business associate agreement does not cover web fetch.
+					withoutCertifications: ['hipaa-eligible']
 				}
 			}
 		]);

@@ -57,3 +57,6 @@ routes:
         retentionDays: null
         zeroDataRetention: false
         sharedWith: [unknown]
+        # Anthropic's business associate agreement does not cover web fetch. Reviewed 2026-11-17:
+        # https://privacy.claude.com/en/articles/8114513-business-associate-agreements-baa-for-commercial-customers
+        withoutCertifications: [hipaa-eligible]

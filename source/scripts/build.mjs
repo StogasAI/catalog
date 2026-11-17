@@ -78,8 +78,34 @@ const dataHandlingFields = [
 	'zeroDataRetention',
 	'tee',
 	'teeVerified',
-	'sharedWith'
+	'sharedWith',
+	'certifications'
 ];
+// The audits and authorizations that a record can list, in canonical order, and those that each
+// one includes: a FedRAMP High authorization meets Moderate, and a DoD impact level meets the
+// levels below it.
+const certificationIds = [
+	'soc2-type2',
+	'iso-27001',
+	'iso-27017',
+	'iso-27018',
+	'iso-27701',
+	'iso-42001',
+	'pci-dss',
+	'csa-star-level-2',
+	'hipaa-eligible',
+	'fedramp-moderate',
+	'fedramp-high',
+	'dod-il2',
+	'dod-il4',
+	'dod-il5'
+];
+const certificationRanks = new Map(certificationIds.map((value, index) => [value, index]));
+const certificationIncludes = {
+	'fedramp-high': 'fedramp-moderate',
+	'dod-il4': 'dod-il2',
+	'dod-il5': 'dod-il4'
+};
 // Hosted tools in canonical order, and the call meters that each may charge. A request's content
 // that a tool reads bills as input tokens, so only web search has call meters.
 const hostedToolIds = ['web_search', 'web_fetch'];
@@ -611,6 +637,7 @@ function normalizeSourceGraph(sourceGraph, companies) {
 						tee: false,
 						teeVerified: false,
 						sharedWith: [],
+						certifications: [],
 						...provider.dataHandling
 					},
 					notes: ownNotes('provider', id, provider.notes)
@@ -668,12 +695,25 @@ function validateSharedWith(owner, sharedWith, companies) {
 		);
 }
 
+// The audits that a record lists: each one that the closed list holds, once, in its order, with
+// every audit that it includes.
+function validateCertifications(owner, certifications) {
+	if (certifications.length)
+		validateCanonicalList(certifications, certificationRanks, `${owner}: certifications`);
+	for (const id of certifications) {
+		const included = certificationIncludes[id];
+		if (included && !certifications.includes(included))
+			throw new Error(`${owner}: certifications lists ${id}, which includes ${included}`);
+	}
+}
+
 function isCompany(companies, id) {
 	return id === 'unknown' || Object.hasOwn(companies, id);
 }
 
 function validateDataHandling(owner, value, places, companies) {
 	validateSharedWith(owner, value.sharedWith, companies);
+	validateCertifications(owner, value.certifications);
 	if (
 		!isLocation(places, value.processingLocation) ||
 		(value.storageLocation !== 'none' && !isLocation(places, value.storageLocation))
@@ -875,7 +915,7 @@ function servedFacts(graph, model, deployment, hosting) {
 
 // A route's hosted tools in canonical order, each tool once, with only its own call meters and
 // places that locations lists. Each deployment of the route runs those that its overrides keep.
-function compileHostedTools(routeId, source, places, companies) {
+function compileHostedTools(routeId, source, places, companies, certifications) {
 	const offers = (source ?? []).map((offer, index) => {
 		const owner = `${routeId}.hostedTools[${index}]`;
 		if (!hostedToolRanks.has(offer.tool)) throw new Error(`${owner}: unknown tool ${offer.tool}`);
@@ -892,6 +932,12 @@ function compileHostedTools(routeId, source, places, companies) {
 		}
 		if (offer.dataHandling?.sharedWith)
 			validateSharedWith(owner, offer.dataHandling.sharedWith, companies);
+		const without = offer.dataHandling?.withoutCertifications;
+		if (without) {
+			validateCanonicalList(without, certificationRanks, `${owner}.withoutCertifications`);
+			if (without.some((id) => !certifications.includes(id)))
+				throw new Error(`${owner}: withoutCertifications removes only what its route lists`);
+		}
 		return {
 			tool: offer.tool,
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
@@ -1356,7 +1402,13 @@ function compileGraph(source, places, companies) {
 					}
 				}
 				validateDataHandling(routeId, dataHandling, places, companies);
-				const hostedTools = compileHostedTools(routeId, route.hostedTools, places, companies);
+				const hostedTools = compileHostedTools(
+					routeId,
+					route.hostedTools,
+					places,
+					companies,
+					dataHandling.certifications
+				);
 				// The provider's company runs the models of a route that names no other hosting.
 				if (route.hosting === provider.companyId)
 					throw new Error(`${routeId}.hosting redundantly repeats its provider's company`);
@@ -1738,6 +1790,20 @@ function compileGraph(source, places, companies) {
 				throw new Error(
 					`${deploymentId} on ${routeId}: sharedWith names only companies other than the provider's and the hosting`
 				);
+		// An audit covers the company that runs the service, so a deployment that another company runs
+		// cannot take the list of its provider.
+		if (
+			hosting !== providerCompany &&
+			graph.providers[providerId].dataHandling.certifications.length
+		)
+			for (const routeId of deployment.routeIds)
+				if (
+					sourceGraph.routes[routeId].dataHandling.certifications === undefined &&
+					deployment.overrides?.dataHandling?.certifications === undefined
+				)
+					throw new Error(
+						`${deploymentId} on ${routeId}: state the certifications of ${hosting}, which runs it`
+					);
 		// The ID names the provider and model, then each fact that sets the deployment apart from the
 		// provider's own standard one: who runs it when not the provider's company, its reasoning
 		// mode, its tier or batch API, and the geography or Azure data zone where it runs.

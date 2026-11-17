@@ -39,8 +39,14 @@ providers:
     - ZA
     - apac
     - europe
+  # Microsoft's public pages name Foundry Models, Azure OpenAI models included, only in its ISO/IEC
+  # 42001 certificate. Its other audit scopes sit in the Service Trust Portal behind a sign-in, and
+  # its FedRAMP High authorization covers United States regions only.
+  # Certifications reviewed 2026-11-17:
+  # https://azure.microsoft.com/en-us/blog/microsoft-azure-ai-foundry-models-and-microsoft-security-copilot-achieve-iso-iec-420012023-certification/
   dataHandling:
     processingLocation: world
     storageLocation: unknown
     retentionDays: 0
     trainingUse: false
+    certifications: [iso-42001]

@@ -42,6 +42,12 @@ routes:
   # Data handling reviewed 2026-11-03: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   # and https://platform.claude.com/docs/en/manage-claude/data-residency. inference_geo covers model inference
   # only, so a search or a fetch can run anywhere. Website publishers can keep the URLs that web fetch requests.
+  # Microsoft sends compliance questions for Claude to Anthropic on both hostings, and Anthropic's
+  # business associate agreement names Claude in Microsoft Foundry. Certifications reviewed 2026-11-17:
+  # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
+  # and https://privacy.claude.com/en/articles/8114513-business-associate-agreements-baa-for-commercial-customers
+  dataHandling:
+    certifications: [soc2-type2, iso-27001, iso-42001, hipaa-eligible]
   hostedTools:
     - tool: web_search
       pricing:

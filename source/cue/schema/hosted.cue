@@ -7,8 +7,9 @@ package catalog
 // lists the tool, so a field can only make the deployment's value worse: a
 // location joins to the smallest place that holds both, a retention to the
 // longer one, unknown retention wins, the flags can only turn false, or true
-// for training, and sharedWith adds the companies that the tool sends content
-// to. An omitted field leaves the deployment's value.
+// for training, sharedWith adds the companies that the tool sends content to,
+// and withoutCertifications removes the audits and agreements that do not
+// cover the tool. An omitted field leaves the deployment's value.
 #HostedToolDataHandling: close({
 	processingLocation?: #ProcessingLocation
 	storageLocation?:    #ProcessingLocation
@@ -19,6 +20,7 @@ package catalog
 	tee?:                false
 	teeVerified?:        false
 	sharedWith?: [#CompanyRef, ...#CompanyRef]
+	withoutCertifications?: [#Certification, ...#Certification]
 })
 
 #HostedTool: close({

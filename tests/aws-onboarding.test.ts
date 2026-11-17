@@ -26,7 +26,29 @@ const capabilities = {
 };
 // In Bedrock's default data retention mode, AWS may keep data for safety and abuse prevention for
 // a period that it does not state.
+// AWS names the GovCloud Regions only in its FedRAMP and DoD authorizations of Bedrock.
+const govCloudCertifications = [
+	'fedramp-moderate',
+	'fedramp-high',
+	'dod-il2',
+	'dod-il4',
+	'dod-il5'
+];
+// Anthropic runs Claude Platform on AWS under its own audits.
+const anthropicCertifications = ['soc2-type2', 'iso-27001', 'iso-42001'];
 const providerHandling: DataHandlingContract = {
+	// The audits in whose scope AWS names Amazon Bedrock.
+	certifications: [
+		'soc2-type2',
+		'iso-27001',
+		'iso-27017',
+		'iso-27018',
+		'iso-27701',
+		'iso-42001',
+		'pci-dss',
+		'csa-star-level-2',
+		'hipaa-eligible'
+	],
 	endToEndEncrypted: false,
 	processingLocation: 'world',
 	retentionDays: null,
@@ -235,6 +257,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 								model,
 								{ inferenceGeo: 'us-gov', model: `us-gov.${profile}` },
 								{
+									certifications: govCloudCertifications,
 									processingLocation: 'US',
 									...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
 								},
@@ -275,6 +298,7 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 				model,
 				{ inferenceGeo: geo, model: `${geo}.${profile}` },
 				{
+					...(geo === 'us-gov' ? { certifications: govCloudCertifications } : {}),
 					...(place ? { processingLocation: place } : {}),
 					retentionDays: null,
 					storageLocation: 'unknown'
@@ -353,7 +377,7 @@ describe('AWS onboarding contract', () => {
 				},
 				{
 					// Anthropic deletes inputs and outputs within 30 days.
-					dataHandling: { retentionDays: 30 },
+					dataHandling: { certifications: anthropicCertifications, retentionDays: 30 },
 					documentFormats: formats,
 					hostedTools: platformHostedTools,
 					inputLimits: {
@@ -368,7 +392,7 @@ describe('AWS onboarding contract', () => {
 				{
 					capabilities: { streaming: false },
 					// Message Batches results stay available for 29 days.
-					dataHandling: { retentionDays: 29 },
+					dataHandling: { certifications: anthropicCertifications, retentionDays: 29 },
 					documentFormats: formats,
 					hostedTools: platformHostedTools,
 					id: 'aws-claude-platform-message-batches',
@@ -378,7 +402,9 @@ describe('AWS onboarding contract', () => {
 				}
 			],
 			deployments,
-			anthropicHosted: anthropicHosted('aws', platformModels)
+			anthropicHosted: anthropicHosted('aws', platformModels),
+			// Anthropic's business associate agreement does not name Claude Platform on AWS.
+			anthropicHostedDataHandling: { certifications: anthropicCertifications }
 		});
 	});
 });
