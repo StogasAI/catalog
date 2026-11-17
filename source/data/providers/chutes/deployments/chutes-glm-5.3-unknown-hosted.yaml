@@ -12,8 +12,8 @@ deployments:
     reasoningEfforts: []
   pricing:
     input_tokens:
-      per_mill_tokens: '1.225'
+      per_mill_tokens: '0.8'
     cached_input_tokens:
-      per_mill_tokens: '0.245'
+      per_mill_tokens: '0.16'
     output_tokens:
-      per_mill_tokens: '3.85'
+      per_mill_tokens: '2.5'

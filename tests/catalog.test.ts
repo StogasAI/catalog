@@ -35,7 +35,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 610 });
+		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 612 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);

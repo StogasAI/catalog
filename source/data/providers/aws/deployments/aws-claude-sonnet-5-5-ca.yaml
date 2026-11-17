@@ -1,0 +1,23 @@
+# Bedrock's Canada inference profile, at AWS's 10 percent premium over the global profile. From
+# Canada (Central) it runs only there and in Calgary; the gateway uses no other source Region for
+# it.
+# Prices from the AWS Price List (AmazonBedrockFoundationModels, "Standard"), reviewed 2026-11-17:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json
+# Messages API support, limits and retention reviewed 2026-11-03: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html
+deployments:
+  modelId: claude-sonnet-5-5
+  routeIds: [aws-bedrock-messages]
+  upstream:
+    model: ca.anthropic.claude-sonnet-5-5
+    inferenceGeo: ca
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.2'
+    cached_input_tokens:
+      per_mill_tokens: '0.11'
+    cache_write_5m_input_tokens:
+      per_mill_tokens: '2.75'
+    cache_write_1h_input_tokens:
+      per_mill_tokens: '4.4'
+    output_tokens:
+      per_mill_tokens: '11'

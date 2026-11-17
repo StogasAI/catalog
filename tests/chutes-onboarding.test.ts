@@ -267,7 +267,7 @@ const deployments: ProviderDeploymentContract[] = [
 			reasoning: 'optional',
 			reasoningEfforts: ['low', 'high', 'max']
 		},
-		['0.3', '0.03', '1.2'],
+		['0.195', '0.02', '0.78'],
 		{ structuredOutputs: false }
 	),
 	standard(
@@ -299,7 +299,7 @@ const deployments: ProviderDeploymentContract[] = [
 			reasoning: 'required',
 			reasoningEfforts: ['low', 'high', 'max']
 		},
-		['1.225', '0.245', '3.85'],
+		['0.8', '0.16', '2.5'],
 		{ structuredOutputs: false }
 	),
 	standard(
