@@ -43,3 +43,13 @@ routes:
   documentFormats:
     extensions: [.csv, .md, .pdf, .txt]
     mediaTypes: [application/pdf, text/plain]
+  # Bedrock keeps nothing of a request to a model whose allowed_modes include none, whatever data
+  # retention mode the account sets. Every Claude model allows none but Fable and Mythos, whose
+  # deployments state what AWS keeps. Bedrock may still store an image that its scan flags as
+  # apparent child sexual abuse material, to confirm and report it.
+  # Reviewed 2026-11-18: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
+  # and https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html
+  dataHandling:
+    storageLocation: none
+    retentionDays: 0
+    zeroDataRetention: true

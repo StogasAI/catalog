@@ -2,10 +2,10 @@ providers:
   name: AWS
   stogasByok: true
   companyId: amazon
-  # In Bedrock's default data retention mode, retention depends on the model's terms and AWS may keep
-  # data for safety and abuse prevention, in the Region where the account uses Bedrock. Zero
-  # retention is an account setting, not the default.
-  # Reviewed 2026-11-09: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
+  # Each Bedrock model decides what AWS keeps, through the data retention modes that it allows, and
+  # the account's mode only decides which models answer. A route or deployment states what its
+  # models keep, and the provider leaves it unknown.
+  # Reviewed 2026-11-18: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
   # and https://aws.amazon.com/bedrock/faqs/
   # AWS names Amazon Bedrock in the scope of each audit below and as a HIPAA eligible service. Its
   # FedRAMP and DoD authorizations name Regions, so only the deployments of those Regions list them.

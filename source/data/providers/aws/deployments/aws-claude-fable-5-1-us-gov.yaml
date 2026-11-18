@@ -23,6 +23,7 @@ deployments:
     dataHandling:
       storageLocation: US
       retentionDays: 30
+      zeroDataRetention: false
       certifications: [fedramp-moderate, fedramp-high, dod-il2, dod-il4, dod-il5]
   pricing:
     input_tokens:

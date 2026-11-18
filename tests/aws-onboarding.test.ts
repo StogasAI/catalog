@@ -182,6 +182,17 @@ const fifthMore = (prices: Prices): Prices =>
 		])
 	);
 
+// Bedrock keeps nothing of a request to a model whose allowed modes include none, which every
+// Claude model does but Fable and Mythos.
+const kept = { retentionDays: 0, storageLocation: 'none', zeroDataRetention: true } as const;
+// Fable needs the aws_review data retention mode, and Mythos needs it or provider_data_share. Under
+// both, AWS keeps prompts and completions inside AWS for up to 30 days.
+const review = (storageLocation: string) => ({
+	retentionDays: 30,
+	storageLocation,
+	zeroDataRetention: false
+});
+
 function deployment(
 	id: string,
 	model: ClaudeModelId,
@@ -192,7 +203,7 @@ function deployment(
 	return {
 		...claudeModels[model],
 		capabilities: claudeCapabilities(model, capabilities),
-		dataHandling: { ...providerHandling, ...dataHandling },
+		dataHandling: { ...providerHandling, ...kept, ...dataHandling },
 		id,
 		modelId: model,
 		pricing,
@@ -205,10 +216,7 @@ function deployment(
 
 const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap(
 	({ model, profile, global, us }) => {
-		// Fable needs the aws_review data retention mode, and Mythos needs provider_data_share or,
-		// from Mythos 5.2, either of the two. Under both, AWS keeps prompts and completions inside AWS
-		// for up to 30 days.
-		const kept = /^claude-(fable|mythos)-/.test(model);
+		const reviewed = /^claude-(fable|mythos)-/.test(model);
 		// Bedrock serves Mythos only to accounts that Anthropic's verification programs approve.
 		const gated = model.startsWith('claude-mythos') ? { approvalRequired: true } : {};
 		// Bedrock caches Claude Opus 4.7 prompts from 4,096 tokens, where Anthropic's API caches
@@ -220,7 +228,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					`aws-${model}`,
 					model,
 					{ inferenceGeo: 'global', model: `global.${profile}` },
-					kept ? { retentionDays: 30, storageLocation: 'world' } : {},
+					reviewed ? review('world') : {},
 					global
 				),
 				...gated,
@@ -233,7 +241,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 					{ inferenceGeo: 'us', model: `us.${profile}` },
 					{
 						processingLocation: 'US',
-						...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
+						...(reviewed ? review('US') : {})
 					},
 					us
 				),
@@ -260,7 +268,7 @@ const deployments: ProviderDeploymentContract[] = Object.values(bedrock).flatMap
 								{
 									certifications: govCloudCertifications,
 									processingLocation: 'US',
-									...(kept ? { retentionDays: 30, storageLocation: 'US' } : {})
+									...(reviewed ? review('US') : {})
 								},
 								fifthMore(global)
 							),
@@ -302,7 +310,8 @@ for (const [model, geos] of Object.entries(batch) as [ClaudeModelId, string[]][]
 					...(geo === 'us-gov' ? { certifications: govCloudCertifications } : {}),
 					...(place ? { processingLocation: place } : {}),
 					retentionDays: null,
-					storageLocation: 'unknown'
+					storageLocation: 'unknown',
+					zeroDataRetention: false
 				},
 				half(geo === 'global' ? global : geo === 'us-gov' ? fifthMore(global) : us)
 			),
@@ -364,6 +373,7 @@ describe('AWS onboarding contract', () => {
 						images: { bytes: 3750000, count: 600, pixels: 8000 },
 						documents: { pages: 600 }
 					},
+					dataHandling: kept,
 					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']

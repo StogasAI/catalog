@@ -14,6 +14,7 @@ deployments:
     dataHandling:
       storageLocation: world
       retentionDays: 30
+      zeroDataRetention: false
   pricing:
     input_tokens:
       per_mill_tokens: '10'
