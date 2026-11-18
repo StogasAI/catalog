@@ -59,7 +59,6 @@ function sourceFixture() {
 			{
 				name: string;
 				kind?: string;
-				description?: string;
 				countries?: string[];
 				parentIds?: string[];
 			}
@@ -397,7 +396,6 @@ describe('catalog source compiler invariants', () => {
 		source.locations.asia = {
 			name: 'Asia',
 			kind: 'continent',
-			description: 'The continent, with the Middle East.',
 			countries: ['CY', 'JP']
 		};
 		source.graph.providers.openai.accountLocations = ['AQ', 'CY', 'DE'];
@@ -411,7 +409,6 @@ describe('catalog source compiler invariants', () => {
 		expect(locations.asia).toEqual({
 			name: 'Asia',
 			kind: 'continent',
-			description: 'The continent, with the Middle East.',
 			countries: ['CY', 'JP'],
 			parentIds: ['world']
 		});

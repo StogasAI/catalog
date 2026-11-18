@@ -3,7 +3,6 @@ export type Location = {
 	name: string;
 	/** Catalogs built before places had kinds have none. */
 	kind?: LocationKind;
-	description?: string;
 	/**
 	 * The ISO 3166-1 countries that a continent, region or union covers, including countries that
 	 * the catalog does not list. Catalogs built before regions listed their countries have none.
