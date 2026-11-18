@@ -398,6 +398,7 @@ describe('Chutes provider onboarding contract', () => {
 					documentFormats: { extensions: [], mediaTypes: [] },
 					inputModalities: ['text'],
 					interfaces: ['chat_completions'],
+					supportsCancellation: true,
 					notes:
 						"Independent network operators supply the GPUs. A model on several Hopper GPUs sends data between them over NVLink without encryption, through switches that Chutes' evidence does not cover."
 				},

@@ -42,6 +42,8 @@ A record's `notes` state a surprising fact that no field can say. Each compiled 
 
 OpenAI's Batch API, Azure's batch jobs, Anthropic's Message Batches API on Anthropic, AWS and Google Cloud, and Amazon Bedrock's batch inference are listed on routes of their own that state `batch: true`. Their deployments serve no other route and name no service tier, and on Azure they take a batch deployment type, `global_batch` or `data_zone_batch_us`, because Azure runs batch jobs only on those. The gateway has no batch API, so a batch route offers neither way and states neither flag.
 
+A route states `supportsCancellation: true` when its streams report the usage so far before they end and its provider bills a stream that the client stops for no more than the last report. The gateway then stops the provider call when the client stops, and bills the usage that the stream reported. Every compiled route states it as `true` or `false`.
+
 Unserved records sit in their own parts. The gateway never reads those parts, so it never routes to these records, and a request that names one fails.
 
 ## Releases

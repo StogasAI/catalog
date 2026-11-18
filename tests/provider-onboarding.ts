@@ -42,6 +42,7 @@ export type ProviderRouteContract = {
 	interfaces: string[];
 	/** The route is a batch API. */
 	batch?: true;
+	supportsCancellation?: true;
 	hostedTools?: HostedToolContract[];
 	/** The ways of serving that the route withdraws from what its provider offers. */
 	stogasByok?: false;
@@ -195,6 +196,7 @@ export function assertProviderOnboardingContract(
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
 			batch: route.batch === true,
+			supportsCancellation: route.supportsCancellation === true,
 			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),
 			providerId,
 			endpoint: route.endpoint ?? null,

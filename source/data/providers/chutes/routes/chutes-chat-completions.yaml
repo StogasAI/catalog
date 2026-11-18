@@ -23,6 +23,9 @@ routes:
     repetitionPenalty: true
     seed: true
     logitBias: false
+  # Instances add the usage so far to every encrypted chunk, and Chutes bills a stream that the
+  # client stops for no more than its last report.
+  supportsCancellation: true
   dataHandling:
     endToEndEncrypted: true
   notes: Independent network operators supply the GPUs. A model on several Hopper GPUs sends data between them over NVLink without encryption, through switches that Chutes' evidence does not cover.

@@ -73,7 +73,8 @@ test('a chain shows each fact once, as the path runs it', () => {
 		'endpoint',
 		'interfaces',
 		'providerId',
-		'retirementDate'
+		'retirementDate',
+		'supportsCancellation'
 	]);
 	expect(chain.model.data).not.toHaveProperty('maxOutputTokens');
 	expect(chain.model.data).toMatchObject({ authorId: 'anthropic', name: 'Claude Fable 5' });

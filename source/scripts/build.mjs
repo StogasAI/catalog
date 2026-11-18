@@ -1430,6 +1430,7 @@ function compileGraph(source, places, companies) {
 						endpoint: route.endpoint ?? null,
 						interfaces: [...route.interfaces],
 						batch: route.batch === true,
+						supportsCancellation: route.supportsCancellation === true,
 						inputModalities: [...route.inputModalities],
 						documentFormats: structuredClone(route.documentFormats),
 						inputLimits: narrowestInputLimits(route.inputLimits),

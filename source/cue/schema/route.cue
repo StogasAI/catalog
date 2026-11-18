@@ -49,6 +49,10 @@ package catalog
 	// name no service tier. The gateway has no batch API, so Stogas serves no
 	// batch route.
 	batch?: true
+	// The route's streams report the usage so far before they end, and the provider bills a
+	// stream that the client stops for no more than its last report. The gateway then stops the
+	// provider call when the client stops, and bills the usage that the stream reported.
+	supportsCancellation?: true
 
 	// Content the route carries to the provider. A deployment accepts the
 	// modalities that both its model and the route accept.
