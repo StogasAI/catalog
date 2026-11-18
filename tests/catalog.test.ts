@@ -35,7 +35,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 69, providers: 6, routes: 20, deployments: 612 });
+		).toEqual({ authors: 11, models: 71, providers: 6, routes: 20, deployments: 624 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -815,7 +815,7 @@ describe('compiled catalog', () => {
 		}
 	});
 
-	test('publishes exact GPT-6 tier prices and Ultrafast only for Astra and GPT-6.1 Sol', () => {
+	test('publishes exact GPT-6 tier prices and Ultrafast only for the Astra and newer Sol models', () => {
 		const deployments = catalog.graph.deployments;
 		expect(
 			Object.fromEntries(
@@ -825,7 +825,9 @@ describe('compiled catalog', () => {
 			)
 		).toEqual({
 			'openai-gpt-6-astra-ultrafast': ['openai-responses'],
-			'openai-gpt-6.1-sol-ultrafast': ['openai-responses']
+			'openai-gpt-6.1-sol-ultrafast': ['openai-responses'],
+			'openai-gpt-6.2-astra-ultrafast': ['openai-responses'],
+			'openai-gpt-6.2-sol-ultrafast': ['openai-responses']
 		});
 
 		// OpenAI Standard input, cached input, and output prices per million tokens up to 272K.
@@ -834,7 +836,9 @@ describe('compiled catalog', () => {
 			'gpt-6-luna': ['0.1', '0.01', '0.5'],
 			'gpt-6-sol': ['2', '0.2', '10'],
 			'gpt-6.1-sol': ['2', '0.1', '10'],
-			'gpt-6.1-terra': ['1', '0.05', '5']
+			'gpt-6.1-terra': ['1', '0.05', '5'],
+			'gpt-6.2-astra': ['8', '0.4', '40'],
+			'gpt-6.2-sol': ['2', '0.1', '10']
 		} as const;
 		const tierScale = {
 			standard: [1n, 1n],
@@ -875,7 +879,7 @@ describe('compiled catalog', () => {
 			if (chat) expect(chat.reasoningEfforts).toEqual(['low', 'medium', 'high', 'xhigh']);
 			checked.push(deploymentId);
 		}
-		expect(checked).toHaveLength(55);
+		expect(checked).toHaveLength(67);
 	});
 
 	test('puts each place in every place that holds all of its countries, and in no other', () => {
@@ -898,9 +902,24 @@ describe('compiled catalog', () => {
 		}
 	});
 
-	test('keeps one deterministic catalog without dated states', () => {
+	test('schedules only the Ultrafast launch price of the GPT-6.2 models', () => {
 		expect(catalog.schema).toBe('stogas.catalog.v1');
-		expect(catalog.schedule).toEqual([]);
+		// OpenAI charges half the list price until March 1, 2027, Pacific time.
+		expect(catalog.schedule.map(({ start }) => start)).toEqual([
+			'2026-11-18T00:00:00Z',
+			'2027-03-01T08:00:00Z'
+		]);
+		const [launch, list] = catalog.schedule;
+		expect(Object.keys(launch!.graph)).toEqual(['deployments']);
+		expect(list!.graph).toEqual({});
+		for (const id of ['openai-gpt-6.2-astra-ultrafast', 'openai-gpt-6.2-sol-ultrafast']) {
+			const listed = catalog.graph.deployments[id]!.pricing;
+			const dated = launch!.graph.deployments![id]!.pricing;
+			for (const [meter, rates] of Object.entries(listed))
+				for (const [key, rate] of Object.entries(rates))
+					expect(coefficient((dated as typeof listed)[meter]![key]!) * 2n).toBe(coefficient(rate));
+		}
+		expect(Object.keys(launch!.graph.deployments!)).toHaveLength(2);
 	});
 
 	test('orders parts so that they retire as a whole', () => {

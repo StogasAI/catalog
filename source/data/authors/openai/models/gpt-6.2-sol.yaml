@@ -1,0 +1,19 @@
+models:
+  authorId: openai
+  name: GPT-6.2 Sol
+  groupIds: [gpt-6.2, gpt-sol]
+  contextWindowTokens: 1050000
+  maxInputTokens: 922000
+  maxOutputTokens: 128000
+  inputModalities: [text, image]
+  outputModalities: [text]
+  reasoning: required
+  reasoningEfforts: [low, medium, high, xhigh, max]
+  reasoningEffortsByInterface:
+    chat_completions: [low, medium, high, xhigh]
+  openWeights: false
+  # Reviewed 2026-11-18: https://developers.openai.com/api/docs/guides/prompt-caching
+  promptCacheMinimumTokens: 1024
+  releaseDate: 2026-11-02
+  succeeds: gpt-6.1-sol
+  knowledgeCutoff: 2026-06-01

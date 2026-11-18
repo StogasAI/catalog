@@ -1,0 +1,40 @@
+deployments:
+  modelId: gpt-6.2-sol
+  routeIds: [openai-responses]
+  upstream:
+    model: gpt-6.2-sol
+    serviceTier: ultrafast
+  overrides:
+    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
+    # 2026-11-18: https://developers.openai.com/api/docs/guides/reasoning
+    sampling:
+      temperature: false
+      topP: false
+  # OpenAI charges 3 times the Standard rate through February 28, 2027 and 6 times from
+  # March 1, 2027, Pacific time. Reviewed 2026-11-18: https://developers.openai.com/api/docs/pricing
+  periods:
+    - name: 'Ultrafast launch price'
+      start: 2026-11-18T00:00:00Z
+      end: 2027-03-01T08:00:00Z
+      set:
+        pricing.input_tokens.per_mill_tokens: '6'
+        pricing.input_tokens.per_mill_context_gt_272k: '12'
+        pricing.cached_input_tokens.per_mill_tokens: '0.3'
+        pricing.cached_input_tokens.per_mill_context_gt_272k: '0.6'
+        pricing.cache_write_input_tokens.per_mill_tokens: '7.5'
+        pricing.cache_write_input_tokens.per_mill_context_gt_272k: '15'
+        pricing.output_tokens.per_mill_tokens: '30'
+        pricing.output_tokens.per_mill_context_gt_272k: '45'
+  pricing:
+    input_tokens:
+      per_mill_tokens: '12'
+      per_mill_context_gt_272k: '24'
+    cached_input_tokens:
+      per_mill_tokens: '0.6'
+      per_mill_context_gt_272k: '1.2'
+    cache_write_input_tokens:
+      per_mill_tokens: '15'
+      per_mill_context_gt_272k: '30'
+    output_tokens:
+      per_mill_tokens: '60'
+      per_mill_context_gt_272k: '90'

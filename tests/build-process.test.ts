@@ -446,12 +446,13 @@ exit 1
 		});
 	}
 
-	const datedPrice = (price: string, name = 'November input discount') =>
+	// Before every period of the real catalog, so that each state here differs by this one alone.
+	const datedPrice = (price: string, name = 'October input discount') =>
 		[
 			'  periods:',
 			`    - name: '${name}'`,
-			'      start: 2026-11-01T00:00:00Z',
-			'      end: 2026-12-01T00:00:00Z',
+			'      start: 2026-10-01T00:00:00Z',
+			'      end: 2026-11-01T00:00:00Z',
 			'      set:',
 			`        pricing.input_tokens.per_mill_tokens: '${price}'`,
 			'  pricing:\n'
@@ -516,23 +517,23 @@ exit 1
 		replaceSource(root, path, '  pricing:\n', datedPrice('2'));
 		expectBuildSuccess(runBuild(root));
 		const { root: catalogFile, catalog } = readCatalog(join(root, 'generated'));
-		const starts = ['2026-11-01T00:00:00Z', '2026-12-01T00:00:00Z'];
-		expect(catalog.schedule.map(({ start }) => start)).toEqual(starts);
+		const starts = ['2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z'];
+		expect(catalog.schedule.slice(0, 2).map(({ start }) => start)).toEqual(starts);
 		expect(
 			catalog.schedule[0]!.graph.deployments!['openai-gpt-5.6-sol']!.pricing.input_tokens
 				.per_mill_tokens
 		).toBe('2');
 		// A price is no part of a summary, so the root keeps only the starts.
-		expect(catalogFile.schedule).toEqual(starts.map((start) => ({ start, summaries: {} })));
-		expect(catalog.periods).toEqual([
-			{
-				kind: 'deployments',
-				id: 'openai-gpt-5.6-sol',
-				name: 'November input discount',
-				start: '2026-11-01T00:00:00Z',
-				end: '2026-12-01T00:00:00Z'
-			}
-		]);
+		expect(catalogFile.schedule.slice(0, 2)).toEqual(
+			starts.map((start) => ({ start, summaries: {} }))
+		);
+		expect(catalog.periods).toContainEqual({
+			kind: 'deployments',
+			id: 'openai-gpt-5.6-sol',
+			name: 'October input discount',
+			start: '2026-10-01T00:00:00Z',
+			end: '2026-11-01T00:00:00Z'
+		});
 	});
 
 	test('rejects a dated period without a name', () => {
@@ -550,7 +551,7 @@ exit 1
 		replaceSource(root, path, '  pricing:\n', datedPrice('free'));
 		const result = runBuild(root, ['--validate-only']);
 		expect(result.exitCode).not.toBe(0);
-		expect(result.output).toContain('The catalog state from 2026-11-01T00:00:00Z is invalid');
+		expect(result.output).toContain('The catalog state from 2026-10-01T00:00:00Z is invalid');
 		expect(result.output).toContain('per_mill_tokens');
 	});
 });

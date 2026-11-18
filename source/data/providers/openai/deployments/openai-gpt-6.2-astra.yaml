@@ -1,0 +1,24 @@
+deployments:
+  modelId: gpt-6.2-astra
+  routeIds: [openai-chat-completions, openai-responses]
+  upstream:
+    model: gpt-6.2-astra
+  overrides:
+    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
+    # 2026-11-18: https://developers.openai.com/api/docs/guides/reasoning
+    sampling:
+      temperature: false
+      topP: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '8'
+      per_mill_context_gt_272k: '16'
+    cached_input_tokens:
+      per_mill_tokens: '0.4'
+      per_mill_context_gt_272k: '0.8'
+    cache_write_input_tokens:
+      per_mill_tokens: '10'
+      per_mill_context_gt_272k: '20'
+    output_tokens:
+      per_mill_tokens: '40'
+      per_mill_context_gt_272k: '60'
