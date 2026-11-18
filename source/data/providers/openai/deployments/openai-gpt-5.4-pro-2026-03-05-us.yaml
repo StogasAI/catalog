@@ -11,12 +11,6 @@ deployments:
     inferenceGeo: us
   stogasByok: false
   notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
-  overrides:
-    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
-    # 2026-11-15: https://developers.openai.com/api/docs/guides/latest-model
-    sampling:
-      temperature: false
-      topP: false
   pricing:
     input_tokens:
       per_mill_tokens: '33'

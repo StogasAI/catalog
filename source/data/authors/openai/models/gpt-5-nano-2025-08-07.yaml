@@ -13,6 +13,11 @@ models:
   reasoning: required
   reasoningEfforts: [minimal, low, medium, high]
   openWeights: false
+  # OpenAI takes these only at reasoning effort none, which this model lacks, on Azure too.
+  # Reviewed 2026-11-18: https://developers.openai.com/api/docs/guides/latest-model
+  sampling:
+    temperature: false
+    topP: false
   snapshot: 2025-08-07
   releaseDate: 2025-08-07
   knowledgeCutoff: 2024-05-31

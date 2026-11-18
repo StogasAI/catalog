@@ -4,12 +4,6 @@ deployments:
   upstream:
     model: gpt-6-astra
     serviceTier: fast
-  overrides:
-    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
-    # 2026-11-15: https://developers.openai.com/api/docs/guides/latest-model
-    sampling:
-      temperature: false
-      topP: false
   pricing:
     input_tokens:
       per_mill_tokens: '20'

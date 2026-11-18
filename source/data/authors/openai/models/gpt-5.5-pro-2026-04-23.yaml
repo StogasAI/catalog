@@ -19,6 +19,11 @@ models:
   # Reviewed 2026-11-17: https://developers.openai.com/api/docs/models/gpt-5.5-pro
   reasoningDefault: high
   openWeights: false
+  # OpenAI takes these only at reasoning effort none, which this model lacks, on Azure too.
+  # Reviewed 2026-11-18: https://developers.openai.com/api/docs/guides/latest-model
+  sampling:
+    temperature: false
+    topP: false
   snapshot: 2026-04-23
   releaseDate: 2026-04-24
   succeeds: gpt-5.4-pro-2026-03-05

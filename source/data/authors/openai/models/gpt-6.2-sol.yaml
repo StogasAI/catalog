@@ -12,8 +12,13 @@ models:
   reasoningEffortsByInterface:
     chat_completions: [low, medium, high, xhigh]
   openWeights: false
+  # OpenAI takes these only at reasoning effort none, which this model lacks, on Azure too.
+  # Reviewed 2026-11-18: https://developers.openai.com/api/docs/guides/latest-model
+  sampling:
+    temperature: false
+    topP: false
   # Reviewed 2026-11-18: https://developers.openai.com/api/docs/guides/prompt-caching
   promptCacheMinimumTokens: 1024
-  releaseDate: 2026-11-02
+  releaseDate: 2026-11-17
   succeeds: gpt-6.1-sol
   knowledgeCutoff: 2026-06-01

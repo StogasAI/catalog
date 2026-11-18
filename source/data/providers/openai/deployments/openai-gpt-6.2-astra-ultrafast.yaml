@@ -4,12 +4,6 @@ deployments:
   upstream:
     model: gpt-6.2-astra
     serviceTier: ultrafast
-  overrides:
-    # OpenAI takes these only at reasoning effort none, which this model lacks. Reviewed
-    # 2026-11-18: https://developers.openai.com/api/docs/guides/reasoning
-    sampling:
-      temperature: false
-      topP: false
   # OpenAI charges 3 times the Standard rate through February 28, 2027 and 6 times from
   # March 1, 2027, Pacific time. Reviewed 2026-11-18: https://developers.openai.com/api/docs/pricing
   periods:
