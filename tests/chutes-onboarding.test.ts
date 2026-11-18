@@ -399,7 +399,7 @@ describe('Chutes provider onboarding contract', () => {
 					inputModalities: ['text'],
 					interfaces: ['chat_completions'],
 					notes:
-						"Independent network operators supply the GPUs, and Chutes runs each model in a TEE that is designed to keep request content from them. A model on several Hopper GPUs sends data between them over NVLink without encryption, through switches that Chutes' evidence does not cover."
+						"Independent network operators supply the GPUs. A model on several Hopper GPUs sends data between them over NVLink without encryption, through switches that Chutes' evidence does not cover."
 				},
 				{
 					dataHandling: { endToEndEncrypted: false, trainingUse: null, tee: false },

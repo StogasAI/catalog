@@ -14,7 +14,6 @@ deployments:
     reasoningEfforts: [low, medium, high, xhigh]
     dataHandling:
       processingLocation: unknown
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '10'

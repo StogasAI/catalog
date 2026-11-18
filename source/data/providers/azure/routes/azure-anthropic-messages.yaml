@@ -47,7 +47,12 @@ routes:
   # business associate agreement names Claude in Microsoft Foundry. Certifications reviewed 2026-11-17:
   # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
   # and https://privacy.claude.com/en/articles/8114513-business-associate-agreements-baa-for-commercial-customers
+  # Anthropic sells and operates Claude in Foundry on both hostings as an independent data processor,
+  # so every deployment here keeps Anthropic's 30 days whatever Microsoft keeps. Reviewed 2026-11-16:
+  # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
+  # and https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
   dataHandling:
+    retentionDays: 30
     certifications: [soc2-type2, iso-27001, iso-42001, hipaa-eligible]
   hostedTools:
     - tool: web_search
@@ -63,3 +68,6 @@ routes:
         retentionDays: null
         zeroDataRetention: false
         sharedWith: [unknown]
+        # Anthropic's business associate agreement does not cover web fetch. Reviewed 2026-11-18:
+        # https://privacy.claude.com/en/articles/8114513-business-associate-agreements-baa-for-commercial-customers
+        withoutCertifications: [hipaa-eligible]
