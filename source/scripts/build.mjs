@@ -620,6 +620,7 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					sampling: model.sampling ?? {},
 					promptCacheMinimumTokens: model.promptCacheMinimumTokens ?? null,
 					inputLimits: model.inputLimits ?? {},
+					minimumRetentionDays: model.minimumRetentionDays ?? null,
 					snapshot: model.snapshot ?? null,
 					succeeds: model.succeeds ?? null,
 					// The models that name this one in `succeeds`, which no record states.
@@ -638,6 +639,12 @@ function normalizeSourceGraph(sourceGraph, companies) {
 					...provider,
 					headquarteredCountry: headquarteredCountry('provider', id, provider.companyId),
 					aliases: [...(provider.aliases ?? [])],
+					accountOptions: (provider.accountOptions ?? []).map((option) => ({
+						...option,
+						group: option.group ?? null,
+						dataHandling: option.dataHandling ?? {},
+						grants: option.grants ?? []
+					})),
 					// Source states only the guarantees that a provider gives and the companies that it
 					// shares requests with.
 					dataHandling: {
@@ -740,6 +747,77 @@ function validateDataHandling(owner, value, places, companies) {
 		(value.storageLocation !== 'none' || value.retentionDays !== 0 || value.trainingUse !== false)
 	) {
 		throw new Error(`${owner}: zero data retention conflicts with data handling`);
+	}
+}
+
+// The certifications that an account option can grant, each to a record that lists the entry
+// that it names. No record lists a granted one.
+const grantedCertifications = { hipaa: 'hipaa-eligible' };
+
+/**
+ * Throws unless each account option of each provider covers routes of the provider, changes a
+ * fact, and leaves every record that it reaches valid. Two options that an account can hold
+ * together set no fact twice on one route, so their order decides nothing.
+ */
+function validateAccountOptions(graph, deployments, places, companies) {
+	for (const [providerId, { accountOptions }] of Object.entries(graph.providers)) {
+		for (const [index, option] of accountOptions.entries()) {
+			const owner = `${providerId}.accountOptions.${option.id}`;
+			const effect = option.dataHandling;
+			const changes = [...Object.keys(effect), ...option.grants];
+			if (accountOptions.findIndex(({ id }) => id === option.id) !== index)
+				throw new Error(`${owner}: another option has this ID`);
+			if (
+				option.routes.some(
+					(routeId, at) =>
+						graph.routes[routeId]?.providerId !== providerId || routeId <= option.routes[at - 1]
+				)
+			)
+				throw new Error(`${owner}: routes must list routes of ${providerId}, in order, once each`);
+			if (changes.length === 0) throw new Error(`${owner}: changes nothing`);
+			if (
+				option.grants.some(
+					(id, at) => !Object.hasOwn(grantedCertifications, id) || id <= option.grants[at - 1]
+				)
+			)
+				throw new Error(`${owner}: grants must list granted certifications, in order, once each`);
+			for (const other of accountOptions.slice(0, index)) {
+				const together = option.group === null || option.group !== other.group;
+				const set = [...Object.keys(other.dataHandling), ...other.grants];
+				if (
+					together &&
+					option.routes.some((routeId) => other.routes.includes(routeId)) &&
+					changes.some((change) => set.includes(change))
+				)
+					throw new Error(
+						`${owner}: changes what ${other.id} changes on a shared route, so give both one group`
+					);
+			}
+			for (const routeId of option.routes) {
+				const records = Object.entries(deployments).filter(([, deployment]) =>
+					deployment.routes[routeId]?.accountOptions.includes(option.id)
+				);
+				if (records.length === 0) throw new Error(`${owner}: reaches no deployment on ${routeId}`);
+				for (const [deploymentId, deployment] of records)
+					validateDataHandling(
+						`${owner} on ${deploymentId}`,
+						{ ...deployment.routes[routeId].dataHandling, ...effect },
+						places,
+						companies
+					);
+				for (const id of option.grants)
+					if (
+						!records.some(([, deployment]) =>
+							deployment.routes[routeId].dataHandling.certifications.includes(
+								grantedCertifications[id]
+							)
+						)
+					)
+						throw new Error(
+							`${owner}: no deployment on ${routeId} lists ${grantedCertifications[id]}`
+						);
+			}
+		}
 	}
 }
 
@@ -852,6 +930,16 @@ function servedFacts(graph, model, deployment, hosting) {
 			(offer) => overrides.hostedTools?.[offer.tool] !== false
 		);
 		routes[routeId] = {
+			// The provider's account options that reach this record: those that cover its route,
+			// that the deployment does not remove, and that keep its model's minimum retention.
+			accountOptions: graph.providers[route.providerId].accountOptions
+				.filter(
+					(option) =>
+						option.routes.includes(routeId) &&
+						overrides.accountOptions?.[option.id] !== false &&
+						!(option.dataHandling.retentionDays < model.minimumRetentionDays)
+				)
+				.map((option) => option.id),
 			capabilities: Object.fromEntries(
 				capabilityNames.map((name) => [
 					name,
@@ -1114,7 +1202,7 @@ function validateServedFacts(
 function rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const paths = Object.entries(overrides).flatMap(([key, value]) =>
-		key === 'capabilities' || key === 'dataHandling' || key === 'hostedTools' || key === 'sampling'
+		['accountOptions', 'capabilities', 'dataHandling', 'hostedTools', 'sampling'].includes(key)
 			? Object.keys(value).map((name) => [key, name])
 			: key === 'inputLimits'
 				? Object.entries(value).flatMap(([kind, limit]) =>
@@ -1863,6 +1951,17 @@ function compileGraph(source, places, companies) {
 			...served
 		};
 	}
+
+	// A model's developer can require a retention wherever the model runs.
+	for (const [deploymentId, deployment] of Object.entries(deployments)) {
+		const minimum = graph.models[deployment.modelId].minimumRetentionDays;
+		for (const [routeId, { dataHandling }] of Object.entries(deployment.routes))
+			if (dataHandling.retentionDays !== null && dataHandling.retentionDays < minimum)
+				throw new Error(
+					`${deploymentId} on ${routeId}: ${deployment.modelId} requires a retention of ${minimum} days`
+				);
+	}
+	validateAccountOptions(graph, deployments, places, companies);
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the
 	// provider ran at Standard at, the one deployment of the model on the same route that matches

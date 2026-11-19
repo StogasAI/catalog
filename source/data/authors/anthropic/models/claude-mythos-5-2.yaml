@@ -25,6 +25,10 @@ models:
     topK: false
   # Reviewed 2026-11-15: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
   promptCacheMinimumTokens: 512
+  # Anthropic requires 30 days of retention wherever a Covered Model runs, so zero data retention
+  # does not reach it. Reviewed 2026-11-19:
+  # https://platform.claude.com/docs/en/manage-claude/api-and-data-retention#model-specific-data-retention-requirements
+  minimumRetentionDays: 30
   releaseDate: 2026-11-09
   succeeds: claude-mythos-5-1
   knowledgeCutoff: 2026-06-01

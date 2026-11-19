@@ -2,6 +2,24 @@ providers:
   name: AWS
   stogasByok: true
   companyId: amazon
+  # Claude Platform on AWS follows the retention of Anthropic's own API, and Anthropic enables zero
+  # data retention for an organization on request. Reviewed 2026-11-19:
+  # https://platform.claude.com/docs/en/manage-claude/api-and-data-retention#what-zdr-covers
+  # A customer accepts AWS's business associate agreement in AWS Artifact, and it covers Amazon
+  # Bedrock. Reviewed 2026-11-19: https://aws.amazon.com/compliance/hipaa-eligible-services-reference/
+  # AWS's API reports neither.
+  accountOptions:
+    - id: zero-data-retention
+      name: Zero data retention for Claude Platform on AWS
+      routes: [aws-claude-platform-messages]
+      dataHandling:
+        storageLocation: none
+        retentionDays: 0
+        zeroDataRetention: true
+    - id: business-associate-agreement
+      name: Business associate agreement
+      routes: [aws-bedrock-batch-messages, aws-bedrock-messages]
+      grants: [hipaa]
   # Each Bedrock model decides what AWS keeps, through the data retention modes that it allows, and
   # the account's mode only decides which models answer. A route or deployment states what its
   # models keep, and the provider leaves it unknown.

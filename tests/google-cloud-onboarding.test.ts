@@ -192,6 +192,16 @@ describe('Google Cloud onboarding contract', () => {
 	test('pins the Claude routes and every deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
+				accountOptions: [
+					{
+						dataHandling: { retentionDays: 0, storageLocation: 'none', zeroDataRetention: true },
+						grants: [],
+						group: null,
+						id: 'zero-data-retention',
+						name: 'Zero data retention for Claude Models on Google Cloud (Anthropic managed)',
+						routes: ['google-cloud-anthropic-managed-messages']
+					}
+				],
 				aliases: ['gcp'],
 				capabilities,
 				sampling: ['temperature', 'topP', 'topK'],

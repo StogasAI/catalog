@@ -2,6 +2,36 @@ providers:
   name: Azure
   stogasByok: true
   companyId: microsoft
+  # Microsoft approves a subscription for modified abuse monitoring, and then stores no prompt or
+  # completion for human review. The account reports the capability ContentLogging as false, which
+  # the gateway reads with each check of a credential. It covers the models that Azure sells and
+  # runs, and Microsoft has announced that it will end for models released from November 1, 2026,
+  # on a date that it has yet to name. Reviewed 2026-11-19:
+  # https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/openai/data-privacy
+  # Microsoft's product terms include its business associate agreement for a customer that HIPAA
+  # covers. Claude in Foundry needs Anthropic's agreement and the HIPAA configuration that Anthropic
+  # enables on the subscription. Reviewed 2026-11-19: https://aka.ms/AzureCompliance and
+  # https://platform.claude.com/docs/en/manage-claude/api-and-data-retention#hipaa-readiness
+  accountOptions:
+    - id: modified-abuse-monitoring
+      name: Modified abuse monitoring
+      routes: [azure-chat-completions, azure-responses]
+      dataHandling:
+        storageLocation: none
+        retentionDays: 0
+        zeroDataRetention: true
+    - id: business-associate-agreement
+      name: Business associate agreement
+      routes:
+        - azure-batch-chat-completions
+        - azure-batch-responses
+        - azure-chat-completions
+        - azure-responses
+      grants: [hipaa]
+    - id: anthropic-business-associate-agreement
+      name: Anthropic business associate agreement
+      routes: [azure-anthropic-messages]
+      grants: [hipaa]
   # A resource keeps data at rest in its Azure geography, so a credential's binding narrows storage
   # to the geography of its resource. These are the geographies that offer Foundry models.
   accountLocations:

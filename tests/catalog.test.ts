@@ -902,24 +902,34 @@ describe('compiled catalog', () => {
 		}
 	});
 
-	test('schedules only the Ultrafast launch price of the GPT-6.2 models', () => {
+	test('schedules the Chutes price cut and the Ultrafast launch price of the GPT-6.2 models', () => {
 		expect(catalog.schema).toBe('stogas.catalog.v1');
-		// OpenAI charges half the list price until March 1, 2027, Pacific time.
+		// Chutes ends its price cut on November 24, 2026, and OpenAI charges half the list price
+		// until March 1, 2027, Pacific time.
 		expect(catalog.schedule.map(({ start }) => start)).toEqual([
+			'2026-11-17T00:00:00Z',
 			'2026-11-18T00:00:00Z',
+			'2026-11-24T00:00:00Z',
 			'2027-03-01T08:00:00Z'
 		]);
-		const [launch, list] = catalog.schedule;
+		const [cut, both, launch, list] = catalog.schedule;
+		const chutes = [
+			'chutes-deepseek-v4.1-flash-1017-unknown-hosted',
+			'chutes-glm-5.3-unknown-hosted'
+		];
+		const ultrafast = ['openai-gpt-6.2-astra-ultrafast', 'openai-gpt-6.2-sol-ultrafast'];
+		expect(Object.keys(cut!.graph.deployments!).sort()).toEqual(chutes);
+		expect(Object.keys(both!.graph.deployments!).sort()).toEqual([...chutes, ...ultrafast]);
 		expect(Object.keys(launch!.graph)).toEqual(['deployments']);
+		expect(Object.keys(launch!.graph.deployments!).sort()).toEqual(ultrafast);
 		expect(list!.graph).toEqual({});
-		for (const id of ['openai-gpt-6.2-astra-ultrafast', 'openai-gpt-6.2-sol-ultrafast']) {
+		for (const id of ultrafast) {
 			const listed = catalog.graph.deployments[id]!.pricing;
 			const dated = launch!.graph.deployments![id]!.pricing;
 			for (const [meter, rates] of Object.entries(listed))
 				for (const [key, rate] of Object.entries(rates))
 					expect(coefficient((dated as typeof listed)[meter]![key]!) * 2n).toBe(coefficient(rate));
 		}
-		expect(Object.keys(launch!.graph.deployments!)).toHaveLength(2);
 	});
 
 	test('orders parts so that they retire as a whole', () => {

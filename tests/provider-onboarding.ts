@@ -98,6 +98,15 @@ export type ProviderDeploymentContract = {
 
 export type ProviderOnboardingContract = {
 	provider: {
+		/** What an account with the provider can hold, as the compiled record states each option. */
+		accountOptions?: {
+			dataHandling: Record<string, unknown>;
+			grants: string[];
+			group: string | null;
+			id: string;
+			name: string;
+			routes: string[];
+		}[];
 		aliases: string[];
 		capabilities: Record<string, boolean>;
 		/** The sampling parameters that the provider's API takes. */
@@ -150,6 +159,7 @@ export function assertProviderOnboardingContract(
 		stogasManaged: contract.provider.stogasManaged && route.stogasManaged !== false && !route.batch
 	});
 	const provider = {
+		accountOptions: contract.provider.accountOptions ?? [],
 		aliases: contract.provider.aliases,
 		name: contract.provider.name,
 		companyId: contract.provider.companyId,
@@ -236,7 +246,8 @@ export function assertProviderOnboardingContract(
 		expect(sources.map(([sourceId]) => sourceId)).toHaveLength(1);
 		const [, source] = sources[0]!;
 		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
-		// matches, except the data handling that the cloud changes and its own request limits.
+		// matches, except the data handling that the cloud changes, its own request limits and the
+		// account options, which are each provider's own.
 		// A hosted tool removes only the certifications that its route lists, so the cloud's route
 		// states none of the removals that its own list makes moot.
 		type Served = {
@@ -251,6 +262,7 @@ export function assertProviderOnboardingContract(
 				const handling = { ...own, ...dataHandling };
 				return {
 					...route,
+					accountOptions: undefined,
 					inputLimits: undefined,
 					dataHandling: handling,
 					hostedTools: Object.fromEntries(
@@ -294,6 +306,8 @@ export function assertProviderOnboardingContract(
 				return [
 					routeId,
 					{
+						// The options that reach a record follow the build's rule, which its own test states.
+						accountOptions: expect.any(Array),
 						capabilities: expected.capabilities,
 						dataHandling: {
 							...routeHandling(route),

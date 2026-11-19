@@ -8,6 +8,9 @@ deployments:
     deploymentType: instant
   retirementDate: 2027-10-26
   overrides:
+    # Microsoft's preview terms can differ on abuse monitoring, so the option does not reach it.
+    accountOptions:
+      modified-abuse-monitoring: false
     # Azure caches prompts of 1,024 tokens or more on every OpenAI model. Reviewed 2026-11-15:
     # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/prompt-caching
     promptCacheMinimumTokens: 1024

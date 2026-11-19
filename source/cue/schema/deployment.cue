@@ -131,6 +131,9 @@ package catalog
 		dataHandling?:             #DeploymentDataHandlingOverride
 		// Hosted tools of its routes that the provider does not run for this deployment's model.
 		hostedTools?: close({[#HostedToolId]: false})
+		// Account options of its provider that do not reach this deployment although they cover
+		// its routes.
+		accountOptions?: close({[#Id]: false})
 	})
 	pricing: #DeploymentPricing
 	periods?: [#Period, ...#Period]

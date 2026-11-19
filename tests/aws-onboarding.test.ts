@@ -354,6 +354,24 @@ describe('AWS onboarding contract', () => {
 	test('pins the Claude routes and every deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
+				accountOptions: [
+					{
+						dataHandling: { retentionDays: 0, storageLocation: 'none', zeroDataRetention: true },
+						grants: [],
+						group: null,
+						id: 'zero-data-retention',
+						name: 'Zero data retention for Claude Platform on AWS',
+						routes: ['aws-claude-platform-messages']
+					},
+					{
+						dataHandling: {},
+						grants: ['hipaa'],
+						group: null,
+						id: 'business-associate-agreement',
+						name: 'Business associate agreement',
+						routes: ['aws-bedrock-batch-messages', 'aws-bedrock-messages']
+					}
+				],
 				aliases: [],
 				capabilities,
 				sampling: ['temperature', 'topP', 'topK'],

@@ -82,6 +82,7 @@ function sourceFixture() {
 					reasoning: 'optional',
 					reasoningEfforts: ['low', 'high'],
 					reasoningMaxTokens: null,
+					minimumRetentionDays: undefined as number | undefined,
 					releaseDate: '2026-01-02'
 				}
 			},
@@ -92,6 +93,7 @@ function sourceFixture() {
 					stogasManaged: undefined as true | undefined,
 					companyId: 'openai',
 					accountLocations: ['DE', 'US'] as string[] | undefined,
+					accountOptions: undefined as Array<Record<string, unknown>> | undefined,
 					dataHandling: {
 						processingLocation: 'world',
 						storageLocation: 'unknown',
@@ -314,6 +316,7 @@ describe('catalog source compiler invariants', () => {
 		});
 		expect(catalogs.graph.providers.openai).toEqual({
 			accountLocations: ['DE', 'US'],
+			accountOptions: [],
 			aliases: [],
 			companyId: 'openai',
 			headquarteredCountry: 'US',
@@ -2355,6 +2358,149 @@ describe('catalog source compiler invariants', () => {
 			source.graph.deployments = { 'azure-gpt-test-batch-us': deployment };
 		});
 		expect(buildCatalog(batch).graph.deployments['azure-gpt-test-batch-us']).toBeDefined();
+	});
+
+	describe('lists on each route record the account options that reach it', () => {
+		const zeroRetention = {
+			id: 'zero-data-retention',
+			name: 'Zero Data Retention',
+			group: 'data-retention',
+			routes: ['openai-responses'],
+			dataHandling: { storageLocation: 'none', retentionDays: 0, zeroDataRetention: true }
+		};
+		const sharing = {
+			id: 'data-sharing',
+			name: 'Data sharing',
+			routes: ['openai-responses'],
+			dataHandling: { trainingUse: true }
+		};
+		// A second model keeps each option in use while the first one loses it.
+		const withOptions = (mutate: Mutator = () => {}) =>
+			changed((source) => {
+				const { models, deployments, providers } = source.graph as unknown as Record<
+					string,
+					Record<string, Record<string, unknown>>
+				>;
+				providers.openai!.accountOptions = structuredClone([zeroRetention, sharing]);
+				models['gpt-other'] = structuredClone(models['gpt-test']!);
+				deployments['openai-gpt-other'] = {
+					...structuredClone(deployments['openai-gpt-test']!),
+					modelId: 'gpt-other',
+					upstream: { model: 'gpt-other' }
+				};
+				mutate(source);
+			});
+		const reaching = (source: Source) =>
+			buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses']
+				.accountOptions;
+
+		test('in the provider order, with each option that the provider states', () => {
+			const source = withOptions();
+			expect(reaching(source)).toEqual(['zero-data-retention', 'data-sharing']);
+			expect(buildCatalog(source).graph.providers.openai.accountOptions).toEqual([
+				{ ...zeroRetention, grants: [] },
+				{ ...sharing, group: null, grants: [] }
+			]);
+			expect(reaching(sourceFixture())).toEqual([]);
+		});
+		test('without an option that the deployment removes', () => {
+			expect(
+				reaching(
+					withOptions((source) => {
+						source.graph.deployments['openai-gpt-test'].overrides = {
+							accountOptions: { 'zero-data-retention': false }
+						};
+					})
+				)
+			).toEqual(['data-sharing']);
+		});
+		test('without an option under the retention that the model requires', () => {
+			expect(
+				reaching(
+					withOptions((source) => (source.graph.models['gpt-test'].minimumRetentionDays = 30))
+				)
+			).toEqual(['data-sharing']);
+		});
+		test('and changes the chain of a record that an option reaches', () => {
+			const plain = buildCatalog(sourceFixture()).graph.deployments['openai-gpt-test'];
+			const reached = buildCatalog(withOptions()).graph.deployments['openai-gpt-test'];
+			expect(chainHash(reached)).not.toBe(chainHash(plain));
+		});
+		testRejections([
+			[
+				'record under the retention that its model requires',
+				(source: Source) => (source.graph.models['gpt-test'].minimumRetentionDays = 31),
+				'openai-gpt-test on openai-responses: gpt-test requires a retention of 31 days'
+			],
+			[
+				'option that covers a route of no provider',
+				(source: Source) =>
+					(source.graph.providers.openai.accountOptions = [
+						{ ...zeroRetention, routes: ['azure-responses'] }
+					]),
+				'openai.accountOptions.zero-data-retention: routes must list routes of openai, in order, once each'
+			],
+			[
+				'option that changes nothing',
+				(source: Source) =>
+					(source.graph.providers.openai.accountOptions = [
+						{ id: 'nothing', name: 'Nothing', routes: ['openai-responses'] }
+					]),
+				'openai.accountOptions.nothing: changes nothing'
+			],
+			[
+				'option ID stated twice',
+				(source: Source) =>
+					(source.graph.providers.openai.accountOptions = [zeroRetention, zeroRetention]),
+				'openai.accountOptions.zero-data-retention: another option has this ID'
+			],
+			[
+				'two options outside one group that set the same fact',
+				(source: Source) =>
+					(source.graph.providers.openai.accountOptions = [
+						zeroRetention,
+						{ ...zeroRetention, id: 'modified-abuse-monitoring', group: undefined }
+					]),
+				'openai.accountOptions.modified-abuse-monitoring: changes what zero-data-retention changes on a shared route, so give both one group'
+			],
+			[
+				'zero data retention on a record that may train on content',
+				(source: Source) => {
+					source.graph.providers.openai.accountOptions = [zeroRetention];
+					source.graph.providers.openai.dataHandling.trainingUse = null as unknown as boolean;
+				},
+				'openai.accountOptions.zero-data-retention on openai-gpt-test: zero data retention conflicts with data handling'
+			],
+			[
+				'option that reaches no deployment on a route',
+				(source: Source) => {
+					source.graph.providers.openai.accountOptions = [zeroRetention];
+					source.graph.models['gpt-test'].minimumRetentionDays = 30;
+				},
+				'openai.accountOptions.zero-data-retention: reaches no deployment on openai-responses'
+			],
+			[
+				'grant that no record leads to',
+				(source: Source) =>
+					(source.graph.providers.openai.accountOptions = [
+						{
+							id: 'business-associate-agreement',
+							name: 'Business associate agreement',
+							routes: ['openai-responses'],
+							grants: ['hipaa']
+						}
+					]),
+				'openai.accountOptions.business-associate-agreement: no deployment on openai-responses lists hipaa-eligible'
+			],
+			[
+				'removal of an option that does not reach the deployment',
+				(source: Source) =>
+					(source.graph.deployments['openai-gpt-test'].overrides = {
+						accountOptions: { 'zero-data-retention': false }
+					}),
+				'openai-gpt-test.overrides.accountOptions.zero-data-retention does not change what the deployment serves'
+			]
+		]);
 	});
 
 	describe('takes the data handling that upstream fields decide', () => {

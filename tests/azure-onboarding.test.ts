@@ -389,6 +389,38 @@ describe('Azure provider onboarding contract', () => {
 				...['ID', 'IL', 'IN', 'IT', 'JP', 'KR', 'MX', 'MY', 'NO', 'NZ', 'PL', 'QA', 'SA', 'SE'],
 				...['SG', 'TW', 'US', 'ZA', 'apac', 'europe']
 			],
+			// Microsoft's settings cover the models that Azure runs, and Anthropic's agreement its own.
+			accountOptions: [
+				{
+					dataHandling: { retentionDays: 0, storageLocation: 'none', zeroDataRetention: true },
+					grants: [],
+					group: null,
+					id: 'modified-abuse-monitoring',
+					name: 'Modified abuse monitoring',
+					routes: ['azure-chat-completions', 'azure-responses']
+				},
+				{
+					dataHandling: {},
+					grants: ['hipaa'],
+					group: null,
+					id: 'business-associate-agreement',
+					name: 'Business associate agreement',
+					routes: [
+						'azure-batch-chat-completions',
+						'azure-batch-responses',
+						'azure-chat-completions',
+						'azure-responses'
+					]
+				},
+				{
+					dataHandling: {},
+					grants: ['hipaa'],
+					group: null,
+					id: 'anthropic-business-associate-agreement',
+					name: 'Anthropic business associate agreement',
+					routes: ['azure-anthropic-messages']
+				}
+			],
 			aliases: [],
 			companyId: 'microsoft',
 			headquarteredCountry: 'US',

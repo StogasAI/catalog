@@ -2,6 +2,24 @@ providers:
   name: Anthropic
   stogasByok: true
   companyId: anthropic
+  # Under a zero data retention arrangement Anthropic stores no prompt or response of the Messages
+  # API once it has returned the response. The Batch API is outside the arrangement, and the Fable
+  # and Mythos models keep their 30 days (minimumRetentionDays). An organization that has signed
+  # the business associate agreement and enabled HIPAA readiness may send protected health
+  # information through the Messages API. Anthropic's API reports neither.
+  # Reviewed 2026-11-19: https://platform.claude.com/docs/en/manage-claude/api-and-data-retention
+  accountOptions:
+    - id: zero-data-retention
+      name: Zero data retention
+      routes: [anthropic-messages]
+      dataHandling:
+        storageLocation: none
+        retentionDays: 0
+        zeroDataRetention: true
+    - id: business-associate-agreement
+      name: Business associate agreement
+      routes: [anthropic-messages]
+      grants: [hipaa]
   # Anthropic deletes API inputs and outputs within 30 days, names no place where it stores them,
   # and keeps content that its safety systems flag for up to 2 years. Its API retention page also
   # says that content is not retained by default, so 30 days is the most that either page allows.

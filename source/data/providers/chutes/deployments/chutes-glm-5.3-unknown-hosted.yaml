@@ -10,10 +10,21 @@ deployments:
     capabilities:
       structuredOutputs: false
     reasoningEfforts: []
+  # Chutes lists these cut prices until November 24, 2026, when its regular ones return, and no
+  # start for them; the catalog followed the cut on November 17, 2026. Reviewed 2026-11-19:
+  # https://api.chutes.ai/chutes/1ebb4c96-21fb-5c6f-b5ab-d4aeaa869603
+  periods:
+    - name: 'Chutes price cut'
+      start: 2026-11-17T00:00:00Z
+      end: 2026-11-24T00:00:00Z
+      set:
+        pricing.input_tokens.per_mill_tokens: '0.8'
+        pricing.cached_input_tokens.per_mill_tokens: '0.16'
+        pricing.output_tokens.per_mill_tokens: '2.5'
   pricing:
     input_tokens:
-      per_mill_tokens: '0.8'
+      per_mill_tokens: '1.225'
     cached_input_tokens:
-      per_mill_tokens: '0.16'
+      per_mill_tokens: '0.245'
     output_tokens:
-      per_mill_tokens: '2.5'
+      per_mill_tokens: '3.85'

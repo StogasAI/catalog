@@ -49,6 +49,10 @@ package catalog
 	"dod-il4" |
 	"dod-il5"
 
+// A certification that holds for one account only, which an account option grants where the
+// record lists the entry with the suffix -eligible. No record lists one.
+#GrantedCertification: "hipaa"
+
 // A route states only what differs from its provider. It may state any fact of a deployment's
 // override, such as a Chutes route that relays requests to operators outside a TEE, and whether
 // requests are encrypted end to end, which is false when omitted.

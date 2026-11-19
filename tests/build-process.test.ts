@@ -403,8 +403,8 @@ exit 1
 		{
 			name: 'legacy provider moderation field',
 			path: 'source/data/providers/anthropic/anthropic.yaml',
-			from: '  dataHandling:',
-			to: '  moderated: true\n  dataHandling:',
+			from: '\n  dataHandling:',
+			to: '\n  moderated: true\n  dataHandling:',
 			error: 'moderated'
 		},
 		{

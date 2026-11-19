@@ -3,6 +3,38 @@ providers:
   aliases: [open-ai]
   stogasByok: true
   companyId: openai
+  # OpenAI approves an organization or a project for Zero Data Retention or for Modified Abuse
+  # Monitoring. Each keeps customer content out of the abuse monitoring logs, which OpenAI
+  # otherwise holds for up to 30 days. The gateway never asks OpenAI to store a response, so on
+  # Chat Completions and Responses neither leaves content stored. Batches keep their files under
+  # both. A project that shares its data lets OpenAI train on it. OpenAI's API reports none of
+  # these. Reviewed 2026-11-19: https://developers.openai.com/api/docs/guides/your-data
+  accountOptions:
+    - id: zero-data-retention
+      name: Zero Data Retention
+      group: data-retention
+      routes: [openai-chat-completions, openai-responses]
+      dataHandling:
+        storageLocation: none
+        retentionDays: 0
+        zeroDataRetention: true
+    - id: modified-abuse-monitoring
+      name: Modified Abuse Monitoring
+      group: data-retention
+      routes: [openai-chat-completions, openai-responses]
+      dataHandling:
+        storageLocation: none
+        retentionDays: 0
+        zeroDataRetention: true
+    - id: data-sharing
+      name: Data sharing
+      routes:
+        - openai-batch-chat-completions
+        - openai-batch-responses
+        - openai-chat-completions
+        - openai-responses
+      dataHandling:
+        trainingUse: true
   # OpenAI's trust portal names the API Platform in its SOC 2 Type 2 report and in its ISO/IEC 27001
   # certificate, which includes the 27017 and 27018 controls and 27701. It lists ISO/IEC 42001 and
   # CSA STAR without naming a product, and CSA STAR as a self-assessment, so neither is listed.

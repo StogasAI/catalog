@@ -11,6 +11,9 @@ deployments:
   # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types and
   # https://learn.microsoft.com/en-us/azure/foundry/how-to/fireworks/enable-fireworks-models
   overrides:
+    # Fireworks AI runs the model, so Microsoft's modified abuse monitoring does not reach it.
+    accountOptions:
+      modified-abuse-monitoring: false
     capabilities:
       parallelFunctionCalling: false
       explicitPromptCaching: false
