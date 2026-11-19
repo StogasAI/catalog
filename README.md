@@ -30,7 +30,7 @@ bun run editor
 
 ## Releases
 
-Each release has a sequence number and a manifest with the source commit, a source digest, and the root's hash. GitHub attests the manifest and the root. Stogas rebuilds the same bytes from its own copy of the source, and gateways load only the catalogs that its signed evidence approves.
+Each release has a sequence number and a manifest with the source commit, a source digest, and the root's hash. GitHub Actions and GitLab.com's hosted runners each build a release from its tag and sign a build proof for the manifest and the root. Stogas approves a catalog only when both proofs name the bytes of its own build, and gateways load only the catalogs that its signed evidence approves.
 
 `bun run build:release` builds a release in a disposable Docker container from a read-only copy of the source.
 
