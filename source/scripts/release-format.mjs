@@ -78,10 +78,26 @@ export function catalogManifest(repositoryRoot, sequenceInput) {
 	};
 }
 
-/** Closed Stogas metadata; the external build proof keeps its own signed format. */
+const STAGING_PROVENANCE_TYPE = 'https://stogas.ai/attestations/staging-development/v1';
+
+/**
+ * Closed Stogas metadata; each external build proof keeps its own signed format. A release has
+ * GitHub's proof and GitLab's, or the one placeholder of a local staging build.
+ */
 export function parseCatalogReleaseEvidence(value) {
-	if (!hasKeys(value, ['document', 'provenance']) || !isObject(value.provenance)) {
-		throw new Error('Catalog release evidence must contain one document and provenance object.');
+	const placeholder =
+		isObject(value?.provenance) && value.provenance.predicateType === STAGING_PROVENANCE_TYPE;
+	if (
+		!hasKeys(
+			value,
+			placeholder ? ['document', 'provenance'] : ['document', 'gitlab_provenance', 'provenance']
+		) ||
+		!isObject(value.provenance) ||
+		(!placeholder && !isObject(value.gitlab_provenance))
+	) {
+		throw new Error(
+			"Catalog release evidence must contain one document and either GitHub's and GitLab's build proofs or a placeholder proof."
+		);
 	}
 	parseCatalogReleaseManifest(value.document);
 	return value;
@@ -197,7 +213,7 @@ export function stagingDevelopmentProvenance(manifest) {
 	return {
 		_type: 'https://in-toto.io/Statement/v1',
 		predicate: { environment: 'staging' },
-		predicateType: 'https://stogas.ai/attestations/staging-development/v1',
+		predicateType: STAGING_PROVENANCE_TYPE,
 		subject: [
 			{ digest: { sha256: manifestDigest }, name: 'catalog-release.json' },
 			{ digest: { sha256: root }, name: CATALOG_ROOT }

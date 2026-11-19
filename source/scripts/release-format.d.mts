@@ -13,6 +13,12 @@ export const CATALOG_PARTS_DIRECTORY: 'catalog.parts';
  */
 export function catalogFileList(rootBytes: Uint8Array | string): CatalogPartFile[];
 
+/** The release manifest of the built catalog at the checkout's commit. */
+export function catalogManifest(
+	repositoryRoot: string,
+	sequence: number
+): { source: { commit: string; tag: string } };
+
 /** The staging build proof for a catalog release manifest and its root. */
 export function stagingDevelopmentProvenance(manifest: {
 	artifacts: Record<typeof CATALOG_ROOT, ReleaseArtifact>;

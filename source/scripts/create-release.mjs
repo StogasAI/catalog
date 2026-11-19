@@ -18,23 +18,13 @@ const outputRoot = resolveDestructiveOutput(repositoryRoot, process.argv[3], {
 	allowedRepositoryRoots: ['release'],
 	defaultRelative: 'release'
 });
-const attestationPath = process.argv[4];
+// GitHub's build proof and GitLab's, or the one placeholder proof of a local staging build.
+const [attestationPath, gitlabAttestationPath] = process.argv.slice(4);
 if (!attestationPath) throw new Error('A build attestation file is required.');
-const attestationStat = lstatSync(attestationPath);
-if (
-	!attestationStat.isFile() ||
-	attestationStat.isSymbolicLink() ||
-	attestationStat.size > 1024 * 1024
-) {
-	throw new Error('Build attestation must be a bounded regular file.');
-}
-const attestation = JSON.parse(readFileSync(attestationPath, 'utf8'));
-if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
-	throw new Error('Exactly one build attestation is required.');
-}
 const envelope = parseCatalogReleaseEvidence({
 	document: catalogManifest(repositoryRoot, sequence),
-	provenance: attestation
+	provenance: readAttestation(attestationPath),
+	...(gitlabAttestationPath ? { gitlab_provenance: readAttestation(gitlabAttestationPath) } : {})
 });
 
 rmSync(outputRoot, { recursive: true, force: true });
@@ -54,6 +44,18 @@ writeFileSync(
 		...blobs.map(({ digest, path }) => `${digest.slice('sha256:'.length)}  ${path}`)
 	].join('\n') + '\n'
 );
+
+function readAttestation(path) {
+	const stat = lstatSync(path);
+	if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) {
+		throw new Error('Build attestation must be a bounded regular file.');
+	}
+	const attestation = JSON.parse(readFileSync(path, 'utf8'));
+	if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
+		throw new Error('Each file must hold exactly one build attestation.');
+	}
+	return attestation;
+}
 
 function addBlob({ bytes, digest }) {
 	const relativePath = `blobs/sha256/${digest.slice('sha256:'.length)}.json`;

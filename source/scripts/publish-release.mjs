@@ -37,6 +37,8 @@ const tag = `catalog-v${sequence}`;
 const outputRoot = releaseOutputRoot(process.argv[4]);
 const approvalPath = join(outputRoot, 'catalog-approval.json');
 const targetBucket = process.argv[5]?.trim();
+// GitLab's build proof of the tag, which only `prepare` takes.
+const gitlabAttestationPath = process.argv[6];
 const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
 if (publicationEnvironment !== 'staging' && publicationEnvironment !== 'prod') {
 	throw new Error('CATALOG_PUBLICATION_ENVIRONMENT must be staging or prod.');
@@ -66,7 +68,7 @@ if (action === 'prepare') {
 	await repairRelease();
 } else {
 	throw new Error(
-		'Use: publish-release.mjs <prepare|prepare-placeholder|repair> <sequence> <release-output-dir> [r2-bucket]'
+		'Use: publish-release.mjs <prepare|prepare-placeholder|repair> <sequence> <release-output-dir> [r2-bucket] [gitlab-attestation]'
 	);
 }
 
@@ -100,6 +102,10 @@ async function preparePlaceholderRelease() {
 }
 
 async function prepareRelease() {
+	// The GitHub release keeps the file under this name.
+	if (basename(gitlabAttestationPath ?? '') !== 'gitlab-attestation.jsonl') {
+		throw new Error("prepare requires GitLab's build proof of the tag, gitlab-attestation.jsonl.");
+	}
 	requireCommands(['gh', 'git']);
 	requireStorageEnvironment();
 	requireCleanTaggedSource();
@@ -116,7 +122,8 @@ async function prepareRelease() {
 				'source/scripts/create-release.mjs',
 				String(sequence),
 				outputRoot,
-				join(proposalRoot, 'github-attestation.jsonl')
+				join(proposalRoot, 'github-attestation.jsonl'),
+				gitlabAttestationPath
 			],
 			commandEnvironment(process.execPath)
 		);
@@ -141,13 +148,6 @@ function readPreparedRelease() {
 	requireStorageEnvironment();
 	verifyChecksums(outputRoot);
 	const approval = parseEnvelope(approvalPath);
-	if (
-		!approval.provenance ||
-		typeof approval.provenance !== 'object' ||
-		Array.isArray(approval.provenance)
-	) {
-		throw new Error('Catalog approval requires one GitHub proof.');
-	}
 	const proof = approval.provenance;
 	if (proof?.predicateType === 'https://stogas.ai/attestations/staging-development/v1') {
 		if (
@@ -417,6 +417,15 @@ async function requireImmutableReadbacks(paths, root) {
 function publishGitHubRelease(envelope) {
 	run('gh', [
 		'release',
+		'upload',
+		tag,
+		gitlabAttestationPath,
+		'--repo',
+		'StogasAI/catalog',
+		'--clobber'
+	]);
+	run('gh', [
+		'release',
 		'edit',
 		tag,
 		'--repo',
@@ -428,7 +437,7 @@ function publishGitHubRelease(envelope) {
 		[
 			`Catalog: ${envelope.document.artifacts[CATALOG_ROOT].sha256}`,
 			'',
-			'Stogas rebuilt the catalog from its own copy of the source and got the same SHA-256 value before approving it.'
+			"GitLab.com's hosted runners compiled this release from its tag and made the same manifest and catalog. `gitlab-attestation.jsonl` holds their signed build proof."
 		].join('\n')
 	]);
 }

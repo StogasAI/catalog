@@ -169,11 +169,16 @@ describe('catalog release metadata', () => {
 			const proofPath = join(output, 'attestation.json');
 			const proof = { testAttestation: true };
 			writeFileSync(proofPath, JSON.stringify(proof));
-			const result = Bun.spawnSync(
-				['node', 'source/scripts/create-release.mjs', '7', output, proofPath],
-				{ cwd: process.cwd() }
-			);
-			expect(result.exitCode).toBe(0);
+			const gitlabProofPath = join(output, 'gitlab-attestation.json');
+			const gitlabProof = { testAttestation: 'gitlab' };
+			writeFileSync(gitlabProofPath, JSON.stringify(gitlabProof));
+			const create = (...proofs: string[]) =>
+				Bun.spawnSync(['node', 'source/scripts/create-release.mjs', '7', output, ...proofs], {
+					cwd: process.cwd()
+				});
+			// A build proof that is no staging placeholder needs GitLab's beside it.
+			expect(create(proofPath).exitCode).not.toBe(0);
+			expect(create(proofPath, gitlabProofPath).exitCode).toBe(0);
 
 			// Control lists the approval in signed evidence, so only the root and the parts that it
 			// names are published.
@@ -181,8 +186,9 @@ describe('catalog release metadata', () => {
 			const envelopeBytes = readFileSync(join(output, 'catalog-approval.json'));
 			expect(envelopeBytes.byteLength).toBeLessThanOrEqual(64 * 1024);
 			const envelope = JSON.parse(envelopeBytes.toString());
-			expect(Object.keys(envelope).sort()).toEqual(['document', 'provenance']);
+			expect(Object.keys(envelope).sort()).toEqual(['document', 'gitlab_provenance', 'provenance']);
 			expect(envelope.provenance).toEqual(proof);
+			expect(envelope.gitlab_provenance).toEqual(gitlabProof);
 			expect(envelope.document.schema).toBe('stogas.catalog.release.v2');
 			const { minimum_gateway_release } = JSON.parse(
 				readFileSync('source/release-policy.json', 'utf8')
@@ -235,6 +241,12 @@ describe('catalog release metadata', () => {
 				{ ...envelope, schema: 'extra' },
 				{ ...envelope, signature: { key_id: 'key', signature: 'AA' } },
 				{ ...envelope, provenance: [proof] },
+				{ ...envelope, gitlab_provenance: [gitlabProof] },
+				{ document: envelope.document, provenance: proof },
+				{
+					...envelope,
+					provenance: stagingDevelopmentProvenance(envelope.document)
+				},
 				{ ...envelope, manifest: envelope.document },
 				{ ...envelope, document: { ...envelope.document, extra: true } },
 				{ ...envelope, document: { ...envelope.document, schema: 'stogas.catalog.release.v1' } },
@@ -295,7 +307,7 @@ process.on('exit', () => writeFileSync('stored.json', JSON.stringify([...objects
 		writeFileSync(proofPath, JSON.stringify({ testAttestation: true }));
 		const release = join(root, 'release/catalog-v7');
 		const created = Bun.spawnSync(
-			['node', 'source/scripts/create-release.mjs', '7', release, proofPath],
+			['node', 'source/scripts/create-release.mjs', '7', release, proofPath, proofPath],
 			{ cwd: process.cwd() }
 		);
 		expect(created.exitCode).toBe(0);
