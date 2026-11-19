@@ -11,6 +11,7 @@ const allowedDomains = new Set([
 	'developers.openai.com',
 	'docs.aws.amazon.com',
 	'docs.mistral.ai',
+	'docs.x.ai',
 	'github.com',
 	'huggingface.co',
 	'learn.microsoft.com',
@@ -18,7 +19,9 @@ const allowedDomains = new Set([
 	'prices.azure.com',
 	'pricing.us-east-1.amazonaws.com',
 	'platform.claude.com',
-	'www.alibabacloud.com'
+	'platform.kimi.ai',
+	'www.alibabacloud.com',
+	'x.ai'
 ]);
 
 function validDate(value: string) {

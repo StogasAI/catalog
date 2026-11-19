@@ -262,14 +262,14 @@ const OPENAI_RESIDENCY_LOCATIONS = {
 const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
 
 /**
- * The data handling that a deployment's upstream fields decide, which its record takes without
- * stating it: an inference geography says where inference runs, an OpenAI data residency region also stores
- * there, an Azure Data Zone that Microsoft
- * runs keeps processing and storage in its zone, Microsoft's preview terms for Instant and Flex
- * drop its commitments on storage, retention and training, and only some Azure model formats keep
- * prompt caches apart.
+ * The data handling that a deployment's upstream fields and preview status decide, which its record
+ * takes without stating it: an inference geography says where inference runs, an OpenAI data
+ * residency region also stores there, an Azure Data Zone that Microsoft runs keeps processing and
+ * storage in its zone, Microsoft's preview terms, which cover Instant, Flex and the models that
+ * Azure lists as previews, let it process and store data in any country and drop its commitments
+ * on retention and training, and only some Azure model formats keep prompt caches apart.
  */
-function selectedDataHandling(graph, providerId, hosting, upstream) {
+function selectedDataHandling(graph, providerId, hosting, { upstream, preview }) {
 	const selected = {};
 	// Anthropic runs a request that names no geography anywhere in the world.
 	const geo = upstream.inferenceGeo ?? (providerId === 'anthropic' ? 'global' : undefined);
@@ -288,7 +288,8 @@ function selectedDataHandling(graph, providerId, hosting, upstream) {
 		selected.processingLocation = AZURE_DATA_ZONE_LOCATIONS[zone];
 		selected.storageLocation = AZURE_DATA_ZONE_LOCATIONS[zone];
 	}
-	if (upstream.deploymentType === 'instant' || upstream.serviceTier === 'flex') {
+	if (preview || upstream.deploymentType === 'instant' || upstream.serviceTier === 'flex') {
+		selected.processingLocation = 'world';
 		selected.storageLocation = 'unknown';
 		selected.retentionDays = null;
 		selected.trainingUse = null;
@@ -943,7 +944,7 @@ function servedFacts(graph, model, deployment, hosting) {
 		const dataHandling = mergeFacts(
 			mergeFacts(
 				route.dataHandling,
-				selectedDataHandling(graph, route.providerId, hosting, deployment.upstream)
+				selectedDataHandling(graph, route.providerId, hosting, deployment)
 			),
 			overrides.dataHandling ?? {}
 		);
@@ -1106,9 +1107,16 @@ function validateServedFacts(
 			throw new Error(`${deploymentId}.overrides.hostedTools.${tool} may only remove a tool`);
 		}
 	}
-	// A provider can always reason, or never, where the model leaves it to the request.
-	if (overrides.reasoning !== undefined && model.reasoning !== 'optional') {
-		throw new Error(`${deploymentId}.overrides.reasoning may only narrow optional reasoning`);
+	// A provider decides whether its deployment always reasons, never reasons or lets the request
+	// choose, as a host's chat template can let a request turn off reasoning that the model's author
+	// always uses. No provider gives reasoning to a model that has none.
+	if (overrides.reasoning !== undefined && model.reasoning === 'unsupported') {
+		throw new Error(`${deploymentId}.overrides.reasoning gives reasoning to a model without it`);
+	}
+	if (overrides.reasoning === model.reasoning) {
+		throw new Error(
+			`${deploymentId}.overrides.reasoning does not change what the deployment serves`
+		);
 	}
 	if (
 		served.reasoning === 'unsupported' &&
@@ -1929,13 +1937,19 @@ function compileGraph(source, places, companies) {
 			companies
 		);
 		rejectMaskedOverrides(graph, deploymentId, model, deployment, served, hosting);
-		// Its upstream fields decide these facts, so an override cannot restate or change them.
-		for (const field of Object.keys(
-			selectedDataHandling(graph, providerId, hosting, deployment.upstream)
-		))
+		if (
+			deployment.preview &&
+			(providerId !== 'azure' || hosting !== graph.providers.azure.companyId)
+		)
+			throw new Error(
+				`${deploymentId}.preview names Microsoft's terms for the models that it runs on Azure`
+			);
+		// Its upstream fields and preview status decide these facts, so an override cannot restate or
+		// change them.
+		for (const field of Object.keys(selectedDataHandling(graph, providerId, hosting, deployment)))
 			if (Object.hasOwn(deployment.overrides?.dataHandling ?? {}, field))
 				throw new Error(
-					`${deploymentId}.overrides.dataHandling.${field} follows from its upstream fields`
+					`${deploymentId}.overrides.dataHandling.${field} follows from its upstream fields or preview status`
 				);
 		// The provider's company and the hosting receive every request, so sharedWith names neither.
 		for (const [routeId, route] of Object.entries(served.routes))

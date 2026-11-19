@@ -1,0 +1,22 @@
+deployments:
+  modelId: gpt-5.6-terra
+  routeIds: [azure-chat-completions, azure-responses]
+  upstream:
+    model: gpt-5.6-terra
+    modelFormat: OpenAI
+    modelVersion: '2026-07-09'
+    deploymentType: data_zone_standard_apac
+  retirementDate: 2028-01-11
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2.4'
+      per_mill_context_gt_272k: '4.8'
+    cached_input_tokens:
+      per_mill_tokens: '0.24'
+      per_mill_context_gt_272k: '0.48'
+    cache_write_input_tokens:
+      per_mill_tokens: '3'
+      per_mill_context_gt_272k: '6'
+    output_tokens:
+      per_mill_tokens: '14.4'
+      per_mill_context_gt_272k: '21.6'

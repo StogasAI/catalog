@@ -12,14 +12,22 @@
 			"https://huggingface.co/google/gemma-4-26B-A4B/blob/24548b62aa021d562695c04aaf7758a1ea47990b/tokenizer.json"
 		],
 		"minimax": ["https://huggingface.co/MiniMaxAI"],
-		"mistral-ai": ["https://docs.mistral.ai/getting-started/models/models_overview/"],
-		"moonshot-ai": ["https://huggingface.co/moonshotai"],
+		"mistral-ai": [
+			"https://docs.mistral.ai/getting-started/models/models_overview/",
+			"https://docs.mistral.ai/models/mistral-large-4-0",
+			"https://huggingface.co/mistralai"
+		],
+		"moonshot-ai": [
+			"https://huggingface.co/moonshotai",
+			"https://platform.kimi.ai/docs/guide/kimi-k3-1-pro-quickstart"
+		],
 		"nvidia": [
 			"https://huggingface.co/nvidia",
 			"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8/blob/744b1880a37996c5d56bf454ae164dfd74d77c4e/tokenizer.json",
 			"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16/blob/77df655d5e9f8362164ed14dd8b48f8bce657498/tokenizer.json"
 		],
 		"openai": ["https://developers.openai.com/api/docs/models"],
+		"spacex": ["https://docs.x.ai/docs/models", "https://x.ai/news"],
 		"tencent": [
 			"https://huggingface.co/tencent/Hy4",
 			"https://github.com/TencentCloud/octop-harness/pull/225"

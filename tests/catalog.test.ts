@@ -35,7 +35,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 11, models: 71, providers: 6, routes: 20, deployments: 624 });
+		).toEqual({ authors: 12, models: 77, providers: 6, routes: 20, deployments: 642 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -82,7 +82,7 @@ describe('compiled catalog', () => {
 				)
 				.map(([id, deployment]) => [id, deployment.upstream.model])
 		);
-		expect(Object.keys(selectors)).toHaveLength(152);
+		expect(Object.keys(selectors)).toHaveLength(170);
 		expect(selectors).toMatchObject({
 			'azure-claude-opus-5-5': 'claude-opus-5-5',
 			'azure-claude-opus-5-5-anthropic-hosted': 'claude-opus-5-5',
@@ -352,7 +352,7 @@ describe('compiled catalog', () => {
 		expect(models['claude-opus-4-1']).toMatchObject({ succeeds: null });
 		expect(models['kimi-k3']).toMatchObject({
 			succeeds: 'kimi-k2.6',
-			successorIds: [],
+			successorIds: ['kimi-k3.1-pro'],
 			weightsUrl: 'https://huggingface.co/moonshotai/Kimi-K3'
 		});
 		for (const [modelId, model] of Object.entries(models)) {

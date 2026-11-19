@@ -247,7 +247,53 @@ otherTargets.push(
 			modelFormat: 'Fireworks',
 			modelVersion: '1'
 		}
-	}
+	},
+	{
+		id: 'azure-grok-4.6',
+		modelId: 'grok-4.6',
+		routeIds: ['azure-chat-completions'],
+		hosting: 'microsoft',
+		upstream: {
+			deploymentType: 'global_standard',
+			model: 'grok-4.6',
+			modelFormat: 'xAI',
+			modelVersion: '1'
+		}
+	},
+	{
+		id: 'azure-kimi-k3.1-pro',
+		modelId: 'kimi-k3.1-pro',
+		routeIds: ['azure-chat-completions'],
+		hosting: 'microsoft',
+		upstream: {
+			deploymentType: 'global_standard',
+			model: 'Kimi-K3.1-Pro',
+			modelFormat: 'MoonshotAI',
+			modelVersion: '2026-11-04'
+		}
+	},
+	...(
+		[
+			['grok-4.7', 'grok-4.7', 'xAI', ['global', 'us']],
+			['mistral-large-2512', 'Mistral-Large-3', 'Mistral AI', ['global', 'eu', 'us']],
+			['mistral-large-4', 'mistral-large-4-latest', 'Mistral AI', ['global', 'eu', 'us']],
+			['mistral-medium-3-5', 'mistral-medium-3-5', 'Mistral AI', ['global', 'eu', 'us']]
+		] as const
+	).flatMap(([modelId, model, modelFormat, locations]) =>
+		locations.map((location) => ({
+			id: `azure-${modelId}${location === 'global' ? '' : `-${location}`}`,
+			modelId,
+			routeIds: ['azure-chat-completions'],
+			hosting: 'microsoft',
+			upstream: {
+				deploymentType:
+					location === 'global' ? 'global_standard' : `data_zone_standard_${location}`,
+				model,
+				modelFormat,
+				modelVersion: '1'
+			}
+		}))
+	)
 );
 
 // Independent exact arithmetic for the reviewed price relationships.
@@ -334,10 +380,14 @@ describe('Azure provider onboarding contract', () => {
 			...gptTargets(
 				'gpt-5.5-2026-04-23',
 				'2026-04-24',
-				[...standardNodes, ['fast', 'global'], ['fast', 'us']],
+				[...standardNodes, ['standard', 'apac'], ['fast', 'global'], ['fast', 'us']],
 				{ model: 'gpt-5.5', pro: false }
 			),
-			...gptTargets('gpt-5.6-luna', '2026-07-09', [...standardNodes, ['flex', 'global']]),
+			...gptTargets('gpt-5.6-luna', '2026-07-09', [
+				...standardNodes,
+				['standard', 'apac'],
+				['flex', 'global']
+			]),
 			...gptTargets('gpt-5.6-sol', '2026-07-09', [
 				...standardNodes,
 				['standard', 'apac'],
@@ -346,6 +396,7 @@ describe('Azure provider onboarding contract', () => {
 			]),
 			...gptTargets('gpt-5.6-terra', '2026-07-09', [
 				...standardNodes,
+				['standard', 'apac'],
 				['flex', 'global'],
 				['fast', 'global']
 			]),
@@ -539,9 +590,13 @@ describe('Azure provider onboarding contract', () => {
 	test('pins GPT-5.5 prices, windows, and retirement for every location and tier', () => {
 		for (const [, deployment] of azureDeployments()) {
 			if (deployment.modelId !== 'gpt-5.5-2026-04-23') continue;
-			const zoneTenths = deployment.upstream.deploymentType.startsWith('data_zone_standard_')
-				? 11n
-				: 10n;
+			// US and EU Data Zones cost 1.1 times Global, and the Asia Pacific Data Zone 1.2 times.
+			const zoneTenths =
+				deployment.upstream.deploymentType === 'data_zone_standard_apac'
+					? 12n
+					: deployment.upstream.deploymentType.startsWith('data_zone_standard_')
+						? 11n
+						: 10n;
 			if (deployment.upstream.serviceTier === 'fast') {
 				// Priority has short prompt meters only, at 2.5 times the Standard rates.
 				const rate = (value: string) => ({
@@ -619,7 +674,12 @@ describe('Azure provider onboarding contract', () => {
 			'azure-deepseek-v4-flash-0423-us': ['0.21', '0.031', '0.56'],
 			'azure-deepseek-v4-pro': ['1.74', '0.145', '3.48'],
 			'azure-deepseek-v4-pro-us': ['1.91', '0.16', '3.83'],
-			'azure-minimax-m3-fireworks-hosted-us': ['0.33', '0.066', '1.32']
+			'azure-grok-4.6': ['2', '0.5', '6'],
+			'azure-kimi-k3.1-pro': ['2.3', '0.23', '11.5'],
+			'azure-minimax-m3-fireworks-hosted-us': ['0.33', '0.066', '1.32'],
+			'azure-mistral-large-4': ['0.7', '0.07', '2.1'],
+			'azure-mistral-large-4-eu': ['0.84', '0.084', '2.52'],
+			'azure-mistral-large-4-us': ['0.77', '0.077', '2.31']
 		} as const;
 		const deployments = catalog.graph.deployments;
 		for (const [id, [input, cached, output]] of Object.entries(expected)) {
@@ -638,11 +698,53 @@ describe('Azure provider onboarding contract', () => {
 			input_tokens: { per_mill_tokens: '0.165' },
 			output_tokens: { per_mill_tokens: '0.66' }
 		});
+		// Nor for Mistral Large 3 and Mistral Medium 3.5.
+		for (const [id, input, output] of [
+			['azure-mistral-large-2512', '0.5', '1.5'],
+			['azure-mistral-large-2512-eu', '0.55', '1.65'],
+			['azure-mistral-large-2512-us', '0.55', '1.65'],
+			['azure-mistral-medium-3-5', '1.5', '7.5'],
+			['azure-mistral-medium-3-5-eu', '1.65', '8.25'],
+			['azure-mistral-medium-3-5-us', '1.65', '8.25']
+		] as const) {
+			expect(deployments[id].pricing).toEqual({
+				input_tokens: { per_mill_tokens: input },
+				output_tokens: { per_mill_tokens: output }
+			});
+		}
+		// Grok 4.7 bills every token of a prompt above 200,000 tokens at twice the rate.
+		for (const [id, [input, cached, output]] of [
+			['azure-grok-4.7', ['2', '0.5', '6']],
+			['azure-grok-4.7-us', ['2.2', '0.55', '6.6']]
+		] as const) {
+			const twice = (rate: string) => String(Number(rate) * 2);
+			expect(deployments[id].pricing).toEqual({
+				cached_input_tokens: { per_mill_tokens: cached, per_mill_context_gt_200k: twice(cached) },
+				input_tokens: { per_mill_tokens: input, per_mill_context_gt_200k: twice(input) },
+				output_tokens: { per_mill_tokens: output, per_mill_context_gt_200k: twice(output) }
+			});
+		}
 	});
 
 	test('keeps public regions conservative and does not invent capacity-metered deployments', () => {
-		for (const [, deployment] of azureDeployments()) {
+		// Microsoft's preview terms let it process and store data of these models in any country.
+		const previews = new Set([
+			'azure-mistral-large-4-eu',
+			'azure-mistral-large-4-us',
+			'azure-mistral-medium-3-5-eu',
+			'azure-mistral-medium-3-5-us'
+		]);
+		for (const [id, deployment] of azureDeployments()) {
 			for (const { dataHandling: handling } of Object.values(deployment.routes)) {
+				if (previews.has(id)) {
+					expect(handling).toMatchObject({
+						processingLocation: 'world',
+						retentionDays: null,
+						storageLocation: 'unknown',
+						trainingUse: null
+					});
+					continue;
+				}
 				if (
 					deployment.hosting === 'microsoft' &&
 					deployment.upstream.deploymentType === 'data_zone_standard_us'

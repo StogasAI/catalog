@@ -1369,6 +1369,17 @@ describe('catalog source compiler invariants', () => {
 			expect(deployment.routes['openai-responses'].hostedTools).toEqual({});
 		});
 
+		test('lets a request turn off reasoning that the model always uses', () => {
+			const valid = changed((source) => {
+				source.graph.models['gpt-test'].reasoning = 'required';
+				source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'optional' };
+			});
+			expect(buildCatalog(valid).graph.deployments['openai-gpt-test']).toMatchObject({
+				reasoning: 'optional',
+				routes: { 'openai-responses': { reasoningEfforts: ['low', 'high'] } }
+			});
+		});
+
 		testRejections([
 			[
 				'redundant context',
@@ -1411,12 +1422,19 @@ describe('catalog source compiler invariants', () => {
 				'overrides.hostedTools.web_fetch does not change what the deployment serves'
 			],
 			[
-				'reasoning that the model requires',
+				'reasoning for a model without it',
 				(source: Source) => {
-					source.graph.models['gpt-test'].reasoning = 'required';
-					source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'unsupported' };
+					source.graph.models['gpt-test'].reasoning = 'unsupported';
+					source.graph.models['gpt-test'].reasoningEfforts = [];
+					source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'optional' };
 				},
-				'overrides.reasoning may only narrow optional reasoning'
+				'overrides.reasoning gives reasoning to a model without it'
+			],
+			[
+				'reasoning that the model states',
+				(source: Source) =>
+					(source.graph.deployments['openai-gpt-test'].overrides = { reasoning: 'optional' }),
+				'overrides.reasoning does not change what the deployment serves'
 			],
 			[
 				'unsupported reasoning with efforts',

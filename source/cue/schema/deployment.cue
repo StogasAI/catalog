@@ -27,7 +27,7 @@ package catalog
 	gpuCount?: int & >=1 & <=8
 })
 
-#AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "OpenAI" | "OpenAI-OSS"
+#AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "Mistral AI" | "MoonshotAI" | "OpenAI" | "OpenAI-OSS" | "xAI"
 
 // The type of Azure deployment that a customer creates. Data Zone types keep processing and
 // storage in their zone, and the batch types serve only the batch routes.
@@ -90,6 +90,8 @@ package catalog
 	upstream: #Upstream
 	// The provider serves this deployment only to accounts it has approved.
 	approvalRequired?: true
+	// Azure lists the deployment's model as a preview, whose terms decide its data handling.
+	preview?: true
 	// Omitted when the provider does not state it; the compiler writes unknown.
 	weightPrecision?: #WeightPrecision
 	// The date that the provider names for the deployment's shutdown or
@@ -106,7 +108,7 @@ package catalog
 	notes?:         #Note
 	// Narrower facts than the deployment inherits from its model and routes, on all of its routes.
 	// Any fact that a provider's offer of a model can change has one: limits, modalities,
-	// capabilities, sampling, reasoning and hosted tools only narrow, and the provider's own values
+	// capabilities, sampling, efforts and hosted tools only narrow, and the provider's own values
 	// replace the model's. What the model is, such as its release date, and what a route's API
 	// accepts, such as its interfaces and document formats, have none: a different checkpoint is
 	// another model, and a different API is another route.
@@ -117,8 +119,10 @@ package catalog
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
 		capabilities?: #UnsupportedCapabilities
-		// Optional reasoning that the provider always uses, or never uses, for this deployment.
-		reasoning?: "required" | "unsupported"
+		// Whether the deployment always reasons, never reasons or lets the request choose, where
+		// its provider differs from the model's author. No provider gives reasoning to a model that
+		// has none.
+		reasoning?: #Reasoning
 		reasoningEfforts?: [...#ReasoningEffort]
 		reasoningMaxTokens?: null | #ReasoningMaxTokens
 		// What this provider's deployment does without a reasoning control, or null when it is

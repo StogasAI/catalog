@@ -1,0 +1,26 @@
+deployments:
+  modelId: gpt-5.5-2026-04-23
+  routeIds: [azure-chat-completions, azure-responses]
+  upstream:
+    model: gpt-5.5
+    modelFormat: OpenAI
+    modelVersion: '2026-04-24'
+    deploymentType: data_zone_standard_apac
+  retirementDate: 2027-10-26
+  overrides:
+    # Azure caches prompts of 1,024 tokens or more on every OpenAI model. Reviewed 2026-11-15:
+    # https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/prompt-caching
+    promptCacheMinimumTokens: 1024
+    # Microsoft caps the GPT-5.5 Responses prompt and output together at about 922,000 tokens.
+    # Reviewed 2026-10-13: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#responses-api-token-budget
+    contextWindowTokens: 922000
+  pricing:
+    input_tokens:
+      per_mill_tokens: '6'
+      per_mill_context_gt_272k: '12'
+    cached_input_tokens:
+      per_mill_tokens: '0.6'
+      per_mill_context_gt_272k: '1.2'
+    output_tokens:
+      per_mill_tokens: '36'
+      per_mill_context_gt_272k: '54'
