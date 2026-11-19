@@ -109,7 +109,7 @@ const certificationIncludes = {
 };
 // Hosted tools in canonical order, and the call meters that each may charge. A request's content
 // that a tool reads bills as input tokens, so only web search has call meters.
-const hostedToolIds = ['web_search', 'web_fetch'];
+const hostedToolIds = ['web_search', 'web_fetch', 'mcp'];
 const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
 const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
 const openaiWebSearchMeters = [
@@ -119,7 +119,21 @@ const openaiWebSearchMeters = [
 ];
 const hostedToolMeters = {
 	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
-	web_fetch: []
+	web_fetch: [],
+	mcp: []
+};
+// The request names the server that a remote MCP tool sends content to, so the catalog knows no
+// fact about it.
+const unknownDestination = {
+	processingLocation: 'unknown',
+	storageLocation: 'unknown',
+	retentionDays: null,
+	trainingUse: null,
+	zeroDataRetention: false,
+	endToEndEncrypted: false,
+	tee: false,
+	teeVerified: false,
+	sharedWith: ['unknown']
 };
 const maxAliasesPerNode = 8;
 // Chutes selects an instance of an end-to-end encrypted route by the GPU count that the encrypted
@@ -1177,6 +1191,17 @@ function validateServedFacts(
 				}
 			}
 		}
+		if (route.hostedTools.mcp) {
+			const { withoutCertifications = [], ...effect } = route.hostedTools.mcp.dataHandling;
+			if (
+				!same(effect, unknownDestination) ||
+				route.dataHandling.certifications.some((id) => !withoutCertifications.includes(id))
+			) {
+				throw new Error(
+					`${deploymentId} on ${routeId}: mcp states every data handling fact as unknown and removes every certification`
+				);
+			}
+		}
 		// Each wire charges web search on its own meters, so an offer must price exactly those.
 		if (route.hostedTools.web_search) {
 			const required = anthropicWire ? anthropicWebSearchMeters : openaiWebSearchMeters;
@@ -1506,6 +1531,10 @@ function compileGraph(source, places, companies) {
 					dataHandling.certifications
 				);
 				// The provider's company runs the models of a route that names no other hosting.
+				// A managed account is ours, and a request must not make the provider call a server
+				// that it names in our name, with results whose size no hold bounds.
+				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'mcp'))
+					throw new Error(`${routeId}: a route with a managed credential offers no mcp tool`);
 				if (route.hosting === provider.companyId)
 					throw new Error(`${routeId}.hosting redundantly repeats its provider's company`);
 				if (route.hosting !== undefined && !isCompany(companies, route.hosting))

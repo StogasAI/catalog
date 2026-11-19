@@ -2267,6 +2267,47 @@ describe('catalog source compiler invariants', () => {
 			);
 		});
 
+		test('states nothing about the server that a remote MCP tool names', () => {
+			const unknown = {
+				processingLocation: 'unknown',
+				storageLocation: 'unknown',
+				retentionDays: null,
+				trainingUse: null,
+				zeroDataRetention: false,
+				endToEndEncrypted: false,
+				tee: false,
+				teeVerified: false,
+				sharedWith: ['unknown']
+			};
+			const offer = (dataHandling: object) =>
+				changed((candidate) => {
+					candidate.graph.providers.openai.dataHandling.certifications = [
+						'soc2-type2',
+						'iso-27001'
+					];
+					candidate.graph.routes['openai-responses'].hostedTools = [{ tool: 'mcp', dataHandling }];
+				});
+			const refusal =
+				'openai-gpt-test on openai-responses: mcp states every data handling fact as unknown and removes every certification';
+			expect(() =>
+				buildCatalog(offer({ ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] }))
+			).not.toThrow();
+			// A fact that the offer leaves out would keep the deployment's value for the server.
+			const { trainingUse: _, ...untrained } = unknown;
+			expect(() =>
+				buildCatalog(offer({ ...untrained, withoutCertifications: ['soc2-type2', 'iso-27001'] }))
+			).toThrow(refusal);
+			expect(() =>
+				buildCatalog(offer({ ...unknown, withoutCertifications: ['soc2-type2'] }))
+			).toThrow(refusal);
+			// Our own provider account never calls a server that a request names.
+			const managed = offer({ ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] });
+			managed.graph.providers.openai.stogasManaged = true;
+			expect(() => buildCatalog(managed)).toThrow(
+				'openai-responses: a route with a managed credential offers no mcp tool'
+			);
+		});
+
 		test('lists the certifications of the company that runs a deployment', () => {
 			const certifications = (source: Source, id = 'azure-gpt-test') =>
 				buildCatalog(source).graph.deployments[id].routes['azure-responses'].dataHandling

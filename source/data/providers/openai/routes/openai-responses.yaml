@@ -234,7 +234,9 @@ routes:
       - text/x-zsh
       - text/xml
   # Data handling reviewed 2026-11-03: https://developers.openai.com/api/docs/guides/your-data. Web search
-  # takes the project's US or Europe data residency, as other Responses content does.
+  # takes the project's US or Europe data residency, as other Responses content does. OpenAI sends a
+  # remote MCP tool's calls to the server that the request names, a third party whose policies apply:
+  # https://developers.openai.com/api/docs/guides/tools-connectors-mcp.
   hostedTools:
     - tool: web_search
       pricing:
@@ -244,3 +246,15 @@ routes:
           per_1k_calls: '10'
         openai_responses_web_search_preview_non_reasoning_calls:
           per_1k_calls: '25'
+    - tool: mcp
+      dataHandling:
+        processingLocation: unknown
+        storageLocation: unknown
+        retentionDays: null
+        trainingUse: null
+        zeroDataRetention: false
+        endToEndEncrypted: false
+        tee: false
+        teeVerified: false
+        sharedWith: [unknown]
+        withoutCertifications: [soc2-type2, iso-27001, iso-27017, iso-27018, iso-27701]
