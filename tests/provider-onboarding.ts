@@ -19,6 +19,7 @@ export type DataHandlingContract = {
 	zeroDataRetention: boolean;
 	tee: boolean;
 	teeVerified: boolean;
+	isolatedPromptCache: boolean;
 	/** The companies, other than the provider's and the hosting, that receive requests. */
 	sharedWith?: string[];
 	/** The audits and authorizations that name the service. */

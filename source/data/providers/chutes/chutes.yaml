@@ -7,6 +7,8 @@ providers:
   # content for as long as processing needs it, and name no place or period. Chutes does not
   # train on content.
   # Reviewed 2026-11-09: https://chutes.ai/terms and https://chutes.ai/privacy
+  # A cached prompt reads as cached tokens for a request with another cache_salt or none (recorded
+  # 2026-11-19), and Chutes' instances serve every account, so no account's prompt cache stays apart.
   dataHandling:
     processingLocation: world
     storageLocation: unknown

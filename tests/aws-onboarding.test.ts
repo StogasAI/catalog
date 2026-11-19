@@ -51,6 +51,7 @@ const providerHandling: DataHandlingContract = {
 		'hipaa-eligible'
 	],
 	endToEndEncrypted: false,
+	isolatedPromptCache: true,
 	processingLocation: 'world',
 	retentionDays: null,
 	storageLocation: 'unknown',

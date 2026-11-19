@@ -81,6 +81,11 @@ providers:
     storageLocation: unknown
     retentionDays: 0
     trainingUse: false
+    # Azure OpenAI does not share prompt caches between subscriptions, and Claude keeps them apart
+    # between organizations and workspaces on Foundry. The build drops this for other model formats.
+    # Reviewed 2026-11-19: https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/prompt-caching
+    # and https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    isolatedPromptCache: true
     certifications:
       - soc2-type2
       - iso-27001

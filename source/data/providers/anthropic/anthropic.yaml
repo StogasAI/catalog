@@ -34,4 +34,7 @@ providers:
     storageLocation: unknown
     retentionDays: 30
     trainingUse: false
+    # Organizations never share prompt caches, and the Claude API also keeps them apart between
+    # workspaces. Reviewed 2026-11-19: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    isolatedPromptCache: true
     certifications: [soc2-type2, iso-27001, iso-42001, hipaa-eligible]

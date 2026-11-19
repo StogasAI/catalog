@@ -50,7 +50,8 @@ const dataHandling = {
 	trainingUse: false,
 	zeroDataRetention: false,
 	tee: true,
-	teeVerified: false
+	teeVerified: false,
+	isolatedPromptCache: false
 };
 const deployments: ProviderDeploymentContract[] = [
 	deployment(

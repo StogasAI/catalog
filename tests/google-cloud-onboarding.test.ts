@@ -42,6 +42,7 @@ const providerHandling: DataHandlingContract = {
 		'csa-star-level-2'
 	],
 	endToEndEncrypted: false,
+	isolatedPromptCache: true,
 	processingLocation: 'world',
 	retentionDays: null,
 	storageLocation: 'unknown',

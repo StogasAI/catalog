@@ -1690,6 +1690,7 @@ describe('catalog source compiler invariants', () => {
 			zeroDataRetention: false,
 			tee: false,
 			teeVerified: false,
+			isolatedPromptCache: false,
 			sharedWith: [],
 			certifications: []
 		});
@@ -2305,6 +2306,17 @@ describe('catalog source compiler invariants', () => {
 			managed.graph.providers.openai.stogasManaged = true;
 			expect(() => buildCatalog(managed)).toThrow(
 				'openai-responses: a route with a managed credential offers no mcp tool'
+			);
+		});
+
+		test('keeps a managed account from stating an isolated prompt cache', () => {
+			const isolated = changed((source) => {
+				source.graph.providers.openai.dataHandling.isolatedPromptCache = true;
+			});
+			expect(() => buildCatalog(isolated)).not.toThrow();
+			isolated.graph.providers.openai.stogasManaged = true;
+			expect(() => buildCatalog(isolated)).toThrow(
+				'a route with a managed credential shares its prompt cache'
 			);
 		});
 

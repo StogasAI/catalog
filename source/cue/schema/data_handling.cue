@@ -17,6 +17,9 @@ package catalog
 	// teeVerified is true only when Stogas verifies the approved measured
 	// workload for the concrete request target, independent of provider claims.
 	teeVerified?: true
+	// isolatedPromptCache means the provider keeps each account's prompt cache apart, so that no
+	// other account can learn from cached token counts or response times what one account sent.
+	isolatedPromptCache?: true
 	// The companies, other than the provider's company and the hosting, that receive requests and
 	// responses: one that passes them on to the hosting, or one that the hosting shares them with,
 	// such as the model's developer for abuse monitoring. A company that only supplies
@@ -66,11 +69,12 @@ package catalog
 #DeploymentDataHandlingOverride: close({
 	processingLocation?: #ProcessingLocation
 	storageLocation?:    #StorageLocation
-	retentionDays?:     null | (int & >=0)
-	trainingUse?:       null | bool
-	zeroDataRetention?: bool
-	tee?:               bool
-	teeVerified?:       bool
+	retentionDays?:       null | (int & >=0)
+	trainingUse?:         null | bool
+	zeroDataRetention?:   bool
+	tee?:                 bool
+	teeVerified?:         bool
+	isolatedPromptCache?: bool
 	sharedWith?: [...#CompanyRef]
 	certifications?: [...#Certification]
 })

@@ -303,6 +303,7 @@ describe('compiled catalog', () => {
 		const dataHandlingFields = [
 			'certifications',
 			'endToEndEncrypted',
+			'isolatedPromptCache',
 			'processingLocation',
 			'retentionDays',
 			'sharedWith',

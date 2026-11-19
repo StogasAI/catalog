@@ -35,6 +35,10 @@ providers:
     storageLocation: unknown
     retentionDays: null
     trainingUse: false
+    # Claude's prompt caches stay apart between organizations on Amazon Bedrock, and also between
+    # workspaces on Claude Platform on AWS. Reviewed 2026-11-19:
+    # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    isolatedPromptCache: true
     certifications:
       - soc2-type2
       - iso-27001

@@ -79,6 +79,7 @@ const dataHandlingFields = [
 	'zeroDataRetention',
 	'tee',
 	'teeVerified',
+	'isolatedPromptCache',
 	'sharedWith',
 	'certifications'
 ];
@@ -264,8 +265,9 @@ const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
  * The data handling that a deployment's upstream fields decide, which its record takes without
  * stating it: an inference geography says where inference runs, an OpenAI data residency region also stores
  * there, an Azure Data Zone that Microsoft
- * runs keeps processing and storage in its zone, and Microsoft's preview terms for Instant and Flex
- * drop its commitments on storage, retention and training.
+ * runs keeps processing and storage in its zone, Microsoft's preview terms for Instant and Flex
+ * drop its commitments on storage, retention and training, and only some Azure model formats keep
+ * prompt caches apart.
  */
 function selectedDataHandling(graph, providerId, hosting, upstream) {
 	const selected = {};
@@ -291,6 +293,10 @@ function selectedDataHandling(graph, providerId, hosting, upstream) {
 		selected.retentionDays = null;
 		selected.trainingUse = null;
 	}
+	// Microsoft keeps prompt caches apart between subscriptions only for its OpenAI models, and
+	// Anthropic between workspaces for Claude. Azure states nothing for the other formats.
+	if (upstream.modelFormat !== 'OpenAI' && upstream.modelFormat !== 'Anthropic')
+		selected.isolatedPromptCache = false;
 	return selected;
 }
 
@@ -665,6 +671,7 @@ function normalizeSourceGraph(sourceGraph, companies) {
 						zeroDataRetention: false,
 						tee: false,
 						teeVerified: false,
+						isolatedPromptCache: false,
 						sharedWith: [],
 						certifications: [],
 						...provider.dataHandling
@@ -1535,6 +1542,9 @@ function compileGraph(source, places, companies) {
 				// that it names in our name, with results whose size no hold bounds.
 				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'mcp'))
 					throw new Error(`${routeId}: a route with a managed credential offers no mcp tool`);
+				// Every customer on our managed account shares its prompt cache.
+				if (modes.stogasManaged && dataHandling.isolatedPromptCache)
+					throw new Error(`${routeId}: a route with a managed credential shares its prompt cache`);
 				if (route.hosting === provider.companyId)
 					throw new Error(`${routeId}.hosting redundantly repeats its provider's company`);
 				if (route.hosting !== undefined && !isCompany(companies, route.hosting))

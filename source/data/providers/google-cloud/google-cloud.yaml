@@ -27,6 +27,9 @@ providers:
     storageLocation: unknown
     retentionDays: null
     trainingUse: false
+    # Organizations never share Claude's prompt caches, on Google Cloud too. Reviewed 2026-11-19:
+    # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    isolatedPromptCache: true
     certifications:
       - soc2-type2
       - iso-27001
