@@ -1337,9 +1337,10 @@ const PLACE_FIELDS = new Set([
 ]);
 
 /**
- * Throws unless a record names each place or a place inside it, in the base graph or a dated
- * state. The catalog lists the places that data can be in, and a place that nothing can be in
- * would only lengthen every list that offers places.
+ * Throws unless a record names each country and subdivision or a place inside it, in the base graph
+ * or a dated state. The catalog lists the places that data can be in, and a place that nothing can
+ * be in would only lengthen every list that offers places. Continents, regions and unions stay,
+ * because access policies name them to limit requests by country.
  */
 function requireNamedPlaces(places, graphs) {
 	const named = new Set();
@@ -1355,7 +1356,7 @@ function requireNamedPlaces(places, graphs) {
 	};
 	for (const graph of graphs) visit(graph);
 	for (const id of places.within.keys())
-		if (!named.has(id))
+		if (!named.has(id) && !places.countries.has(id))
 			throw new Error(`Location ${id}: no record names it or a place inside it, so remove it`);
 }
 

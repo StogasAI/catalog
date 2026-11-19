@@ -1,17 +1,20 @@
 # The places that data handling names. A continent, region or union lists every country that it
-# covers by its ISO 3166-1 code, and what holds each place follows from those lists: a country lies
-# in each smallest region that lists it, a region in each smallest region that lists all of its
-# countries and more, and a subdivision such as US-CA in the country of its code. A place that no
-# region holds lies in world.
+# covers by its ISO 3166-1 code, or XK for Kosovo, and what holds each place follows from those
+# lists: a country lies in each smallest region that lists it, a region in each smallest region that
+# lists all of its countries and more, and a subdivision such as US-CA in the country of its code. A
+# place that no region holds lies in world.
 #
-# The catalog lists a place only when a record names it or a place inside it: a data handling
-# location, a headquartered country or a provider's account location. The build names any other
-# place to remove, so the places that policies and the catalog offer are places that data can be in.
-# A region still lists each of its countries, listed or not, so that readers know what it covers.
+# The catalog lists a country or subdivision only when a record names it or a place inside it: a
+# data handling location, a headquartered country or a provider's account location. The build names
+# any other to remove, so the countries that policies and the catalog offer are countries that data
+# can be in. Every continent, region and union stays, because access policies name them to accept or
+# refuse requests by the country they come from, and each lists all of its countries, listed or not.
 #
 # The continents and the regions within them follow the territory containment of Unicode CLDR 48,
-# from UN M.49, except that europe holds every eu member, Cyprus included. No standard defines
-# apac: it is CLDR Asia and Oceania without the Arab states, Israel, Iran, Cyprus and HM, plus IO.
+# from UN M.49, except that europe holds every eu member, Cyprus included. They leave out the codes
+# that ISO 3166-1 does not assign, such as EA for Ceuta and Melilla, but keep XK, which IP address
+# data uses for Kosovo. No standard defines apac: it is CLDR Asia and Oceania without the Arab
+# states, Israel, Iran, Cyprus and HM, plus IO.
 # CLDR data is under the Unicode License v3 (https://www.unicode.org/license.txt):
 # https://github.com/unicode-org/cldr-json/blob/48.0.0/cldr-json/cldr-core/supplemental/territoryContainment.json
 locations:
@@ -193,6 +196,7 @@ locations:
       - SM
       - UA
       - VA
+      - XK
   north-america:
     name: North America
     kind: continent
