@@ -1,0 +1,63 @@
+# Models other than Claude in Amazon Bedrock:
+# https://bedrock-runtime.{region}.amazonaws.com/openai/v1/chat/completions, called with an
+# inference profile ID and signed as Bedrock's Messages route is. AWS recommends this endpoint and
+# the OpenAI-compatible APIs for the models of other authors. The route keeps nothing between
+# requests, and the gateway serves Responses requests through it.
+# Reviewed 2026-11-20: https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html,
+# https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints.html and
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html
+routes:
+  providerId: aws
+  interfaces: [chat_completions]
+  inputModalities: [text, image]
+  # A tool message carries an image that the model reads, and Bedrock refuses a file there
+  # (capture aws/chat-completions-files). An explicit cache mark is OpenAI's
+  # prompt_cache_breakpoint (capture aws/chat-completions-prompt-caching).
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: true
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+    toolResultImages: true
+    toolResultDocuments: false
+  # The API checks the type of temperature, top_p, top_k, both penalties and seed, and each model
+  # its values. It takes logit_bias with keys that name no token and ignores repetition_penalty
+  # (capture aws/chat-completions-request-fields).
+  sampling:
+    temperature: true
+    topP: true
+    topK: true
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: false
+    seed: true
+    logitBias: false
+  # Bedrock reads a file's type from the extension of its name and lists these types in its
+  # refusal of any other (capture aws/chat-completions-files).
+  documentFormats:
+    extensions: [.csv, .docx, .html, .md, .pdf, .pptx, .txt, .xlsx]
+    mediaTypes:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - text/csv
+      - text/html
+      - text/markdown
+      - text/plain
+  # Bedrock keeps nothing of a request to these models. AWS keeps traffic for abuse detection only
+  # for OpenAI's models and Claude Fable, and may store an image that its scan flags as apparent
+  # child sexual abuse material, to confirm and report it.
+  # Reviewed 2026-11-20: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
+  # and https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html
+  # AWS says nothing about keeping the prompt caches of these models apart between accounts.
+  # Reviewed 2026-11-20: https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+  dataHandling:
+    storageLocation: none
+    retentionDays: 0
+    zeroDataRetention: true
+    isolatedPromptCache: false

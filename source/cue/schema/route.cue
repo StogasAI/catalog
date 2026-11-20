@@ -17,10 +17,12 @@ package catalog
 	structuredOutputs:       bool
 	systemMessages:          bool
 	toolChoice:              bool
-	// A tool result takes the images and documents that a user message takes. Chat Completions
-	// at OpenAI and Azure refuses a file there, and answers 200 for an image that the model
-	// never sees.
-	toolResultAttachments: bool
+	// A tool result takes the images that a user message takes. Chat Completions at OpenAI and
+	// Azure answers 200 for an image there that the model never sees.
+	toolResultImages: bool
+	// A tool result takes the documents that a user message takes. Chat Completions at OpenAI and
+	// Azure refuses a file there, and so does Bedrock's for models other than Claude.
+	toolResultDocuments: bool
 })
 
 // A model or deployment can only take away what its routes offer.
@@ -33,7 +35,8 @@ package catalog
 	structuredOutputs?:       false
 	systemMessages?:          false
 	toolChoice?:              false
-	toolResultAttachments?:   false
+	toolResultImages?:        false
+	toolResultDocuments?:     false
 })
 
 #Route: close({

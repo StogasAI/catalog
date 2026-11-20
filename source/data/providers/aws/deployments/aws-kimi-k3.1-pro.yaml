@@ -1,0 +1,33 @@
+# Bedrock's global inference profile, which routes across every commercial Region with capacity.
+# AWS names the model Kimi K3.1 Pro - Highspeed and links Moonshot AI's Kimi-K3.1-Pro weights.
+# Prices, Chat Completions support, limits, caching and retention from its model card, reviewed
+# 2026-11-20; the AWS Price List has no rows for it yet:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3-1-highspeed.html
+deployments:
+  modelId: kimi-k3.1-pro
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: global.moonshotai.kimi-k3.1
+    inferenceGeo: global
+  overrides:
+    # Bedrock answers without reasoning at reasoning_effort none, and the model reasons at max
+    # without an effort (capture aws/chat-completions-efforts).
+    reasoning: optional
+    reasoningDefault: max
+    promptCacheMinimumTokens: 256
+    # Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed
+    # without applying it (capture aws/chat-completions-request-fields).
+    sampling:
+      topP: false
+      frequencyPenalty: false
+      presencePenalty: false
+      seed: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4'
+    cached_input_tokens:
+      per_mill_tokens: '0.2'
+    cache_write_input_tokens:
+      per_mill_tokens: '5'
+    output_tokens:
+      per_mill_tokens: '20'

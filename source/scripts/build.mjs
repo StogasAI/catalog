@@ -52,7 +52,8 @@ const capabilityNames = [
 	'structuredOutputs',
 	'systemMessages',
 	'toolChoice',
-	'toolResultAttachments'
+	'toolResultImages',
+	'toolResultDocuments'
 ];
 const samplingNames = [
 	'temperature',
@@ -1887,23 +1888,38 @@ function compileGraph(source, places, companies) {
 			...deployment.upstream,
 			serviceTier: deployment.upstream.serviceTier ?? 'standard'
 		};
+		// AWS and Google Cloud serve Claude through Anthropic's Messages API, and other models in
+		// OpenAI's format.
+		const cloud = providerId === 'aws' || providerId === 'google-cloud';
 		const anthropicWire =
 			providerId === 'anthropic' ||
-			providerId === 'aws' ||
-			providerId === 'google-cloud' ||
+			(cloud && model.authorId === 'anthropic') ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
 		// The GovCloud Regions are a partition of their own, whose accounts the gateway cannot use.
 		if (deployment.upstream.inferenceGeo === 'us-gov' && stogasServes) {
 			throw new Error(`${deploymentId}: Stogas does not serve the AWS GovCloud (US) Regions`);
 		}
-		// Bedrock serves Claude only through inference profiles, whose IDs name the geography.
+		// Bedrock serves these deployments only through inference profiles, whose IDs name the
+		// geography and then the model, whose own ID starts with anthropic for Claude.
 		if (
 			providerId === 'aws' &&
 			hosting === providerCompany &&
-			!deployment.upstream.model.startsWith(`${deployment.upstream.inferenceGeo}.anthropic.`)
+			!deployment.upstream.model.startsWith(
+				`${deployment.upstream.inferenceGeo}.${anthropicWire ? 'anthropic.' : ''}`
+			)
 		) {
 			throw new Error(
 				`${deploymentId}: name the ${deployment.upstream.inferenceGeo} inference profile of the model`
+			);
+		}
+		if (
+			cloud &&
+			deployment.routeIds.some(
+				(routeId) => (routeId === 'aws-bedrock-chat-completions') === anthropicWire
+			)
+		) {
+			throw new Error(
+				`${deploymentId}: only models other than Claude use the Chat Completions route of ${providerId}`
 			);
 		}
 		if (

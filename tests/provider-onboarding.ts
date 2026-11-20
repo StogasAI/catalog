@@ -41,6 +41,8 @@ export type ProviderRouteContract = {
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
+	/** The sampling parameters that the route's API takes, where they differ from the provider's. */
+	sampling?: string[];
 	/** The route is a batch API. */
 	batch?: true;
 	supportsCancellation?: true;
@@ -78,6 +80,11 @@ export type ProviderDeploymentContract = {
 	modelReasoningEfforts?: string[];
 	modelReasoning?: 'optional' | 'required' | 'unsupported';
 	modelReasoningMaxTokens?: { maximum: number; minimum: number } | null;
+	/** The deployment's reasoning and its default, where they differ from the model's. */
+	reasoning?: 'optional' | 'required' | 'unsupported';
+	reasoningDefault?: string | null;
+	/** The sampling parameters that the deployment takes away from its routes. */
+	withoutSampling?: string[];
 	/** The company that runs the model, or unknown. */
 	hosting: string;
 	/** The companies, other than the provider's and the hosting, that receive its requests. */
@@ -202,7 +209,10 @@ export function assertProviderOnboardingContract(
 				}
 			},
 			sampling: Object.fromEntries(
-				samplingNames.map((name) => [name, contract.provider.sampling.includes(name)])
+				samplingNames.map((name) => [
+					name,
+					(route.sampling ?? contract.provider.sampling).includes(name)
+				])
 			),
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
@@ -323,7 +333,9 @@ export function assertProviderOnboardingContract(
 						sampling: Object.fromEntries(
 							samplingNames.map((name) => [
 								name,
-								contract.provider.sampling.includes(name) && model.sampling[name] !== false
+								(route.sampling ?? contract.provider.sampling).includes(name) &&
+									model.sampling[name] !== false &&
+									!expected.withoutSampling?.includes(name)
 							])
 						),
 						hostedTools: Object.fromEntries(
@@ -359,8 +371,11 @@ export function assertProviderOnboardingContract(
 						  expected.capabilities.explicitPromptCaching
 						? model.promptCacheMinimumTokens
 						: null,
-			reasoning: expected.modelReasoning ?? 'unsupported',
-			reasoningDefault: model.reasoningDefault,
+			reasoning: expected.reasoning ?? expected.modelReasoning ?? 'unsupported',
+			reasoningDefault:
+				expected.reasoningDefault !== undefined
+					? expected.reasoningDefault
+					: model.reasoningDefault,
 			reasoningMaxTokens:
 				expected.reasoningMaxTokens !== undefined
 					? expected.reasoningMaxTokens

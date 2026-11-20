@@ -14,7 +14,8 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	toolResultAttachments: false
+	toolResultImages: false,
+	toolResultDocuments: false
 };
 const chuteIds: Record<string, string> = {
 	'chutes-deepseek-v3.2': '398651e1-5f85-5e50-a513-7c5324e8e839',

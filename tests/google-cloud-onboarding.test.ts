@@ -23,7 +23,8 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	toolResultAttachments: true
+	toolResultImages: true,
+	toolResultDocuments: true
 };
 // Request and response logging is a project setting that no request can turn off.
 // Anthropic runs its managed routes under its own audits.

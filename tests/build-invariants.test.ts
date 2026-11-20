@@ -19,7 +19,8 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	toolResultAttachments: true
+	toolResultImages: true,
+	toolResultDocuments: true
 };
 
 const sampling = {

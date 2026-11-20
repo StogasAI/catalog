@@ -1,0 +1,34 @@
+# Bedrock's US inference profile, at AWS's 10 percent premium over the global profile. From a
+# US source Region it runs only in US Regions; the gateway uses no other source Region for it.
+# Prices from the AWS Price List (AmazonBedrock, moonshotai.kimi-k3), reviewed 2026-11-20:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json
+# Chat Completions support, limits, caching and retention reviewed 2026-11-20:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html
+deployments:
+  modelId: kimi-k3
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: us.moonshotai.kimi-k3
+    inferenceGeo: us
+  overrides:
+    # Bedrock answers without reasoning at reasoning_effort none, and the model reasons at max
+    # without an effort (capture aws/chat-completions-efforts).
+    reasoning: optional
+    reasoningDefault: max
+    promptCacheMinimumTokens: 256
+    # Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed
+    # without applying it (capture aws/chat-completions-request-fields).
+    sampling:
+      topP: false
+      frequencyPenalty: false
+      presencePenalty: false
+      seed: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '3.3'
+    cached_input_tokens:
+      per_mill_tokens: '0.33'
+    cache_write_input_tokens:
+      per_mill_tokens: '4.125'
+    output_tokens:
+      per_mill_tokens: '16.5'

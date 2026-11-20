@@ -23,7 +23,8 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
-	toolResultAttachments: true
+	toolResultImages: true,
+	toolResultDocuments: true
 };
 // In Bedrock's default data retention mode, AWS may keep data for safety and abuse prevention for
 // a period that it does not state.
@@ -351,8 +352,77 @@ const formats = {
 	mediaTypes: ['application/pdf', 'text/plain']
 };
 
+// Bedrock serves the models of other authors on its Chat Completions API. AWS states no isolation of
+// their prompt caches between accounts.
+const chatHandling = { ...kept, isolatedPromptCache: false } as const;
+const chatCapabilities = {
+	...capabilities,
+	implicitPromptCaching: true,
+	// Bedrock reads an image in a tool message and refuses a file there.
+	toolResultDocuments: false
+};
+// Kimi K3 and K3.1 Pro: what Moonshot AI states for each model, and each one's Bedrock profile ID
+// after its geography prefix, with its AWS prices: the global profile's, then those of the US and
+// India profiles, which cost 10 percent more.
+const kimi = {
+	authorId: 'moonshot-ai',
+	contextWindowTokens: 1048576,
+	inputModalities: ['text', 'image', 'video'],
+	maxOutputTokens: 1048576,
+	modelReasoning: 'required',
+	modelReasoningEfforts: ['low', 'high', 'max'],
+	outputModalities: ['text']
+} as const;
+const kimiPrices = (input: string, cacheRead: string, cacheWrite: string, output: string) => ({
+	cache_write_input_tokens: { per_mill_tokens: cacheWrite },
+	cached_input_tokens: { per_mill_tokens: cacheRead },
+	input_tokens: { per_mill_tokens: input },
+	output_tokens: { per_mill_tokens: output }
+});
+for (const [model, profile, global, geographic] of [
+	[
+		'kimi-k3',
+		'moonshotai.kimi-k3',
+		kimiPrices('3', '0.3', '3.75', '15'),
+		kimiPrices('3.3', '0.33', '4.125', '16.5')
+	],
+	[
+		'kimi-k3.1-pro',
+		'moonshotai.kimi-k3.1',
+		kimiPrices('4', '0.2', '5', '20'),
+		kimiPrices('4.4', '0.22', '5.5', '22')
+	]
+] as const) {
+	for (const [geo, place] of [['global'], ['us', 'US'], ['in', 'IN']] as const) {
+		deployments.push({
+			...kimi,
+			capabilities: chatCapabilities,
+			dataHandling: {
+				...providerHandling,
+				...chatHandling,
+				...(place ? { processingLocation: place } : {})
+			},
+			hosting: 'amazon',
+			id: `aws-${model}${geo === 'global' ? '' : `-${geo}`}`,
+			modelId: model,
+			pricing: geo === 'global' ? global : geographic,
+			promptCacheMinimumTokens: 256,
+			// Bedrock answers without reasoning at reasoning_effort none, and the model reasons at max
+			// without an effort.
+			reasoning: 'optional',
+			reasoningDefault: 'max',
+			retirementDate: null,
+			routeIds: ['aws-bedrock-chat-completions'],
+			upstream: { inferenceGeo: geo, model: `${geo}.${profile}`, serviceTier: 'standard' },
+			// Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed
+			// without applying it.
+			withoutSampling: ['topP', 'frequencyPenalty', 'presencePenalty', 'seed']
+		});
+	}
+}
+
 describe('AWS onboarding contract', () => {
-	test('pins the Claude routes and every deployment', () => {
+	test('pins every route and deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
 				accountOptions: [
@@ -370,7 +440,11 @@ describe('AWS onboarding contract', () => {
 						group: null,
 						id: 'business-associate-agreement',
 						name: 'Business associate agreement',
-						routes: ['aws-bedrock-batch-messages', 'aws-bedrock-messages']
+						routes: [
+							'aws-bedrock-batch-messages',
+							'aws-bedrock-chat-completions',
+							'aws-bedrock-messages'
+						]
 					}
 				],
 				aliases: [],
@@ -396,6 +470,27 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses']
+				},
+				{
+					capabilities: chatCapabilities,
+					dataHandling: chatHandling,
+					documentFormats: {
+						extensions: ['.csv', '.docx', '.html', '.md', '.pdf', '.pptx', '.txt', '.xlsx'],
+						mediaTypes: [
+							'application/pdf',
+							'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+							'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+							'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+							'text/csv',
+							'text/html',
+							'text/markdown',
+							'text/plain'
+						]
+					},
+					id: 'aws-bedrock-chat-completions',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions'],
+					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
 				},
 				{
 					capabilities: { streaming: false },
