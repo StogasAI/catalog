@@ -27,8 +27,10 @@ providers:
     storageLocation: unknown
     retentionDays: null
     trainingUse: false
-    # Organizations never share Claude's prompt caches, on Google Cloud too. Reviewed 2026-11-19:
-    # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    # Organizations never share Claude's prompt caches, on Google Cloud too, and Google never serves
+    # Gemini's cache of one project to another. Reviewed 2026-11-19:
+    # https://platform.claude.com/docs/en/build-with-claude/prompt-caching and 2026-11-20:
+    # https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention
     isolatedPromptCache: true
     certifications:
       - soc2-type2

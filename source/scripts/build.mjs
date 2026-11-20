@@ -1888,9 +1888,13 @@ function compileGraph(source, places, companies) {
 			...deployment.upstream,
 			serviceTier: deployment.upstream.serviceTier ?? 'standard'
 		};
-		// AWS and Google Cloud serve Claude through Anthropic's Messages API, and other models in
-		// OpenAI's format.
+		// AWS and Google Cloud serve Claude through Anthropic's Messages API, and other models through
+		// a route of their own: OpenAI's format on AWS and Gemini's on Google Cloud.
 		const cloud = providerId === 'aws' || providerId === 'google-cloud';
+		const otherModelRoute = {
+			aws: 'aws-bedrock-chat-completions',
+			'google-cloud': 'google-cloud-agent-platform-generate-content'
+		}[providerId];
 		const anthropicWire =
 			providerId === 'anthropic' ||
 			(cloud && model.authorId === 'anthropic') ||
@@ -1914,12 +1918,10 @@ function compileGraph(source, places, companies) {
 		}
 		if (
 			cloud &&
-			deployment.routeIds.some(
-				(routeId) => (routeId === 'aws-bedrock-chat-completions') === anthropicWire
-			)
+			deployment.routeIds.some((routeId) => (routeId === otherModelRoute) === anthropicWire)
 		) {
 			throw new Error(
-				`${deploymentId}: only models other than Claude use the Chat Completions route of ${providerId}`
+				`${deploymentId}: only models other than Claude use the ${otherModelRoute} route`
 			);
 		}
 		if (

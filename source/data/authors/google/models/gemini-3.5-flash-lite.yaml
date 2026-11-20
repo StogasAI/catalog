@@ -1,0 +1,26 @@
+models:
+  authorId: google
+  name: Gemini 3.5 Flash-Lite
+  groupIds: [gemini-3, gemini-flash-lite]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 65536
+  inputModalities: [text, image, audio, video]
+  outputModalities: [text]
+  # Thinking cannot be turned off. Reviewed 2026-11-20: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite
+  reasoning: required
+  reasoningEfforts: [minimal, low, medium, high]
+  reasoningDefault: minimal
+  openWeights: false
+  # Google ignores custom temperature, top_p and top_k and refuses penalties
+  # (capture google-cloud/generate-content-request-fields).
+  sampling:
+    temperature: false
+    topP: false
+    topK: false
+    frequencyPenalty: false
+    presencePenalty: false
+  # Agent Platform caches at least 4,096 tokens for Gemini 3 models other than those it names.
+  # Reviewed 2026-11-20: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/context-cache/context-cache-overview
+  promptCacheMinimumTokens: 4096
+  releaseDate: 2026-07-21
+  succeeds: gemini-3.1-flash-lite

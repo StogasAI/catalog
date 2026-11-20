@@ -35,7 +35,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 12, models: 77, providers: 6, routes: 21, deployments: 648 });
+		).toEqual({ authors: 12, models: 85, providers: 6, routes: 22, deployments: 672 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -582,6 +582,13 @@ describe('compiled catalog', () => {
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast',
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-fast-us',
 			'google-cloud-claude-mythos-5-2-anthropic-hosted-us',
+			// Google serves Gemini 4 Carbon and Neon to verified enterprise customers.
+			'google-cloud-gemini-4-carbon',
+			'google-cloud-gemini-4-carbon-eu',
+			'google-cloud-gemini-4-carbon-us',
+			'google-cloud-gemini-4-neon',
+			'google-cloud-gemini-4-neon-eu',
+			'google-cloud-gemini-4-neon-us',
 			// OpenAI opens its India and United Arab Emirates endpoints through sales.
 			'openai-gpt-5.2-2025-12-11-ae',
 			'openai-gpt-5.5-2026-04-23-ae',
@@ -903,33 +910,51 @@ describe('compiled catalog', () => {
 		}
 	});
 
-	test('schedules the Chutes price cut and the Ultrafast launch price of the GPT-6.2 models', () => {
+	test('schedules the price cut, launch price and launch credits that providers announced', () => {
 		expect(catalog.schema).toBe('stogas.catalog.v1');
 		// Chutes ends its price cut on November 24, 2026, and OpenAI charges half the list price
-		// until March 1, 2027, Pacific time.
+		// until March 1, 2027. Google gives half of the net spend back as credits on Gemini 4 Carbon
+		// and Argon until December 1, 2026, and on Gemini 3.8 Flash until January 1, 2027. Both
+		// count days in Pacific time.
 		expect(catalog.schedule.map(({ start }) => start)).toEqual([
 			'2026-11-17T00:00:00Z',
 			'2026-11-18T00:00:00Z',
+			'2026-11-20T00:00:00Z',
 			'2026-11-24T00:00:00Z',
+			'2026-12-01T08:00:00Z',
+			'2027-01-01T08:00:00Z',
 			'2027-03-01T08:00:00Z'
 		]);
-		const [cut, both, launch, list] = catalog.schedule;
 		const chutes = [
 			'chutes-deepseek-v4.1-flash-1017-unknown-hosted',
 			'chutes-glm-5.3-unknown-hosted'
 		];
 		const ultrafast = ['openai-gpt-6.2-astra-ultrafast', 'openai-gpt-6.2-sol-ultrafast'];
-		expect(Object.keys(cut!.graph.deployments!).sort()).toEqual(chutes);
-		expect(Object.keys(both!.graph.deployments!).sort()).toEqual([...chutes, ...ultrafast]);
-		expect(Object.keys(launch!.graph)).toEqual(['deployments']);
-		expect(Object.keys(launch!.graph.deployments!).sort()).toEqual(ultrafast);
-		expect(list!.graph).toEqual({});
-		for (const id of ultrafast) {
+		const deployments = (model: string) =>
+			['', '-eu', '-us'].map((geo) => `google-cloud-${model}${geo}`);
+		const gemini4 = [...deployments('gemini-4-argon'), ...deployments('gemini-4-carbon')];
+		const flash = deployments('gemini-3.8-flash');
+		expect(
+			catalog.schedule.map(({ graph }) => Object.keys(graph.deployments ?? {}).sort())
+		).toEqual([
+			chutes,
+			[...chutes, ...ultrafast],
+			[...chutes, ...flash, ...gemini4, ...ultrafast].sort(),
+			[...flash, ...gemini4, ...ultrafast].sort(),
+			[...flash, ...ultrafast].sort(),
+			ultrafast,
+			[]
+		]);
+		expect(catalog.schedule.at(-1)!.graph).toEqual({});
+		// Each dated price is half of the list price.
+		const dated = catalog.schedule[3]!.graph.deployments!;
+		for (const id of [...ultrafast, ...gemini4, ...flash]) {
 			const listed = catalog.graph.deployments[id]!.pricing;
-			const dated = launch!.graph.deployments![id]!.pricing;
 			for (const [meter, rates] of Object.entries(listed))
 				for (const [key, rate] of Object.entries(rates))
-					expect(coefficient((dated as typeof listed)[meter]![key]!) * 2n).toBe(coefficient(rate));
+					expect(coefficient((dated[id]!.pricing as typeof listed)[meter]![key]!) * 2n).toBe(
+						coefficient(rate)
+					);
 		}
 	});
 

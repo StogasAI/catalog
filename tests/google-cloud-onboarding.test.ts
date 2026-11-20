@@ -160,6 +160,131 @@ const deployments: ProviderDeploymentContract[] = agentPlatform.flatMap(
 			: [])
 	]
 );
+// Gemini on Agent Platform: what Google states for each model, and its prices at the global
+// endpoint, then at the us and eu multi-regions, which cost 10 percent more.
+const geminiCapabilities = {
+	explicitPromptCaching: false,
+	functionCalling: true,
+	implicitPromptCaching: true,
+	parallelFunctionCalling: true,
+	streaming: true,
+	structuredOutputs: true,
+	systemMessages: true,
+	toolChoice: true,
+	// Core sends a tool result to Gemini as text.
+	toolResultImages: false,
+	toolResultDocuments: false
+};
+const geminiPrices = (input: string, cacheRead: string, output: string) => ({
+	cached_input_tokens: { per_mill_tokens: cacheRead },
+	input_tokens: { per_mill_tokens: input },
+	output_tokens: { per_mill_tokens: output }
+});
+// Google ignores custom sampling on Gemini 4 and states nothing about its penalties or seed.
+const gemini4Sampling = [
+	'temperature',
+	'topP',
+	'topK',
+	'frequencyPenalty',
+	'presencePenalty',
+	'seed'
+];
+const gemini: {
+	model: string;
+	efforts: string[];
+	global: Prices;
+	regional: Prices;
+	approvalRequired?: true;
+	withoutSampling: string[];
+	withoutInputModalities?: string[];
+}[] = [
+	{
+		model: 'gemini-4-carbon',
+		efforts: ['low', 'medium', 'high'],
+		global: geminiPrices('4', '0.2', '20'),
+		regional: geminiPrices('4.4', '0.22', '22'),
+		approvalRequired: true,
+		withoutSampling: gemini4Sampling
+	},
+	{
+		model: 'gemini-4-argon',
+		efforts: ['low', 'medium', 'high'],
+		global: geminiPrices('4', '0.2', '20'),
+		regional: geminiPrices('4.4', '0.22', '22'),
+		withoutSampling: gemini4Sampling
+	},
+	{
+		model: 'gemini-4-hydrogen',
+		efforts: ['low', 'medium', 'high', 'xhigh'],
+		global: geminiPrices('1.5', '0.075', '7.5'),
+		regional: geminiPrices('1.65', '0.082', '8.25'),
+		withoutSampling: gemini4Sampling
+	},
+	{
+		model: 'gemini-4-neon',
+		efforts: ['low', 'medium', 'high', 'xhigh'],
+		global: geminiPrices('3', '0.15', '15'),
+		regional: geminiPrices('3.3', '0.165', '16.5'),
+		approvalRequired: true,
+		withoutSampling: gemini4Sampling
+	},
+	{
+		model: 'gemini-3.8-flash',
+		efforts: ['low', 'medium', 'high'],
+		global: geminiPrices('1.5', '0.15', '7.5'),
+		regional: geminiPrices('1.65', '0.165', '8.25'),
+		withoutSampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty']
+	},
+	{
+		model: 'gemini-3.5-flash',
+		efforts: ['minimal', 'low', 'medium', 'high'],
+		global: geminiPrices('1.5', '0.15', '9'),
+		regional: geminiPrices('1.65', '0.165', '9.9'),
+		withoutSampling: ['topK']
+	},
+	{
+		model: 'gemini-3.5-flash-lite',
+		efforts: ['minimal', 'low', 'medium', 'high'],
+		global: geminiPrices('0.3', '0.03', '2.5'),
+		regional: geminiPrices('0.33', '0.033', '2.75'),
+		withoutSampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty']
+	},
+	{
+		model: 'gemini-3.1-flash-lite',
+		efforts: ['minimal', 'low', 'medium', 'high'],
+		global: geminiPrices('0.25', '0.025', '1.5'),
+		regional: geminiPrices('0.275', '0.027', '1.65'),
+		withoutSampling: ['topK'],
+		// Google charges twice the text price for audio, which the catalog cannot price.
+		withoutInputModalities: ['audio']
+	}
+];
+for (const { model, efforts, global, regional, ...facts } of gemini) {
+	const gemini4 = model.startsWith('gemini-4');
+	for (const [geo, place] of [['global'], ['eu', 'eu'], ['us', 'US']] as const) {
+		deployments.push({
+			...facts,
+			authorId: 'google',
+			capabilities: geminiCapabilities,
+			contextWindowTokens: 1048576,
+			dataHandling: { ...providerHandling, ...(place ? { processingLocation: place } : {}) },
+			hosting: 'google',
+			id: `google-cloud-${model}${geo === 'global' ? '' : `-${geo}`}`,
+			inputModalities: ['text', 'image', 'audio', 'video'],
+			// One reply on v1 is one foreground segment of Gemini 4.
+			maxOutputTokens: 65536,
+			modelId: model,
+			modelMaxOutputTokens: gemini4 ? 1048576 : 65536,
+			modelReasoning: 'required',
+			modelReasoningEfforts: efforts,
+			outputModalities: ['text'],
+			pricing: geo === 'global' ? global : regional,
+			retirementDate: null,
+			routeIds: ['google-cloud-agent-platform-generate-content'],
+			upstream: { inferenceGeo: geo, model, serviceTier: 'standard' }
+		});
+	}
+}
 // Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
 // serves what Anthropic's does. Of the Mythos models, Anthropic lists only Mythos 5.2 there.
 const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
@@ -191,7 +316,7 @@ const formats = {
 };
 
 describe('Google Cloud onboarding contract', () => {
-	test('pins the Claude routes and every deployment', () => {
+	test('pins every route and deployment', () => {
 		assertProviderOnboardingContract(catalog, {
 			provider: {
 				accountOptions: [
@@ -259,6 +384,18 @@ describe('Google Cloud onboarding contract', () => {
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
 					batch: true
+				},
+				{
+					capabilities: geminiCapabilities,
+					documentFormats: {
+						extensions: ['.pdf', '.txt'],
+						mediaTypes: ['application/pdf', 'text/plain']
+					},
+					inputLimits: { images: { count: 3000 }, documents: { count: 3000 } },
+					id: 'google-cloud-agent-platform-generate-content',
+					inputModalities: ['text', 'image', 'audio'],
+					interfaces: ['chat_completions'],
+					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
 				}
 			],
 			deployments,

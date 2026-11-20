@@ -69,6 +69,8 @@ export type ProviderDeploymentContract = {
 	id: string;
 	// The model's input modalities; each route keeps those it carries.
 	inputModalities: string[];
+	/** The input modalities of its model that the deployment takes away. */
+	withoutInputModalities?: string[];
 	// Omitted when the input ceiling is the context window.
 	maxInputTokens?: number;
 	maxOutputTokens: number;
@@ -327,8 +329,10 @@ export function assertProviderOnboardingContract(
 						},
 						// The route's limits, narrowed by the model's, which the model's own test states.
 						inputLimits: expect.any(Object),
-						inputModalities: expected.inputModalities.filter((modality) =>
-							route.inputModalities.includes(modality)
+						inputModalities: expected.inputModalities.filter(
+							(modality) =>
+								route.inputModalities.includes(modality) &&
+								!expected.withoutInputModalities?.includes(modality)
 						),
 						sampling: Object.fromEntries(
 							samplingNames.map((name) => [

@@ -1,0 +1,23 @@
+# Agent Platform's us multi-region endpoint, at Google's 10 percent premium over the global
+# endpoint.
+# Standard PayGo prices from the Cloud Billing Catalog (Agent Platform, Gemini 4 Neon Regional), reviewed
+# 2026-11-20: https://cloud.google.com/skus and https://cloud.google.com/model-garden/pricing
+# Google serves the model to verified enterprise customers in select regions.
+deployments:
+  modelId: gemini-4-neon
+  routeIds: [google-cloud-agent-platform-generate-content]
+  upstream:
+    model: gemini-4-neon
+    inferenceGeo: us
+  approvalRequired: true
+  overrides:
+    # One generateContent reply on v1 is one foreground segment of at most 65,536 tokens, and
+    # a longer reply needs v1beta1. Reviewed 2026-11-20: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-neon
+    maxOutputTokens: 65536
+  pricing:
+    input_tokens:
+      per_mill_tokens: '3.3'
+    cached_input_tokens:
+      per_mill_tokens: '0.165'
+    output_tokens:
+      per_mill_tokens: '16.5'

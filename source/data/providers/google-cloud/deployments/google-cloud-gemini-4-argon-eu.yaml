@@ -1,0 +1,30 @@
+# Agent Platform's eu multi-region endpoint, at Google's 10 percent premium over the global
+# endpoint.
+# Standard PayGo prices from the Cloud Billing Catalog (Agent Platform, Gemini 4 Argon Regional), reviewed
+# 2026-11-20: https://cloud.google.com/skus and https://cloud.google.com/model-garden/pricing
+deployments:
+  modelId: gemini-4-argon
+  routeIds: [google-cloud-agent-platform-generate-content]
+  upstream:
+    model: gemini-4-argon
+    inferenceGeo: eu
+  overrides:
+    # One generateContent reply on v1 is one foreground segment of at most 65,536 tokens, and
+    # 32,768 without streaming. Reviewed 2026-11-20: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon
+    maxOutputTokens: 65536
+  # Google gives half of the net spend back as credits through November 30, 2026, Pacific time.
+  periods:
+    - name: 'Launch credits'
+      start: 2026-11-20T00:00:00Z
+      end: 2026-12-01T08:00:00Z
+      set:
+        pricing.input_tokens.per_mill_tokens: '2.2'
+        pricing.cached_input_tokens.per_mill_tokens: '0.11'
+        pricing.output_tokens.per_mill_tokens: '11'
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4.4'
+    cached_input_tokens:
+      per_mill_tokens: '0.22'
+    output_tokens:
+      per_mill_tokens: '22'
