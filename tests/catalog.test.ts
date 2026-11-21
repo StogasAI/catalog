@@ -869,11 +869,13 @@ describe('compiled catalog', () => {
 			const regional = 'inferenceGeo' in deployment.upstream;
 			const numerator = tierNumerator * (regional ? 11n : 1n);
 			const denominator = tierDenominator * (regional ? 10n : 1n);
-			// Cache writes cost 1.25x input. Prompts over 272K double input rates and raise output by half.
+			// Cache writes cost 1.25x input for 30 minutes and 2.5x for 12 hours. Prompts over 272K
+			// double input rates and raise output by half.
 			for (const [meter, short, long] of [
 				['input_tokens', input, input * 2n],
 				['cached_input_tokens', cached, cached * 2n],
 				['cache_write_input_tokens', (input * 5n) / 4n, (input * 5n) / 2n],
+				['cache_write_12h_input_tokens', (input * 5n) / 2n, input * 5n],
 				['output_tokens', output, (output * 3n) / 2n]
 			] as const) {
 				const rates = deployment.pricing[meter];

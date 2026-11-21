@@ -11,5 +11,7 @@ deployments:
       per_mill_tokens: '1.25'
     cache_write_input_tokens:
       per_mill_tokens: '15.625'
+    cache_write_12h_input_tokens:
+      per_mill_tokens: '31.25'
     output_tokens:
       per_mill_tokens: '75'

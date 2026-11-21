@@ -306,11 +306,22 @@ function scaled(value: string, numerator: bigint, denominator = 1n) {
 	return `${digits.slice(0, -36)}.${digits.slice(-36)}`.replace(/0+$/, '').replace(/\.$/, '');
 }
 
-// Long prompts double the input prices and raise the output price by half.
-function gptPricing(rates: readonly string[], numerator: bigint, denominator: bigint) {
+// Long prompts double the input prices and raise the output price by half. A 30-minute cache write
+// costs 1.25 times input, and a 12-hour one 2.5 times the input price at `longWriteNumerator`.
+function gptPricing(
+	rates: readonly string[],
+	numerator: bigint,
+	denominator: bigint,
+	longWriteNumerator = numerator
+) {
 	const [input, cached, output] = rates.map((rate) => scaled(rate, numerator, denominator));
 	const write = scaled(input!, 5n, 4n);
+	const longWrite = scaled(scaled(rates[0]!, longWriteNumerator, denominator), 5n, 2n);
 	return {
+		cache_write_12h_input_tokens: {
+			per_mill_context_gt_272k: scaled(longWrite, 2n),
+			per_mill_tokens: longWrite
+		},
 		cache_write_input_tokens: {
 			per_mill_context_gt_272k: scaled(write, 2n),
 			per_mill_tokens: write
@@ -496,6 +507,7 @@ describe('Azure provider onboarding contract', () => {
 	test('pins GPT prices and retirement for every Azure location, tier, and reasoning mode', () => {
 		// Global input, cached input, and output prices; EU Data Zone price in tenths of Global;
 		// retirement. US Data Zones cost 1.1 times Global and Asia Pacific Data Zones 1.2 times.
+		// Microsoft prices 12-hour cache writes in EU Data Zones at 1.2 times Global for every model.
 		const models = {
 			'gpt-5.6-luna': [['0.2', '0.02', '1.2'], 11n, '2028-01-11'],
 			'gpt-5.6-sol': [['4', '0.4', '20'], 11n, '2028-01-11'],
@@ -520,8 +532,14 @@ describe('Azure provider onboarding contract', () => {
 							: 10n;
 			const [tierNumerator, tierDenominator] =
 				serviceTier === 'fast' ? [2n, 1n] : serviceTier === 'flex' ? [1n, 2n] : [1n, 1n];
+			const longWriteTenths = deploymentType === 'data_zone_standard_eu' ? 12n : regionTenths;
 			expect(deployment.pricing).toEqual(
-				gptPricing(rates, regionTenths * tierNumerator, 10n * tierDenominator)
+				gptPricing(
+					rates,
+					regionTenths * tierNumerator,
+					10n * tierDenominator,
+					longWriteTenths * tierNumerator
+				)
 			);
 			expect(deployment.retirementDate).toBe(retirement);
 			expect(deployment.contextWindowTokens).toBe(1_050_000);

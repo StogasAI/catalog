@@ -17,6 +17,9 @@ deployments:
     cache_write_input_tokens:
       per_mill_tokens: '2.75'
       per_mill_context_gt_272k: '5.5'
+    cache_write_12h_input_tokens:
+      per_mill_tokens: '5.5'
+      per_mill_context_gt_272k: '11'
     output_tokens:
       per_mill_tokens: '13.2'
       per_mill_context_gt_272k: '19.8'

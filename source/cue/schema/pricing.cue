@@ -19,14 +19,18 @@ package catalog
 	per_1k_search_context_high_calls:   #USD
 })
 
+// cache_write_input_tokens is a cache write at the deployment's default lifetime,
+// which is 30 minutes in OpenAI's format. Claude prices its writes by lifetime,
+// and OpenAI's format prices its 12-hour writes apart.
 #TokenPricing: {
-	input_tokens?:                #TokenRate
-	cached_input_tokens?:         #TokenRate
-	cache_write_input_tokens?:    #TokenRate
-	cache_write_5m_input_tokens?: #TokenRate
-	cache_write_1h_input_tokens?: #TokenRate
-	output_tokens?:               #TokenRate
-	reasoning_tokens?:            #TokenRate
+	input_tokens?:                 #TokenRate
+	cached_input_tokens?:          #TokenRate
+	cache_write_input_tokens?:     #TokenRate
+	cache_write_5m_input_tokens?:  #TokenRate
+	cache_write_1h_input_tokens?:  #TokenRate
+	cache_write_12h_input_tokens?: #TokenRate
+	output_tokens?:                #TokenRate
+	reasoning_tokens?:             #TokenRate
 }
 
 // The call meters of a hosted tool. Content that a tool adds to the context,
