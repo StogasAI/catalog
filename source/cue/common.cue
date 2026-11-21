@@ -88,8 +88,9 @@ package catalog
 #WeightPrecision:       "fp32" | "bf16" | "fp16" | "fp8" | "fp6" | "fp4" | "nvfp4" | "mxfp4" | "int8" | "int4"
 
 // A dotted path to a field of the node that owns the period, such as
-// pricing.input_tokens.per_mill_tokens.
-#FieldPath: string & =~"^[a-z][A-Za-z0-9_]*([.][a-z][A-Za-z0-9_]*)*$"
+// pricing.input_tokens.per_mill_tokens. A key below the first can be an ID, as in
+// overrides.accountOptions.modified-abuse-monitoring.
+#FieldPath: string & =~"^[a-z][A-Za-z0-9_]*([.][a-z0-9][A-Za-z0-9_-]*)*$"
 
 // A dated change to one node, such as a promotion or an announced price change.
 // From start until end, each set path takes its value, null included, and each

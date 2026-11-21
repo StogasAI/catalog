@@ -5,8 +5,9 @@ providers:
   # Microsoft approves a subscription for modified abuse monitoring, and then stores no prompt or
   # completion for human review. The account reports the capability ContentLogging as false, which
   # the gateway reads with each check of a credential. It covers the models that Azure sells and
-  # runs, and Microsoft has announced that it will end for models released from November 1, 2026,
-  # on a date that it has yet to name. Reviewed 2026-11-19:
+  # runs. For each model made available from November 1, 2026, it ends on a date that Microsoft
+  # will announce at least 30 days ahead, and a period on each of the model's deployments then
+  # withdraws the option from that date. Reviewed 2026-11-21:
   # https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/openai/data-privacy
   # Microsoft's product terms include its business associate agreement for a customer that HIPAA
   # covers. Claude in Foundry needs Anthropic's agreement and the HIPAA configuration that Anthropic

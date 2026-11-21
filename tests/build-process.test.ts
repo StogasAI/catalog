@@ -536,6 +536,33 @@ exit 1
 		});
 	});
 
+	test('compiles a dated period that withdraws an account option', () => {
+		const root = catalogCopy();
+		const id = 'azure-gpt-5.6-sol';
+		replaceSource(
+			root,
+			`source/data/providers/azure/deployments/${id}.yaml`,
+			'  pricing:\n',
+			[
+				'  periods:',
+				"    - name: 'Modified abuse monitoring ends'",
+				'      start: 2026-10-01T00:00:00Z',
+				'      end: 2026-11-01T00:00:00Z',
+				'      set:',
+				'        overrides.accountOptions.modified-abuse-monitoring: false',
+				'  pricing:\n'
+			].join('\n')
+		);
+		expectBuildSuccess(runBuild(root));
+		const { catalog } = readCatalog(join(root, 'generated'));
+		const record = (graph: typeof catalog.graph) =>
+			graph.deployments![id]!.routes['azure-responses'];
+		const state = catalog.schedule.find(({ start }) => start === '2026-10-01T00:00:00Z')!;
+		expect(record(catalog.graph).accountOptions).toContain('modified-abuse-monitoring');
+		expect(record(state.graph).accountOptions).not.toContain('modified-abuse-monitoring');
+		expect(record(state.graph).chainHash).not.toBe(record(catalog.graph).chainHash);
+	});
+
 	test('rejects a dated period without a name', () => {
 		const root = catalogCopy();
 		const path = 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml';
