@@ -1108,6 +1108,37 @@ describe('catalog source compiler invariants', () => {
 		});
 	});
 
+	test('applies the periods of a node that change different fields at the same time', () => {
+		const source = sourceFixture();
+		setPeriods(source.graph.deployments['openai-gpt-test'], [
+			{
+				name: 'New output price',
+				start: '2026-11-15T00:00:00Z',
+				set: { 'pricing.output_tokens.per_mill_tokens': '3' }
+			},
+			{
+				name: 'Launch discount',
+				start: '2026-11-01T00:00:00Z',
+				end: '2026-12-01T00:00:00Z',
+				set: { 'pricing.input_tokens.per_mill_tokens': '0.5' }
+			}
+		]);
+		const catalog = buildCatalog(source);
+		const pricing = (time: string) =>
+			catalogAt(catalog, new Date(time)).deployments['openai-gpt-test'].pricing;
+		const prices = (input: string, output: string) => ({
+			input_tokens: { per_mill_tokens: input },
+			output_tokens: { per_mill_tokens: output }
+		});
+		expect(pricing('2026-11-01T00:00:00Z')).toEqual(prices('0.5', '2'));
+		expect(pricing('2026-11-15T00:00:00Z')).toEqual(prices('0.5', '3'));
+		expect(pricing('2026-12-01T00:00:00Z')).toEqual(prices('1', '3'));
+		expect(catalog.periods.map(({ name }) => name)).toEqual([
+			'Launch discount',
+			'New output price'
+		]);
+	});
+
 	test('returns to the base graph when the last period ends', () => {
 		const source = sourceFixture();
 		setPeriods(source.graph.authors.openai, [
@@ -1195,27 +1226,45 @@ describe('catalog source compiler invariants', () => {
 			'must end after it starts'
 		],
 		[
-			'rejects overlapping periods',
+			'rejects periods that change one field at the same time',
 			(source) =>
 				setPeriods(source.graph.models['gpt-test'], [
+					{ name: 'Test', start: '2026-12-01T00:00:00Z', set: { name: 'B' } },
 					{
 						name: 'Test',
 						start: '2026-11-01T00:00:00Z',
 						end: '2026-12-01T00:00:01Z',
 						set: { name: 'A' }
-					},
-					{ name: 'Test', start: '2026-12-01T00:00:00Z', set: { name: 'B' } }
+					}
 				]),
-			'models.gpt-test.periods[1] must start after the period before it ends'
+			'models.gpt-test.periods[1] changes name while models.gpt-test.periods[0] changes name'
 		],
 		[
-			'rejects a period after one without an end',
+			'rejects a period that changes a field while one without an end does',
 			(source) =>
 				setPeriods(source.graph.models['gpt-test'], [
 					{ name: 'Test', start: '2026-11-01T00:00:00Z', set: { name: 'A' } },
-					{ name: 'Test', start: '2026-12-01T00:00:00Z', set: { name: 'B' } }
+					{ name: 'Test', start: '2027-11-01T00:00:00Z', set: { name: 'B' } }
 				]),
-			'must start after the period before it ends'
+			'models.gpt-test.periods[1] changes name while models.gpt-test.periods[0] changes name'
+		],
+		[
+			'rejects periods that change a field and its parent at the same time',
+			(source) =>
+				setPeriods(source.graph.deployments['openai-gpt-test'], [
+					{
+						name: 'Test',
+						start: '2026-11-01T00:00:00Z',
+						end: '2026-12-01T00:00:00Z',
+						set: { 'pricing.input_tokens.per_mill_tokens': '0.5' }
+					},
+					{
+						name: 'Test',
+						start: '2026-11-30T00:00:00Z',
+						set: { 'pricing.input_tokens': { per_mill_tokens: '3' } }
+					}
+				]),
+			'deployments.openai-gpt-test.periods[1] changes pricing.input_tokens while deployments.openai-gpt-test.periods[0] changes pricing.input_tokens.per_mill_tokens'
 		],
 		[
 			'rejects an impossible period time',

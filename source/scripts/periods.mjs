@@ -42,7 +42,7 @@ export function periodStates(graph) {
 		const state = Object.fromEntries(nodeKinds.map((kind) => [kind, { ...base[kind] }]));
 		for (const period of periods) {
 			if (period.start <= at && at < period.end) {
-				state[period.kind][period.id] = applyPeriod(base[period.kind][period.id], period);
+				state[period.kind][period.id] = applyPeriod(state[period.kind][period.id], period);
 			}
 		}
 		return { start: timestamp(at), graph: state };
@@ -65,16 +65,11 @@ export function periodStates(graph) {
 }
 
 function validatePeriods(kind, id, node, periods) {
-	let previousEnd = -Infinity;
-	return periods.map((period, index) => {
+	const checked = periods.map((period, index) => {
 		const owner = `${kind}.${id}.periods[${index}]`;
 		const start = instant(period.start, owner);
 		const end = period.end === undefined ? Infinity : instant(period.end, owner);
 		if (end <= start) throw new Error(`${owner} must end after it starts`);
-		if (start < previousEnd) {
-			throw new Error(`${owner} must start after the period before it ends`);
-		}
-		previousEnd = end;
 		const set = period.set ?? {};
 		const unset = period.unset ?? [];
 		const paths = [...Object.keys(set), ...unset].sort();
@@ -83,10 +78,8 @@ function validatePeriods(kind, id, node, periods) {
 			if (structuralFields.has(path.split('.')[0])) {
 				throw new Error(`${owner} cannot change ${path}; add or edit nodes instead`);
 			}
-			const next = paths[position + 1];
-			if (next === path || next?.startsWith(`${path}.`)) {
-				throw new Error(`${owner} changes both ${path} and ${next}`);
-			}
+			const inside = paths.slice(position + 1).find((other) => nested(path, other));
+			if (inside !== undefined) throw new Error(`${owner} changes both ${path} and ${inside}`);
 		}
 		for (const [path, value] of Object.entries(set)) {
 			const current = valueAt(node, path, owner);
@@ -99,8 +92,28 @@ function validatePeriods(kind, id, node, periods) {
 				throw new Error(`${owner} unsets ${path}, which the node does not have`);
 			}
 		}
-		return { kind, id, name: period.name, start, end, set, unset };
+		return { owner, paths, period: { kind, id, name: period.name, start, end, set, unset } };
 	});
+	// Periods of a node can run at the same time when they change different fields, so each field
+	// has one value at every instant, whatever order the periods apply in. A price that two reasons
+	// change at once is a period of its own, because only its provider says how the two combine.
+	for (const [index, { owner, paths, period }] of checked.entries()) {
+		for (const other of checked.slice(0, index)) {
+			if (period.start >= other.period.end || other.period.start >= period.end) continue;
+			for (const path of paths) {
+				const shared = other.paths.find((otherPath) => nested(path, otherPath));
+				if (shared !== undefined) {
+					throw new Error(`${owner} changes ${path} while ${other.owner} changes ${shared}`);
+				}
+			}
+		}
+	}
+	return checked.map(({ period }) => period);
+}
+
+// Two paths name the same value, or one value holds the other.
+function nested(left, right) {
+	return left === right || left.startsWith(`${right}.`) || right.startsWith(`${left}.`);
 }
 
 function applyPeriod(node, { set, unset }) {
