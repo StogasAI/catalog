@@ -753,7 +753,16 @@ describe('Azure provider onboarding contract', () => {
 			'azure-mistral-medium-3-5-us'
 		]);
 		for (const [id, deployment] of azureDeployments()) {
-			for (const { dataHandling: handling } of Object.values(deployment.routes)) {
+			for (const [routeId, { accountOptions, dataHandling: handling }] of Object.entries(
+				deployment.routes
+			)) {
+				// Modified abuse monitoring reaches no record whose terms leave retention unknown, such
+				// as Instant, Flex and preview models, or that another company runs.
+				if (routeId === 'azure-chat-completions' || routeId === 'azure-responses')
+					expect([id, accountOptions.includes('modified-abuse-monitoring')]).toEqual([
+						id,
+						handling.retentionDays !== null
+					]);
 				if (previews.has(id)) {
 					expect(handling).toMatchObject({
 						processingLocation: 'world',

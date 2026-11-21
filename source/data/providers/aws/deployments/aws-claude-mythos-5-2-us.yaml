@@ -18,7 +18,6 @@ deployments:
   overrides:
     dataHandling:
       storageLocation: US
-      retentionDays: 30
       zeroDataRetention: false
   pricing:
     input_tokens:

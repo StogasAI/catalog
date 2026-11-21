@@ -771,6 +771,11 @@ function validateDataHandling(owner, value, places, companies) {
 	) {
 		throw new Error(`${owner}: zero data retention conflicts with data handling`);
 	}
+	// Content that a provider keeps is kept somewhere, which a record raised to its model's minimum
+	// retention must then state.
+	if (value.storageLocation === 'none' && value.retentionDays !== 0) {
+		throw new Error(`${owner}: a retention requires a storage location`);
+	}
 }
 
 // The certifications that an account option can grant, each to a record that lists the entry
@@ -942,24 +947,32 @@ function servedFacts(graph, model, deployment, hosting) {
 			route.interfaces.length === 1
 				? model.reasoningEffortsByInterface[route.interfaces[0]]
 				: undefined;
+		const selected = selectedDataHandling(graph, route.providerId, hosting, deployment);
 		const dataHandling = mergeFacts(
-			mergeFacts(
-				route.dataHandling,
-				selectedDataHandling(graph, route.providerId, hosting, deployment)
-			),
+			mergeFacts(route.dataHandling, selected),
 			overrides.dataHandling ?? {}
 		);
+		// The model's developer can require a retention wherever the model runs, which replaces a
+		// shorter one. An unknown retention stays unknown.
+		if (
+			dataHandling.retentionDays !== null &&
+			dataHandling.retentionDays < model.minimumRetentionDays
+		)
+			dataHandling.retentionDays = model.minimumRetentionDays;
 		const offers = route.hostedTools.filter(
 			(offer) => overrides.hostedTools?.[offer.tool] !== false
 		);
 		routes[routeId] = {
 			// The provider's account options that reach this record: those that cover its route,
-			// that the deployment does not remove, and that keep its model's minimum retention.
+			// that the deployment does not remove, that set no fact which the deployment's own terms
+			// leave unknown, as Microsoft's preview terms do, and that keep its model's minimum
+			// retention.
 			accountOptions: graph.providers[route.providerId].accountOptions
 				.filter(
 					(option) =>
 						option.routes.includes(routeId) &&
 						overrides.accountOptions?.[option.id] !== false &&
+						!Object.keys(option.dataHandling).some((field) => selected[field] === null) &&
 						!(option.dataHandling.retentionDays < model.minimumRetentionDays)
 				)
 				.map((option) => option.id),
@@ -2024,15 +2037,6 @@ function compileGraph(source, places, companies) {
 		};
 	}
 
-	// A model's developer can require a retention wherever the model runs.
-	for (const [deploymentId, deployment] of Object.entries(deployments)) {
-		const minimum = graph.models[deployment.modelId].minimumRetentionDays;
-		for (const [routeId, { dataHandling }] of Object.entries(deployment.routes))
-			if (dataHandling.retentionDays !== null && dataHandling.retentionDays < minimum)
-				throw new Error(
-					`${deploymentId} on ${routeId}: ${deployment.modelId} requires a retention of ${minimum} days`
-				);
-	}
 	validateAccountOptions(graph, deployments, places, companies);
 
 	// A requested tier moves a model selector to, and the gateway bills a Fast request that the

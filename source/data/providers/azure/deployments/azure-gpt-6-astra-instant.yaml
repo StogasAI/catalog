@@ -7,10 +7,6 @@ deployments:
     modelVersion: '2026-09-03'
     deploymentType: instant
   retirementDate: 2028-01-11
-  overrides:
-    # Microsoft's preview terms can differ on abuse monitoring, so the option does not reach it.
-    accountOptions:
-      modified-abuse-monitoring: false
   pricing:
     input_tokens:
       per_mill_tokens: '10'

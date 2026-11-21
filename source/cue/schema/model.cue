@@ -37,8 +37,8 @@ package catalog
 	promptCacheMinimumTokens?: int & >0
 	// Limits of the model that are narrower than those of its routes.
 	inputLimits?: #InputLimits
-	// The retention that the model's developer requires wherever the model runs. No deployment
-	// states a shorter one, and no account option brings one under it.
+	// The retention that the model's developer requires wherever the model runs. Each record of the
+	// model takes it in place of a shorter one, and no account option brings one under it.
 	minimumRetentionDays?: int & >0
 	// The date of the immutable checkpoint that the model's ID pins, which the owner states or
 	// writes into a dated ID whose date it documents as the snapshot's. Omitted otherwise.

@@ -1741,7 +1741,7 @@ describe('catalog source compiler invariants', () => {
 		const route = {
 			endToEndEncrypted: false,
 			processingLocation: 'unknown',
-			storageLocation: 'none',
+			storageLocation: 'world',
 			retentionDays: null,
 			trainingUse: null
 		};
@@ -1752,7 +1752,7 @@ describe('catalog source compiler invariants', () => {
 		expect(graph.routes['openai-responses'].dataHandling).toEqual({
 			endToEndEncrypted: false,
 			processingLocation: 'unknown',
-			storageLocation: 'none',
+			storageLocation: 'world',
 			retentionDays: null,
 			trainingUse: null,
 			zeroDataRetention: false,
@@ -2484,7 +2484,7 @@ describe('catalog source compiler invariants', () => {
 	describe('lists on each route record the account options that reach it', () => {
 		const zeroRetention = {
 			id: 'zero-data-retention',
-			name: 'Zero Data Retention',
+			name: 'Zero data retention',
 			group: 'data-retention',
 			routes: ['openai-responses'],
 			dataHandling: { storageLocation: 'none', retentionDays: 0, zeroDataRetention: true }
@@ -2547,11 +2547,47 @@ describe('catalog source compiler invariants', () => {
 			const reached = buildCatalog(withOptions()).graph.deployments['openai-gpt-test'];
 			expect(chainHash(reached)).not.toBe(chainHash(plain));
 		});
+		test('and the retention that the model requires replaces a shorter one', () => {
+			const retention = (mutate: Mutator) =>
+				buildCatalog(withOptions(mutate)).graph.deployments['openai-gpt-test'].routes[
+					'openai-responses'
+				].dataHandling.retentionDays;
+			expect(
+				retention((source) => (source.graph.models['gpt-test'].minimumRetentionDays = 31))
+			).toBe(31);
+			expect(
+				retention((source) => (source.graph.models['gpt-test'].minimumRetentionDays = 7))
+			).toBe(30);
+			// No requirement states a retention that the provider leaves unknown.
+			expect(
+				retention((source) => {
+					source.graph.models['gpt-test'].minimumRetentionDays = 31;
+					source.graph.providers.openai.dataHandling.retentionDays = null;
+				})
+			).toBeNull();
+		});
 		testRejections([
 			[
-				'record under the retention that its model requires',
-				(source: Source) => (source.graph.models['gpt-test'].minimumRetentionDays = 31),
-				'openai-gpt-test on openai-responses: gpt-test requires a retention of 31 days'
+				'deployment that restates the retention that its model requires',
+				(source: Source) => {
+					source.graph.models['gpt-test'].minimumRetentionDays = 31;
+					source.graph.deployments['openai-gpt-test'].overrides = {
+						dataHandling: { retentionDays: 31 }
+					};
+				},
+				'openai-gpt-test.overrides.dataHandling.retentionDays does not change what the deployment serves'
+			],
+			[
+				'record that keeps nothing of a model that requires a retention',
+				(source: Source) => {
+					source.graph.models['gpt-test'].minimumRetentionDays = 31;
+					source.graph.providers.openai.dataHandling = {
+						...source.graph.providers.openai.dataHandling,
+						storageLocation: 'none',
+						retentionDays: 0
+					};
+				},
+				'a retention requires a storage location'
 			],
 			[
 				'option that covers a route of no provider',

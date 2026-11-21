@@ -4,9 +4,6 @@ deployments:
   upstream:
     model: claude-fable-5-2
     inferenceGeo: us
-  overrides:
-    dataHandling:
-      retentionDays: 30
   pricing:
     input_tokens:
       per_mill_tokens: '4.4'
