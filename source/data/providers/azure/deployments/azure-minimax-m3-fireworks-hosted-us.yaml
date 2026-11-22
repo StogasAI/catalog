@@ -10,6 +10,9 @@ deployments:
   # Microsoft's US Data Zone processes requests only in the US. Reviewed 2026-11-09:
   # https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types and
   # https://learn.microsoft.com/en-us/azure/foundry/how-to/fireworks/enable-fireworks-models
+  # Microsoft retires the pay-per-token offer on this date. Reviewed 2026-11-22:
+  # https://learn.microsoft.com/en-us/azure/foundry/how-to/fireworks/fireworks-model-catalog#pay-per-token
+  retirementDate: 2026-11-25
   overrides:
     # Fireworks AI runs the model, so Microsoft's modified abuse monitoring does not reach it.
     accountOptions:
