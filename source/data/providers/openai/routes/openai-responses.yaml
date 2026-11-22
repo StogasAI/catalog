@@ -247,6 +247,13 @@ routes:
   # takes the same residency, and the data residency guide does not list hosted shells. OpenAI bills
   # each container by session to the key's account, which no request measures, so neither tool has a
   # price here. Reviewed 2026-11-22.
+  # Image generation keeps each request's images for 30 days of abuse monitoring, and Zero Data
+  # Retention covers only some image models, not the tool's default, while a request may name any
+  # of them, so the offer keeps 30 days at an unknown place, as OpenAI does without the account's
+  # options: https://developers.openai.com/api/docs/guides/your-data. The data residency guide lists
+  # the Images API but not the tool, so where the tool processes is unknown too, as for hosted
+  # shells. OpenAI bills the image model's tokens, and no reply reports their cached part, so the
+  # tool has no price here. Reviewed 2026-11-22.
   hostedTools:
     - tool: web_search
       pricing:
@@ -266,3 +273,8 @@ routes:
       dataHandling:
         processingLocation: unknown
         storageLocation: unknown
+    - tool: image_generation
+      dataHandling:
+        processingLocation: unknown
+        storageLocation: unknown
+        retentionDays: 30

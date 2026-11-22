@@ -1641,6 +1641,9 @@ function compileGraph(source, places, companies) {
 				// does not place.
 				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'mcp'))
 					throw new Error(`${routeId}: the gateway has no hold for mcp on a managed credential`);
+				// No reply prices an image, so no request on a managed account could pay for one.
+				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'image_generation'))
+					throw new Error(`${routeId}: image generation has no price for a managed credential`);
 				// Every customer on our managed account shares its prompt cache.
 				if (modes.stogasManaged && dataHandling.isolatedPromptCache)
 					throw new Error(`${routeId}: a route with a managed credential shares its prompt cache`);

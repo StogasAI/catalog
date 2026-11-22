@@ -21,6 +21,7 @@ deployments:
       file_search: false
       code_interpreter: false
       shell: false
+      image_generation: false
   pricing:
     input_tokens:
       per_mill_tokens: '5.5'
