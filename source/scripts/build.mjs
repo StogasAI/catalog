@@ -110,9 +110,10 @@ const certificationIncludes = {
 	'dod-il4': 'dod-il2',
 	'dod-il5': 'dod-il4'
 };
-// Hosted tools in canonical order, and the call meters that each may charge. A request's content
-// that a tool reads bills as input tokens, so only web search has call meters.
-const hostedToolIds = ['web_search', 'web_fetch', 'mcp'];
+// Hosted tools in canonical order, and the call meters that each may charge. Content that a tool
+// adds to the context bills as input tokens, so only the searches that also charge for each call
+// have call meters.
+const hostedToolIds = ['web_search', 'web_fetch', 'mcp', 'file_search'];
 const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
 const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
 const openaiWebSearchMeters = [
@@ -120,10 +121,12 @@ const openaiWebSearchMeters = [
 	'openai_responses_web_search_preview_calls',
 	'openai_responses_web_search_preview_non_reasoning_calls'
 ];
+const openaiFileSearchMeters = ['openai_responses_file_search_calls'];
 const hostedToolMeters = {
 	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
 	web_fetch: [],
-	mcp: []
+	mcp: [],
+	file_search: openaiFileSearchMeters
 };
 // The request names the server that a remote MCP tool sends content to, so the catalog knows no
 // fact about it, and no audit or agreement covers it.
@@ -1281,12 +1284,20 @@ function validateServedFacts(
 				}
 			}
 		}
-		// Each wire charges web search on its own meters, so an offer must price exactly those.
-		if (route.hostedTools.web_search) {
-			const required = anthropicWire ? anthropicWebSearchMeters : openaiWebSearchMeters;
-			if (!same(Object.keys(route.hostedTools.web_search.pricing).sort(), [...required].sort())) {
+		// Only OpenAI's own Responses API runs file search.
+		if (anthropicWire && route.hostedTools.file_search) {
+			throw new Error(`${deploymentId} on ${routeId}: Claude's wire has no file_search`);
+		}
+		// Each wire charges a search on its own meters, so an offer must price exactly those, and no
+		// call bills at zero.
+		for (const [tool, required] of [
+			['web_search', anthropicWire ? anthropicWebSearchMeters : openaiWebSearchMeters],
+			['file_search', openaiFileSearchMeters]
+		]) {
+			const offer = route.hostedTools[tool];
+			if (offer && !same(Object.keys(offer.pricing).sort(), [...required].sort())) {
 				throw new Error(
-					`${deploymentId} on ${routeId}: web search needs exactly the meters ${required.join(', ')}`
+					`${deploymentId} on ${routeId}: ${tool} needs exactly the meters ${required.join(', ')}`
 				);
 			}
 		}

@@ -11,7 +11,14 @@ deployments:
     inferenceGeo: ae
   approvalRequired: true
   stogasByok: false
-  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026.
+  notes: OpenAI publishes no prices for its data residency endpoints, so these prices apply its rule of 10% more for models released on or after March 5, 2026. OpenAI processes no hosted tools in this region.
+  # OpenAI's data residency guide lists processing in this region for none of its hosted tools.
+  # Reviewed 2026-11-22: https://developers.openai.com/api/docs/guides/data-residency
+  overrides:
+    hostedTools:
+      web_search: false
+      mcp: false
+      file_search: false
   pricing:
     input_tokens:
       per_mill_tokens: '0.22'

@@ -1,6 +1,6 @@
 package catalog
 
-#HostedToolId: "web_search" | "web_fetch" | "mcp"
+#HostedToolId: "web_search" | "web_fetch" | "mcp" | "file_search"
 
 // Where the tool's own processing sends request content, and what it keeps.
 // The gateway joins these facts with the deployment's for each request that

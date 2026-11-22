@@ -238,7 +238,10 @@ routes:
   # Data handling reviewed 2026-11-03: https://developers.openai.com/api/docs/guides/your-data. Web search
   # takes the project's US or Europe data residency, as other Responses content does. OpenAI sends a
   # remote MCP tool's calls to the server that the request names, a third party whose policies apply:
-  # https://developers.openai.com/api/docs/guides/tools-connectors-mcp.
+  # https://developers.openai.com/api/docs/guides/tools-connectors-mcp. File search reads vector
+  # stores that the account keeps, keeps nothing of the request and takes the same residency.
+  # Reviewed 2026-11-22: https://developers.openai.com/api/docs/guides/data-residency. Its calls cost
+  # $2.50 per 1,000 on the Responses API: https://developers.openai.com/api/docs/pricing
   hostedTools:
     - tool: web_search
       pricing:
@@ -249,3 +252,7 @@ routes:
         openai_responses_web_search_preview_non_reasoning_calls:
           per_1k_calls: '25'
     - tool: mcp
+    - tool: file_search
+      pricing:
+        openai_responses_file_search_calls:
+          per_1k_calls: '2.5'

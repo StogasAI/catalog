@@ -2030,7 +2030,43 @@ describe('catalog source compiler invariants', () => {
 						}
 					];
 				},
-				'openai-gpt-test on openai-responses: web search needs exactly the meters'
+				'openai-gpt-test on openai-responses: web_search needs exactly the meters'
+			],
+			[
+				'file search without its call meter',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{ tool: 'file_search', dataHandling: {} }
+					];
+				},
+				'openai-gpt-test on openai-responses: file_search needs exactly the meters openai_responses_file_search_calls'
+			],
+			[
+				"web search on file search's call meter",
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{
+							tool: 'web_search',
+							pricing: { openai_responses_file_search_calls: { per_1k_calls: '2.5' } },
+							dataHandling: {}
+						}
+					];
+				},
+				'openai-responses.hostedTools[0]: web_search has no call meter openai_responses_file_search_calls'
+			],
+			[
+				"file search on Claude's wire",
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{
+							tool: 'file_search',
+							pricing: { openai_responses_file_search_calls: { per_1k_calls: '2.5' } },
+							dataHandling: {}
+						}
+					];
+					asAnthropic(source);
+				},
+				"anthropic-gpt-test-us on anthropic-messages: Claude's wire has no file_search"
 			],
 			[
 				'hosted tool data handling in an unlisted place',

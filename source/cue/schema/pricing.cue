@@ -40,6 +40,7 @@ package catalog
 	openai_responses_web_search_calls?:                       #CallRate
 	openai_responses_web_search_preview_calls?:               #CallRate
 	openai_responses_web_search_preview_non_reasoning_calls?: #CallRate
+	openai_responses_file_search_calls?:                      #CallRate
 })
 
 // Search models charge for the search that every request makes, so their
