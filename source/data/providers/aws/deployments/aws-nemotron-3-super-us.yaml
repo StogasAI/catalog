@@ -1,0 +1,36 @@
+# Bedrock runs Nemotron 3 Super only in the Region of each request, at the same prices in each US
+# Region.
+# Prices from the AWS Price List (AmazonBedrock, nvidia.nemotron-super-3-120b-input-tokens and
+# nvidia.nemotron-super-3-120b-output-tokens), reviewed 2026-11-20:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json
+# Regions and Chat Completions support reviewed 2026-11-20:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-nvidia-nemotron-super-3-120b.html
+deployments:
+  modelId: nemotron-3-super
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: nvidia.nemotron-super-3-120b
+    inferenceGeo: us
+    regions: [us-east-1, us-east-2, us-west-2]
+  overrides:
+    # Bedrock serves a window of 262,144 tokens, which the prompt and the output share (capture
+    # aws/chat-completions-in-region-limits).
+    contextWindowTokens: 262144
+    maxOutputTokens: 262144
+    # The model reasons only at reasoning_effort high, which the gateway sends to turn reasoning
+    # on, and answers without reasoning when a request sets no effort (capture
+    # aws/chat-completions-in-region-reasoning).
+    reasoningDefault: none
+    # Bedrock caches no prompt and leaves every document out of the prompt (captures
+    # aws/chat-completions-in-region-caching and aws/chat-completions-in-region-files).
+    capabilities:
+      implicitPromptCaching: false
+      explicitPromptCaching: false
+    documentFormats:
+      mediaTypes: []
+      extensions: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.15'
+    output_tokens:
+      per_mill_tokens: '0.65'

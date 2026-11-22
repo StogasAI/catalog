@@ -12,6 +12,9 @@ deployments:
       parallelFunctionCalling: false
       implicitPromptCaching: false
       explicitPromptCaching: false
+      # The model calls the tool or writes the call into its text under tool_choice none (capture
+      # azure/other-model-formats-tool-choice-none).
+      toolChoiceNone: false
   pricing:
     input_tokens:
       per_mill_tokens: '0.15'

@@ -12,6 +12,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: true
     toolResultImages: true
     toolResultDocuments: true
   # The sampling fields of the Messages API. Reviewed 2026-11-15:

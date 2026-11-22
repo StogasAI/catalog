@@ -1,0 +1,4 @@
+groups:
+  authorId: moonshot-ai
+  name: 'Kimi K2 Code'
+  parentIds: [kimi-k2, kimi-code]

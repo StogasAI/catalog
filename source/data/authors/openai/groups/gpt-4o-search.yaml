@@ -1,0 +1,4 @@
+groups:
+  authorId: openai
+  name: 'GPT-4o search'
+  parentIds: [gpt-4o, gpt-search]

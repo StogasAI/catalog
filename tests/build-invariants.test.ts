@@ -19,6 +19,7 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
+	toolChoiceNone: true,
 	toolResultImages: true,
 	toolResultDocuments: true
 };
@@ -52,8 +53,12 @@ function sourceFixture() {
 			world: { name: 'World', kind: 'world' },
 			europe: { name: 'Europe', kind: 'continent', countries: ['CH', 'CY', 'DE', 'FR'] },
 			eu: { name: 'European Union', kind: 'union', countries: ['CY', 'DE', 'FR'] },
+			CH: { name: 'Switzerland', kind: 'country' },
+			CY: { name: 'Cyprus', kind: 'country' },
 			DE: { name: 'Germany', kind: 'country' },
+			FR: { name: 'France', kind: 'country' },
 			'north-america': { name: 'North America', kind: 'continent', countries: ['CA', 'US'] },
+			CA: { name: 'Canada', kind: 'country' },
 			US: { name: 'United States', kind: 'country' }
 		} as Record<
 			string,
@@ -395,7 +400,7 @@ describe('catalog source compiler invariants', () => {
 	test('derives the places that contain each place from the countries that regions list', () => {
 		const source = sourceFixture();
 		source.locations['US-CA'] = { name: 'California', kind: 'subdivision' };
-		source.locations.CY = { name: 'Cyprus', kind: 'country' };
+		source.locations.JP = { name: 'Japan', kind: 'country' };
 		source.locations.AQ = { name: 'Antarctica', kind: 'country' };
 		source.locations.asia = {
 			name: 'Asia',
@@ -429,6 +434,16 @@ describe('catalog source compiler invariants', () => {
 		});
 	});
 
+	test('lists a country that no record names', () => {
+		// A company's headquarters and an access policy name any country, so every one is a place.
+		const source = sourceFixture();
+		Object.assign(source.companies.openai, { headquarteredCountry: 'FR' });
+		const { companies, locations } = buildCatalog(source);
+		expect(companies.openai!.headquarteredCountry).toBe('FR');
+		expect(locations.FR).toEqual({ name: 'France', kind: 'country', parentIds: ['eu'] });
+		expect(locations.CA!.parentIds).toEqual(['north-america']);
+	});
+
 	test('keeps a region inside another only when the other lists all of its countries', () => {
 		const source = sourceFixture();
 		// The EU holds Germany but not Switzerland, so a region of both lies only in Europe.
@@ -444,9 +459,9 @@ describe('catalog source compiler invariants', () => {
 		expect(places.countries.get('eu')).toEqual(['CY', 'DE', 'FR']);
 		expect(countriesIn(places, 'eu')).toEqual(['CY', 'DE', 'FR']);
 		expect(countriesIn(places, 'DE')).toEqual(['DE']);
-		// A country that the catalog does not list lies in each region that lists it.
 		expect(locationWithin(places, 'FR')).toEqual(['FR', 'eu', 'europe', 'world']);
-		expect(locationWithin(places, 'JP')).toEqual(['JP', 'world']);
+		// A place that the catalog does not list holds only itself.
+		expect(locationWithin(places, 'JP')).toEqual(['JP']);
 		expect(locationWithin(places, 'unknown')).toEqual(['unknown']);
 		// Nothing kept lies within every place.
 		expect(locationWithin(places, 'none')).toEqual([...places.within.keys(), 'none'].sort());
@@ -518,8 +533,8 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				'subdivision of a country that locations does not list',
-				(source: Source) => (source.locations['FR-75'] = { name: 'Paris', kind: 'subdivision' }),
-				'Location FR-75 lies in unknown place FR'
+				(source: Source) => (source.locations['JP-13'] = { name: 'Tokyo', kind: 'subdivision' }),
+				'Location JP-13 lies in unknown place JP'
 			],
 			...['unknown', 'none', 'Europe', 'e_u', 'DEU'].map(
 				(id) =>
@@ -547,13 +562,18 @@ describe('catalog source compiler invariants', () => {
 					] as const
 			),
 			[
-				'place that no record names',
-				(source: Source) => (source.locations.FR = { name: 'France', kind: 'country' }),
-				'Location FR: no record names it or a place inside it, so remove it'
+				'subdivision that no record names',
+				(source: Source) => (source.locations['US-TX'] = { name: 'Texas', kind: 'subdivision' }),
+				'Location US-TX: no record names it, so remove it'
+			],
+			[
+				'region with a country that locations does not list',
+				(source: Source) => (source.locations.eu!.countries = ['CY', 'DE', 'FR', 'IT']),
+				'Location eu: lists IT, which locations does not list'
 			],
 			[
 				'account location that locations does not list',
-				(source: Source) => (source.graph.providers.openai.accountLocations = ['DE', 'FR', 'US']),
+				(source: Source) => (source.graph.providers.openai.accountLocations = ['DE', 'JP', 'US']),
 				'openai: accountLocations must list places that locations lists, in order, once each'
 			],
 			[
@@ -568,7 +588,7 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				'unlisted processing location',
-				(source: Source) => (source.graph.providers.openai.dataHandling.processingLocation = 'FR'),
+				(source: Source) => (source.graph.providers.openai.dataHandling.processingLocation = 'JP'),
 				'dataHandling names a place that locations does not list'
 			],
 			[
@@ -579,18 +599,18 @@ describe('catalog source compiler invariants', () => {
 			],
 			[
 				'unlisted storage location',
-				(source: Source) => (source.graph.providers.openai.dataHandling.storageLocation = 'FR'),
+				(source: Source) => (source.graph.providers.openai.dataHandling.storageLocation = 'JP'),
 				'dataHandling names a place that locations does not list'
 			],
 			[
-				'unlisted headquarters',
-				(source: Source) => Object.assign(source.companies.openai, { headquarteredCountry: 'FR' }),
-				'headquarteredCountry names a country that locations does not list'
+				'headquarters that locations does not list',
+				(source: Source) => Object.assign(source.companies.openai, { headquarteredCountry: 'JP' }),
+				'Company openai: headquarteredCountry is not a country that locations lists'
 			],
 			[
 				'region as headquarters',
 				(source: Source) => Object.assign(source.companies.openai, { headquarteredCountry: 'eu' }),
-				'headquarteredCountry names a country that locations does not list'
+				'Company openai: headquarteredCountry is not a country that locations lists'
 			]
 		]);
 	});
@@ -2348,32 +2368,45 @@ describe('catalog source compiler invariants', () => {
 				teeVerified: false,
 				sharedWith: ['unknown']
 			};
-			const offer = (dataHandling: object) =>
+			const offer = (dataHandling?: object) =>
 				changed((candidate) => {
 					candidate.graph.providers.openai.dataHandling.certifications = [
 						'soc2-type2',
 						'iso-27001'
 					];
-					candidate.graph.routes['openai-responses'].hostedTools = [{ tool: 'mcp', dataHandling }];
+					candidate.graph.routes['openai-responses'].hostedTools = [
+						{ tool: 'mcp', ...(dataHandling && { dataHandling }) }
+					];
 				});
-			const refusal =
-				'openai-gpt-test on openai-responses: mcp states every data handling fact as unknown and removes every certification';
-			expect(() =>
-				buildCatalog(offer({ ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] }))
-			).not.toThrow();
-			// A fact that the offer leaves out would keep the deployment's value for the server.
-			const { trainingUse: _, ...untrained } = unknown;
-			expect(() =>
-				buildCatalog(offer({ ...untrained, withoutCertifications: ['soc2-type2', 'iso-27001'] }))
-			).toThrow(refusal);
-			expect(() =>
-				buildCatalog(offer({ ...unknown, withoutCertifications: ['soc2-type2'] }))
-			).toThrow(refusal);
-			// Our own provider account never calls a server that a request names.
-			const managed = offer({ ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] });
+			// The build states the facts, and a deployment's own certifications go too.
+			const source = offer();
+			source.graph.deployments['openai-gpt-test'].overrides = {
+				dataHandling: { certifications: ['soc2-type2', 'iso-27001', 'iso-42001'] }
+			};
+			const { graph } = buildCatalog(source);
+			expect(graph.routes['openai-responses'].hostedTools).toEqual([
+				{
+					tool: 'mcp',
+					dataHandling: { ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] }
+				}
+			]);
+			expect(
+				graph.deployments['openai-gpt-test'].routes['openai-responses'].hostedTools.mcp
+			).toEqual({
+				dataHandling: {
+					...unknown,
+					withoutCertifications: ['soc2-type2', 'iso-27001', 'iso-42001']
+				},
+				pricing: {}
+			});
+			expect(() => buildCatalog(offer({ trainingUse: null }))).toThrow(
+				'openai-responses.hostedTools[0]: mcp states no dataHandling, because the request names its server'
+			);
+			// Our own provider account would need a hold that the gateway does not place.
+			const managed = offer();
 			managed.graph.providers.openai.stogasManaged = true;
 			expect(() => buildCatalog(managed)).toThrow(
-				'openai-responses: a route with a managed credential offers no mcp tool'
+				'openai-responses: the gateway has no hold for mcp on a managed credential'
 			);
 		});
 
@@ -2920,7 +2953,7 @@ describe('route document formats', () => {
 	const pdf = { extensions: ['.pdf'], mediaTypes: ['application/pdf'] };
 	const documents = { extensions: ['.pdf', '.txt'], mediaTypes: ['application/pdf', 'text/plain'] };
 
-	test('stay on each route and enter the chains of its deployments', () => {
+	test('stay on each route and reach each route of its deployments, which an override narrows', () => {
 		const source = sourceFixture();
 		source.graph.routes['openai-responses'].documentFormats = documents;
 		addSecondOpenAIRoute(source);
@@ -2931,7 +2964,8 @@ describe('route document formats', () => {
 		expect(original.graph.routes['openai-chat-completions'].documentFormats).toEqual(pdf);
 		const deployment = original.graph.deployments['openai-gpt-test'];
 		expect(Object.keys(deployment.routes)).toEqual(['openai-chat-completions', 'openai-responses']);
-		expect(deployment.routes['openai-responses']).not.toHaveProperty('documentFormats');
+		expect(deployment.routes['openai-responses'].documentFormats).toEqual(documents);
+		expect(deployment.routes['openai-chat-completions'].documentFormats).toEqual(pdf);
 
 		source.graph.routes['openai-responses'].documentFormats = pdf;
 		const changedRoute = buildCatalog(source).graph.deployments['openai-gpt-test'];
@@ -2939,6 +2973,16 @@ describe('route document formats', () => {
 		expect(changedRoute.routes['openai-chat-completions'].chainHash).toBe(
 			deployment.routes['openai-chat-completions'].chainHash
 		);
+
+		source.graph.routes['openai-responses'].documentFormats = documents;
+		const text = { extensions: ['.txt'], mediaTypes: ['text/plain'] };
+		source.graph.deployments['openai-gpt-test'].overrides = { documentFormats: text };
+		const narrowed = buildCatalog(source);
+		expect(narrowed.graph.routes['openai-responses'].documentFormats).toEqual(documents);
+		expect(narrowed.graph.deployments['openai-gpt-test'].routes).toMatchObject({
+			'openai-chat-completions': { documentFormats: { extensions: [], mediaTypes: [] } },
+			'openai-responses': { documentFormats: text }
+		});
 	});
 
 	test('keep provider-processed PDFs for a text-only model', () => {

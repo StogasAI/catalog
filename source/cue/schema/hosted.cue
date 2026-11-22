@@ -27,6 +27,8 @@ package catalog
 #HostedTool: close({
 	tool: #HostedToolId
 	pricing?: #HostedToolPricing
-	// Omitted when the tool's processing changes none of the deployment's facts.
+	// Omitted when the tool's processing changes none of the deployment's facts, and always for
+	// mcp: the request names the server, so the build states every fact of it as unknown and
+	// removes every certification.
 	dataHandling?: #HostedToolDataHandling
 })

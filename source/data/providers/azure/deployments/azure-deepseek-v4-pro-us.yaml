@@ -15,6 +15,9 @@ deployments:
     # Probed 2026-10-14: several tool calls per turn, even with parallel_tool_calls false, and json_schema output holds.
     capabilities:
       explicitPromptCaching: false
+      # The model calls the tool or writes the call into its text under tool_choice none (capture
+      # azure/other-model-formats-tool-choice-none).
+      toolChoiceNone: false
   pricing:
     input_tokens:
       per_mill_tokens: '1.91'

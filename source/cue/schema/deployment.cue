@@ -46,10 +46,16 @@ package catalog
 // Anthropic's inference geography on Claude Platform on AWS, which models before Claude 4.6 do
 // not take. The build requires it for Bedrock and checks the geographies that Anthropic takes.
 // us-gov is the profile of the AWS GovCloud (US) Regions, a separate AWS partition.
+// regions lists the Regions of a Bedrock model that runs only in the Region of each request and
+// so has no inference profile: the model ID names none, and each Region lies in the geography and
+// charges the deployment's prices.
 #AWSUpstream: close({
 	model:         #UpstreamId
 	inferenceGeo?: #InferenceGeography
+	regions?: [#AWSRegion, ...#AWSRegion]
 })
+
+#AWSRegion: =~"^[a-z]{2}-[a-z]+-[1-9]$"
 
 // Every inference geography: Bedrock's inference profiles name global, those that keep
 // inference in one country or union, which include each geography that Anthropic and Google
@@ -73,6 +79,7 @@ package catalog
 	gpuCount?:       int & >=1 & <=8
 	serviceTier?:    "flex" | "fast" | "ultrafast"
 	inferenceGeo?:   #InferenceGeography
+	regions?: [#AWSRegion, ...#AWSRegion]
 	reasoningMode?:  "pro"
 	modelFormat?:    #AzureModelFormat
 	modelVersion?:   #UpstreamId
@@ -107,17 +114,24 @@ package catalog
 	stogasManaged?: false
 	notes?:         #Note
 	// Narrower facts than the deployment inherits from its model and routes, on all of its routes.
-	// Any fact that a provider's offer of a model can change has one: limits, modalities,
-	// capabilities, sampling, efforts and hosted tools only narrow, and the provider's own values
-	// replace the model's. What the model is, such as its release date, and what a route's API
-	// accepts, such as its interfaces and document formats, have none: a different checkpoint is
-	// another model, and a different API is another route.
+	// Any fact that a provider's offer of a model can change has one: limits, modalities, document
+	// formats, capabilities, sampling, efforts and hosted tools only narrow, and the provider's own
+	// values replace the model's. What the model is, such as its release date, and what a route's
+	// API is, such as its interfaces, have none: a different checkpoint is another model, and a
+	// different API is another route.
 	overrides?: close({
 		contextWindowTokens?: int & >0
 		maxInputTokens?:      int & >0
 		maxOutputTokens?:     int & >0
 		inputModalities?: [#Modality, ...#Modality]
 		outputModalities?: [#Modality, ...#Modality]
+		// The document formats of its routes that the provider reads for this deployment's model,
+		// where it reads fewer, and empty lists where it reads none: Bedrock leaves every document
+		// out of the prompt of a model that runs in the Region of each request.
+		documentFormats?: close({
+			mediaTypes: [...#MediaType]
+			extensions: [...#Extension]
+		})
 		capabilities?: #UnsupportedCapabilities
 		// Whether the deployment always reasons, never reasons or lets the request choose, where
 		// its provider differs from the model's author. No provider gives reasoning to a model that

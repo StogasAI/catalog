@@ -20,6 +20,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: true
     toolResultImages: false
     toolResultDocuments: false
   # The sampling fields of OpenAI's Chat Completions API. Reviewed 2026-11-15:

@@ -18,6 +18,10 @@ deployments:
       parallelFunctionCalling: false
       explicitPromptCaching: false
       structuredOutputs: false
+      # No recorded exchange shows this model answering in text under tool_choice none, and most
+      # models of other authors call the tool or write the call there (capture
+      # azure/other-model-formats-tool-choice-none).
+      toolChoiceNone: false
     dataHandling:
       processingLocation: US
       # Fireworks AI runs the model, and Microsoft names no audit of it for this deployment.

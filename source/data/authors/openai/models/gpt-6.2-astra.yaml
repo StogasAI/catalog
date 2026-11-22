@@ -1,7 +1,7 @@
 models:
   authorId: openai
   name: GPT-6.2 Astra
-  groupIds: [gpt-6.2, gpt-astra]
+  groupIds: [gpt-6.2, gpt-6-astra]
   contextWindowTokens: 1050000
   maxInputTokens: 922000
   maxOutputTokens: 128000

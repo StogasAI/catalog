@@ -13,15 +13,8 @@ deployments:
     # One generateContent reply on v1 is one foreground segment of at most 65,536 tokens, and
     # 32,768 without streaming. Reviewed 2026-11-20: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-carbon
     maxOutputTokens: 65536
-  # Google gives half of the net spend back as credits through November 30, 2026, Pacific time.
-  periods:
-    - name: 'Launch credits'
-      start: 2026-11-20T00:00:00Z
-      end: 2026-12-01T08:00:00Z
-      set:
-        pricing.input_tokens.per_mill_tokens: '2'
-        pricing.cached_input_tokens.per_mill_tokens: '0.1'
-        pricing.output_tokens.per_mill_tokens: '10'
+  # Google bills the full price and gives half of the net spend back later as credits, through
+  # November 30, 2026, Pacific time, so the deployment states the price that Google bills.
   pricing:
     input_tokens:
       per_mill_tokens: '4'

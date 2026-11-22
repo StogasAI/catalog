@@ -2,7 +2,7 @@ models:
   authorId: openai
   name: GPT-4o search preview
   aliases: [gpt-4o-search-preview]
-  groupIds: [gpt-4o, gpt-search]
+  groupIds: [gpt-4o-search]
   contextWindowTokens: 128000
   maxOutputTokens: 16384
   inputModalities: [text]

@@ -23,6 +23,7 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
+	toolChoiceNone: true,
 	toolResultImages: true,
 	toolResultDocuments: true
 };
@@ -171,6 +172,8 @@ const geminiCapabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
+	// Every Gemini model calls a function at mode NONE after an earlier call.
+	toolChoiceNone: false,
 	// Core sends a tool result to Gemini as text.
 	toolResultImages: false,
 	toolResultDocuments: false

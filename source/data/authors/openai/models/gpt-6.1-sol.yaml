@@ -1,7 +1,7 @@
 models:
   authorId: openai
   name: GPT-6.1 Sol
-  groupIds: [gpt-6.1, gpt-sol]
+  groupIds: [gpt-6.1, gpt-6-sol]
   contextWindowTokens: 1050000
   maxInputTokens: 922000
   maxOutputTokens: 128000

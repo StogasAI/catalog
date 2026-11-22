@@ -52,6 +52,7 @@ const capabilityNames = [
 	'structuredOutputs',
 	'systemMessages',
 	'toolChoice',
+	'toolChoiceNone',
 	'toolResultImages',
 	'toolResultDocuments'
 ];
@@ -125,7 +126,7 @@ const hostedToolMeters = {
 	mcp: []
 };
 // The request names the server that a remote MCP tool sends content to, so the catalog knows no
-// fact about it.
+// fact about it, and no audit or agreement covers it.
 const unknownDestination = {
 	processingLocation: 'unknown',
 	storageLocation: 'unknown',
@@ -137,6 +138,15 @@ const unknownDestination = {
 	teeVerified: false,
 	sharedWith: ['unknown']
 };
+
+// The facts of a remote MCP tool for a record with these certifications. The build states them,
+// so source states none.
+function remoteServerFacts(certifications) {
+	return {
+		...structuredClone(unknownDestination),
+		...(certifications.length > 0 && { withoutCertifications: [...certifications] })
+	};
+}
 const maxAliasesPerNode = 8;
 // Chutes selects an instance of an end-to-end encrypted route by the GPU count that the encrypted
 // transport attests, and its other routes take none.
@@ -232,6 +242,25 @@ function fileOwnedNodeBody(path, source) {
 // CUE's memory grows with the records that one run reads, about 330 KB for each deployment, so
 // it reads deployments in batches of this many.
 const CUE_DEPLOYMENT_BATCH = 1000;
+
+// The geography of each AWS commercial Region that a Bedrock deployment can list: the Regions whose
+// inference profiles keep inference in their geography, which the gateway also uses only there.
+// Opt-in Regions and those that add their own country to a profile, such as London, are left out.
+const AWS_REGION_GEOGRAPHY = {
+	'ap-northeast-1': 'jp',
+	'ap-northeast-3': 'jp',
+	'ap-south-1': 'in',
+	'ap-southeast-2': 'au',
+	'ca-central-1': 'ca',
+	'eu-central-1': 'eu',
+	'eu-north-1': 'eu',
+	'eu-west-1': 'eu',
+	'eu-west-3': 'eu',
+	'us-east-1': 'us',
+	'us-east-2': 'us',
+	'us-west-1': 'us',
+	'us-west-2': 'us'
+};
 
 // Where each inference geography runs inference: Anthropic's, Bedrock's inference profiles' and
 // Google Cloud's endpoints'.
@@ -932,7 +961,7 @@ function validateReasoningDefault(owner, value, reasoning, efforts) {
 // What a deployment serves: facts that hold on all its routes, its prices among them, and for
 // each route the facts that combine the route with the model and deployment, such as the hosted
 // tools that the route runs for it, with their call prices. Facts of the route alone, such as its
-// document formats, stay on the route. A capability needs the route, the model and the deployment.
+// interfaces, stay on the route. A capability needs the route, the model and the deployment.
 function servedFacts(graph, model, deployment, hosting) {
 	const overrides = deployment.overrides ?? {};
 	const contextWindowTokens = overrides.contextWindowTokens ?? model.contextWindowTokens;
@@ -987,11 +1016,23 @@ function servedFacts(graph, model, deployment, hosting) {
 			dataHandling: Object.fromEntries(
 				dataHandlingFields.map((field) => [field, dataHandling[field]])
 			),
+			documentFormats: Object.fromEntries(
+				['extensions', 'mediaTypes'].map((field) => [
+					field,
+					route.documentFormats[field].filter(
+						(format) => overrides.documentFormats?.[field].includes(format) ?? true
+					)
+				])
+			),
 			hostedTools: Object.fromEntries(
 				offers.map((offer) => [
 					offer.tool,
 					{
-						dataHandling: structuredClone(offer.dataHandling),
+						// A deployment can state certifications of its own, and none covers the server.
+						dataHandling:
+							offer.tool === 'mcp'
+								? remoteServerFacts(dataHandling.certifications)
+								: structuredClone(offer.dataHandling),
 						pricing: structuredClone(offer.pricing ?? {})
 					}
 				])
@@ -1056,6 +1097,8 @@ function compileHostedTools(routeId, source, places, companies, certifications) 
 				throw new Error(`${owner}: ${offer.tool} has no call meter ${meter}`);
 			}
 		}
+		if (offer.tool === 'mcp' && offer.dataHandling)
+			throw new Error(`${owner}: mcp states no dataHandling, because the request names its server`);
 		const { processingLocation, storageLocation } = offer.dataHandling ?? {};
 		for (const location of [processingLocation, storageLocation]) {
 			if (location !== undefined && !isLocation(places, location)) {
@@ -1073,7 +1116,10 @@ function compileHostedTools(routeId, source, places, companies, certifications) 
 		return {
 			tool: offer.tool,
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
-			dataHandling: structuredClone(offer.dataHandling ?? {})
+			dataHandling:
+				offer.tool === 'mcp'
+					? remoteServerFacts(certifications)
+					: structuredClone(offer.dataHandling ?? {})
 		};
 	});
 	offers.sort((left, right) => hostedToolRanks.get(left.tool) - hostedToolRanks.get(right.tool));
@@ -1119,6 +1165,21 @@ function validateServedFacts(
 	for (const [tool, value] of Object.entries(overrides.hostedTools ?? {})) {
 		if (!hostedToolRanks.has(tool) || value !== false) {
 			throw new Error(`${deploymentId}.overrides.hostedTools.${tool} may only remove a tool`);
+		}
+	}
+	if (overrides.documentFormats) {
+		const owner = `${deploymentId}.overrides`;
+		validateDocumentFormats(overrides.documentFormats, owner);
+		for (const [field, formats] of Object.entries(overrides.documentFormats)) {
+			const read = deployment.routeIds.flatMap(
+				(routeId) => graph.routes[routeId].documentFormats[field]
+			);
+			if (formats.some((format) => !read.includes(format))) {
+				throw new Error(`${owner}.documentFormats.${field} may only remove a format`);
+			}
+		}
+		for (const [routeId, route] of Object.entries(served.routes)) {
+			validateDocumentFormats(route.documentFormats, `${deploymentId} on ${routeId}`);
 		}
 	}
 	// A provider decides whether its deployment always reasons, never reasons or lets the request
@@ -1220,17 +1281,6 @@ function validateServedFacts(
 				}
 			}
 		}
-		if (route.hostedTools.mcp) {
-			const { withoutCertifications = [], ...effect } = route.hostedTools.mcp.dataHandling;
-			if (
-				!same(effect, unknownDestination) ||
-				route.dataHandling.certifications.some((id) => !withoutCertifications.includes(id))
-			) {
-				throw new Error(
-					`${deploymentId} on ${routeId}: mcp states every data handling fact as unknown and removes every certification`
-				);
-			}
-		}
 		// Each wire charges web search on its own meters, so an offer must price exactly those.
 		if (route.hostedTools.web_search) {
 			const required = anthropicWire ? anthropicWebSearchMeters : openaiWebSearchMeters;
@@ -1316,7 +1366,7 @@ export function buildCatalog(source) {
 	const companies = source.companies;
 	const { base, states, periods } = periodStates(source.graph);
 	const sourceGraphs = [base, ...states.map((state) => state.graph)];
-	requireNamedPlaces(places, [...sourceGraphs, companies]);
+	requireNamedSubdivisions(places, sourceGraphs);
 	const graph = compileGraph(base, places, companies);
 	const schedule = [];
 	const graphs = [graph];
@@ -1351,39 +1401,33 @@ function requireNamedCompanies(companies, graphs) {
 		if (!named.has(id)) throw new Error(`Company ${id}: no record names it, so remove it`);
 }
 
-const PLACE_FIELDS = new Set([
-	'accountLocations',
-	'headquarteredCountry',
-	'processingLocation',
-	'storageLocation'
-]);
+const PLACE_FIELDS = new Set(['accountLocations', 'processingLocation', 'storageLocation']);
 
 /**
- * Throws unless a record names each country and subdivision or a place inside it, in the base graph
- * or a dated state. The catalog lists the places that data can be in, and a place that nothing can
- * be in would only lengthen every list that offers places. Continents, regions and unions stay,
- * because access policies name them to limit requests by country.
+ * Throws unless a record names each subdivision, in the base graph or a dated state. The catalog
+ * lists every country, because a company has its headquarters in one, an account's resources lie in
+ * one and an access policy names the countries that requests may come from. No such use names a
+ * subdivision, so one that no data handling or account location names would only lengthen the list.
  */
-function requireNamedPlaces(places, graphs) {
+function requireNamedSubdivisions(places, graphs) {
 	const named = new Set();
 	const visit = (value) => {
 		if (Array.isArray(value)) for (const item of value) visit(item);
 		else if (value && typeof value === 'object')
 			for (const [key, item] of Object.entries(value)) {
-				if (PLACE_FIELDS.has(key))
-					for (const place of [item].flat())
-						for (const within of places.within.get(place) ?? []) named.add(within);
+				if (PLACE_FIELDS.has(key)) for (const place of [item].flat()) named.add(place);
 				else visit(item);
 			}
 	};
 	for (const graph of graphs) visit(graph);
 	for (const id of places.within.keys())
-		if (!named.has(id) && !places.countries.has(id))
-			throw new Error(`Location ${id}: no record names it or a place inside it, so remove it`);
+		if (SUBDIVISION_ID.test(id) && !named.has(id))
+			throw new Error(`Location ${id}: no record names it, so remove it`);
 }
 
 const REGION_KINDS = ['continent', 'region', 'union'];
 const COUNTRY_ID = /^[A-Z]{2}$/;
+const SUBDIVISION_ID = /^[A-Z]{2}-/;
 
 /**
  * The locations in order, each with the places that directly contain it. A continent, region or
@@ -1408,7 +1452,7 @@ function compileLocations(source) {
 				? 'world'
 				: COUNTRY_ID.test(id)
 					? 'country'
-					: /^[A-Z]{2}-/.test(id)
+					: SUBDIVISION_ID.test(id)
 						? 'subdivision'
 						: null;
 		if (expected ? kind !== expected : !REGION_KINDS.includes(/** @type {string} */ (kind)))
@@ -1431,6 +1475,10 @@ function compileLocations(source) {
 			)
 		)
 			throw new Error(`Location ${id}: countries must list ISO 3166-1 codes in order, once each`);
+		// Every use of a country names a place, so a region lists no country that is not one.
+		const unlisted = countries.find((country) => !Object.hasOwn(source, country));
+		if (unlisted)
+			throw new Error(`Location ${id}: lists ${unlisted}, which locations does not list`);
 		regions.set(id, new Set(countries));
 	}
 	const holds = (outer, inner) => [...inner].every((country) => outer.has(country));
@@ -1439,7 +1487,7 @@ function compileLocations(source) {
 		const own = regions.get(id);
 		let parentIds;
 		if (id === WORLD) parentIds = [];
-		else if (/^[A-Z]{2}-/.test(id)) parentIds = [id.slice(0, 2)];
+		else if (SUBDIVISION_ID.test(id)) parentIds = [id.slice(0, 2)];
 		else {
 			const holders = [...regions.keys()].filter(
 				(other) =>
@@ -1561,10 +1609,11 @@ function compileGraph(source, places, companies) {
 					dataHandling.certifications
 				);
 				// The provider's company runs the models of a route that names no other hosting.
-				// A managed account is ours, and a request must not make the provider call a server
-				// that it names in our name, with results whose size no hold bounds.
+				// On a managed account the client can run the server and fill every result, so a
+				// request would need a hold of a whole input window for each pass, which the gateway
+				// does not place.
 				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'mcp'))
-					throw new Error(`${routeId}: a route with a managed credential offers no mcp tool`);
+					throw new Error(`${routeId}: the gateway has no hold for mcp on a managed credential`);
 				// Every customer on our managed account shares its prompt cache.
 				if (modes.stogasManaged && dataHandling.isolatedPromptCache)
 					throw new Error(`${routeId}: a route with a managed credential shares its prompt cache`);
@@ -1643,10 +1692,8 @@ function compileGraph(source, places, companies) {
 	validateQualifierAliases(graph.authors, 'author');
 	validateQualifierAliases(graph.providers, 'provider');
 	for (const [id, { headquarteredCountry: country }] of Object.entries(companies))
-		if (!(/^[A-Z]{2}$/.test(country) && places.within.has(country)))
-			throw new Error(
-				`Company ${id}: headquarteredCountry names a country that locations does not list`
-			);
+		if (!COUNTRY_ID.test(country) || !places.within.has(country))
+			throw new Error(`Company ${id}: headquarteredCountry is not a country that locations lists`);
 	for (const [providerId, provider] of Object.entries(graph.providers)) {
 		const accountLocations = provider.accountLocations ?? [];
 		if (
@@ -1878,7 +1925,12 @@ function compileGraph(source, places, companies) {
 					? [undefined, 'global', 'us'].includes(deployment.upstream.inferenceGeo)
 					: selectorKeys.includes('inferenceGeo') &&
 						deployment.upstream.serviceTier === undefined) &&
-				selectorKeys.every((key) => ['inferenceGeo', 'model', 'serviceTier'].includes(key)));
+				selectorKeys.every(
+					(key) =>
+						['inferenceGeo', 'model', 'serviceTier'].includes(key) ||
+						// Only Bedrock runs a model in the Region of each request.
+						(key === 'regions' && providerId === 'aws' && hosting === providerCompany)
+				));
 		if (!selectorKeysValid) {
 			throw new Error(`${deploymentId}: upstream selector does not match provider ${providerId}`);
 		}
@@ -1916,18 +1968,29 @@ function compileGraph(source, places, companies) {
 		if (deployment.upstream.inferenceGeo === 'us-gov' && stogasServes) {
 			throw new Error(`${deploymentId}: Stogas does not serve the AWS GovCloud (US) Regions`);
 		}
-		// Bedrock serves these deployments only through inference profiles, whose IDs name the
-		// geography and then the model, whose own ID starts with anthropic for Claude.
-		if (
-			providerId === 'aws' &&
-			hosting === providerCompany &&
-			!deployment.upstream.model.startsWith(
-				`${deployment.upstream.inferenceGeo}.${anthropicWire ? 'anthropic.' : ''}`
-			)
-		) {
-			throw new Error(
-				`${deploymentId}: name the ${deployment.upstream.inferenceGeo} inference profile of the model`
-			);
+		// Bedrock serves a model through inference profiles, whose IDs name the geography and then
+		// the model, whose own ID starts with anthropic for Claude, or in the Region of each request,
+		// by the model's own ID, at the prices of the Regions that the deployment lists.
+		const { inferenceGeo, model: upstreamModel, regions } = deployment.upstream;
+		if (providerId === 'aws' && hosting === providerCompany && regions === undefined) {
+			if (!upstreamModel.startsWith(`${inferenceGeo}.${anthropicWire ? 'anthropic.' : ''}`)) {
+				throw new Error(`${deploymentId}: name the ${inferenceGeo} inference profile of the model`);
+			}
+		} else if (regions !== undefined) {
+			if (upstreamModel.startsWith(`${inferenceGeo}.`)) {
+				throw new Error(
+					`${deploymentId}: a model that runs in its Region names no inference profile`
+				);
+			}
+			if (regions.some((region, index) => index > 0 && regions[index - 1] >= region)) {
+				throw new Error(`${deploymentId}: list each Region once, in order`);
+			}
+			const outside = regions.find((region) => AWS_REGION_GEOGRAPHY[region] !== inferenceGeo);
+			if (outside) {
+				throw new Error(
+					`${deploymentId}: ${outside} is not a Region of the ${inferenceGeo} geography`
+				);
+			}
 		}
 		if (
 			cloud &&
@@ -2005,7 +2068,7 @@ function compileGraph(source, places, companies) {
 		// The ID names the provider and model, then each fact that sets the deployment apart from the
 		// provider's own standard one: who runs it when not the provider's company, its reasoning
 		// mode, its tier or batch API, and the geography or Azure data zone where it runs.
-		const { deploymentType, inferenceGeo, reasoningMode, serviceTier } = deployment.upstream;
+		const { deploymentType, reasoningMode, serviceTier } = deployment.upstream;
 		const expectedId = [
 			providerId,
 			deployment.modelId,

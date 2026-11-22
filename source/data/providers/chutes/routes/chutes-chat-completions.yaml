@@ -3,6 +3,8 @@ routes:
   endpoint: https://api.chutes.ai/e2e/invoke
   interfaces: [chat_completions]
   inputModalities: [text]
+  # Chutes holds no model to tool_choice none, and most of its models call the tool or write the
+  # call into their text under it (capture chutes/tool-choice-none).
   capabilities:
     streaming: true
     functionCalling: true
@@ -12,6 +14,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: false
     toolResultImages: false
     toolResultDocuments: false
   # The sampling fields that Chutes' OpenAI-compatible API took in our probes, and no logit_bias.

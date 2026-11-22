@@ -1,0 +1,4 @@
+groups:
+  authorId: openai
+  name: 'GPT-5 nano'
+  parentIds: [gpt-5, gpt-nano]

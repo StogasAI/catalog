@@ -1,7 +1,7 @@
 models:
   authorId: nvidia
   name: Nemotron 3 Nano Omni 30B
-  groupIds: [nemotron-3, nemotron-nano]
+  groupIds: [nemotron-3-nano]
   contextWindowTokens: 262144
   maxOutputTokens: 262144
   inputModalities: [text, image, audio, video]

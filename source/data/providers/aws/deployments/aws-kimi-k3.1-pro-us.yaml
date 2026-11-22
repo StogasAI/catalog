@@ -16,13 +16,14 @@ deployments:
     reasoning: optional
     reasoningDefault: max
     promptCacheMinimumTokens: 256
-    # Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed
-    # without applying it (capture aws/chat-completions-request-fields).
+    # Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed and
+    # logit_bias without applying them (capture aws/chat-completions-request-fields).
     sampling:
       topP: false
       frequencyPenalty: false
       presencePenalty: false
       seed: false
+      logitBias: false
   pricing:
     input_tokens:
       per_mill_tokens: '4.4'

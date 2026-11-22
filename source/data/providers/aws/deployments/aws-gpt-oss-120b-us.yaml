@@ -1,0 +1,35 @@
+# Bedrock runs gpt-oss-120b only in the Region of each request, at the same prices in each US
+# Region; its only inference profile is AWS GovCloud's.
+# Prices from the AWS Price List (AmazonBedrock, gpt-oss-120b-input-tokens and
+# gpt-oss-120b-output-tokens), reviewed 2026-11-20:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json
+# Regions, Chat Completions support and reasoning reviewed 2026-11-20:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-120b.html
+deployments:
+  modelId: gpt-oss-120b
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: openai.gpt-oss-120b-1:0
+    inferenceGeo: us
+    regions: [us-east-1, us-east-2, us-west-2]
+  overrides:
+    # Bedrock applies neither tool_choice nor a response_format schema for gpt-oss-120b, which
+    # calls one tool in a turn, refuses logit_bias, caches no prompt and leaves every document out
+    # of the prompt (captures aws/chat-completions-in-region-fields,
+    # aws/chat-completions-in-region-caching and aws/chat-completions-in-region-files).
+    capabilities:
+      parallelFunctionCalling: false
+      implicitPromptCaching: false
+      explicitPromptCaching: false
+      structuredOutputs: false
+      toolChoice: false
+    sampling:
+      logitBias: false
+    documentFormats:
+      mediaTypes: []
+      extensions: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.15'
+    output_tokens:
+      per_mill_tokens: '0.6'

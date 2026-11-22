@@ -1,7 +1,7 @@
 models:
   authorId: google
   name: Gemini 3.1 Flash-Lite
-  groupIds: [gemini-3, gemini-flash-lite]
+  groupIds: [gemini-3-flash-lite]
   contextWindowTokens: 1048576
   maxOutputTokens: 65536
   inputModalities: [text, image, audio, video]

@@ -12,6 +12,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: true
     toolResultImages: true
     toolResultDocuments: true
   # The sampling fields of OpenAI's Chat Completions API. Reviewed 2026-11-15:
@@ -248,14 +249,3 @@ routes:
         openai_responses_web_search_preview_non_reasoning_calls:
           per_1k_calls: '25'
     - tool: mcp
-      dataHandling:
-        processingLocation: unknown
-        storageLocation: unknown
-        retentionDays: null
-        trainingUse: null
-        zeroDataRetention: false
-        endToEndEncrypted: false
-        tee: false
-        teeVerified: false
-        sharedWith: [unknown]
-        withoutCertifications: [soc2-type2, iso-27001, iso-27017, iso-27018, iso-27701]

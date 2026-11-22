@@ -14,6 +14,8 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
+	// Chutes holds no model to tool_choice none.
+	toolChoiceNone: false,
 	toolResultImages: false,
 	toolResultDocuments: false
 };

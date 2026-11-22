@@ -297,6 +297,7 @@ describe('catalog editor graph', () => {
 			'group:gpt-5',
 			'group:gpt-sol',
 			'group:gpt-5.6',
+			'group:gpt-5-sol',
 			model,
 			deployment,
 			route,
@@ -308,6 +309,7 @@ describe('catalog editor graph', () => {
 			'group:gpt-5',
 			'group:gpt-sol',
 			'group:gpt-5.6',
+			'group:gpt-5-sol',
 			model
 		]);
 		expect(completeUnambiguousGraphSelection(chains, ['model:missing'])).toEqual(['model:missing']);
@@ -405,6 +407,7 @@ describe('catalog editor graph', () => {
 			{ type: 'group', id: 'gpt-5' },
 			{ type: 'group', id: 'gpt-sol' },
 			{ type: 'group', id: 'gpt-5.6' },
+			{ type: 'group', id: 'gpt-5-sol' },
 			{ type: 'model', id: 'gpt-5.6-sol' }
 		]);
 		expect(lineageForSelection(catalog, 'author:openai', {})).toMatchObject([

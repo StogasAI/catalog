@@ -1,0 +1,35 @@
+# Bedrock runs DeepSeek V3.2 only in the Region of each request, at the same prices in each US
+# Region.
+# Prices from the AWS Price List (AmazonBedrock, deepseek.v3.2-input-tokens and
+# deepseek.v3.2-output-tokens), reviewed 2026-11-20:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json
+# Regions and Chat Completions support reviewed 2026-11-20:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-deepseek-deepseek-v3-2.html
+deployments:
+  modelId: deepseek-v3.2
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: deepseek.v3.2
+    inferenceGeo: us
+    regions: [us-east-1, us-east-2, us-west-2]
+  # Bedrock takes up to 163,840 tokens of prompt and output, the positions of the model's config,
+  # and the deployment keeps the 128K that DeepSeek states (capture
+  # aws/chat-completions-in-region-limits).
+  overrides:
+    # The model reasons only at reasoning_effort high, which the gateway sends to turn reasoning
+    # on, and answers without reasoning when a request sets no effort (capture
+    # aws/chat-completions-in-region-reasoning).
+    reasoningDefault: none
+    # Bedrock caches no prompt and leaves every document out of the prompt (captures
+    # aws/chat-completions-in-region-caching and aws/chat-completions-in-region-files).
+    capabilities:
+      implicitPromptCaching: false
+      explicitPromptCaching: false
+    documentFormats:
+      mediaTypes: []
+      extensions: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.62'
+    output_tokens:
+      per_mill_tokens: '1.85'

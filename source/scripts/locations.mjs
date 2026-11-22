@@ -1,10 +1,9 @@
 /**
  * The places that data handling names: world, the regions within it, and ISO 3166 countries and
  * their subdivisions. Each place but world lists the places that directly contain it, and a
- * continent, region or union lists every country that it covers, including countries that the
- * catalog does not list. A data handling location is a place, `unknown` when the provider does
- * not say where, or, for storage only, `none` when the provider keeps nothing. Nothing kept is kept
- * nowhere, so `none` lies within every place.
+ * continent, region or union lists every country that it covers. A data handling location is a
+ * place, `unknown` when the provider does not say where, or, for storage only, `none` when the
+ * provider keeps nothing. Nothing kept is kept nowhere, so `none` lies within every place.
  */
 export const WORLD = 'world';
 const PLACE_ID = /^(?:[A-Z]{2}(?:-[A-Z0-9]{1,3})?|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/;
@@ -72,26 +71,16 @@ export function isLocation(places, location) {
 
 /**
  * A data handling location and every place that contains it, in order, as policies read them.
- * A country that the catalog does not list lies in world, in each region that lists it and in the
- * places that contain those. `none` lies in every place, and `unknown` and any other place that
- * the catalog does not list hold only themselves.
+ * `none` lies in every place, and `unknown` and a place that the catalog does not list hold only
+ * themselves.
  */
 export function locationWithin(places, location) {
-	const within = places.within.get(location);
-	if (within) return within;
-	if (location === 'none') return places.all;
-	if (!COUNTRY.test(location)) return [location];
-	const holding = new Set([location, WORLD]);
-	for (const [region, countries] of places.countries)
-		if (countries.includes(location))
-			for (const place of places.within.get(region)) holding.add(place);
-	return [...holding].sort(compare);
+	return places.within.get(location) ?? (location === 'none' ? places.all : [location]);
 }
 
 /**
- * The ISO 3166-1 countries in a place: those that a region lists, the catalog's or not, or else
- * those that the catalog lists inside the place, so a country is in itself and a subdivision holds
- * none.
+ * The ISO 3166-1 countries in a place: those that a region lists, or else those that lie inside
+ * the place, so a country is in itself and a subdivision holds none.
  */
 export function countriesIn(places, place) {
 	return (

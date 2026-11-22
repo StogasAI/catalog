@@ -373,11 +373,11 @@ exit 1
 			error: 'route anthropic-messages belongs to anthropic, not openai'
 		},
 		{
-			name: 'document formats below deployment overrides',
+			name: 'deployment override that adds a document format',
 			path: 'source/data/providers/openai/deployments/openai-gpt-5.6-sol.yaml',
 			from: '  pricing:\n',
-			to: '  overrides:\n    documentFormats: {extensions: [], mediaTypes: []}\n  pricing:\n',
-			error: 'documentFormats'
+			to: "  overrides:\n    documentFormats: {extensions: ['.zzz'], mediaTypes: ['application/x-zzz']}\n  pricing:\n",
+			error: 'may only remove a format'
 		},
 		{
 			name: 'deployment override that adds a capability',

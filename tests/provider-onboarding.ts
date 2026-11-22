@@ -66,6 +66,8 @@ export type ProviderDeploymentContract = {
 	capabilities: Record<string, boolean>;
 	contextWindowTokens: number;
 	dataHandling?: DataHandlingContract;
+	/** The document formats of its routes that the deployment reads, where it reads fewer. */
+	documentFormats?: { extensions: string[]; mediaTypes: string[] };
 	id: string;
 	// The model's input modalities; each route keeps those it carries.
 	inputModalities: string[];
@@ -102,7 +104,7 @@ export type ProviderDeploymentContract = {
 	/** The ways of serving that the deployment withdraws from what its routes offer. */
 	stogasByok?: false;
 	stogasManaged?: false;
-	upstream: Record<string, number | string>;
+	upstream: Record<string, number | string | string[]>;
 	weightPrecision?: string;
 };
 
@@ -327,6 +329,14 @@ export function assertProviderOnboardingContract(
 							...expected.dataHandling,
 							...(expected.sharedWith && { sharedWith: expected.sharedWith })
 						},
+						documentFormats: Object.fromEntries(
+							(['extensions', 'mediaTypes'] as const).map((field) => [
+								field,
+								route.documentFormats[field].filter(
+									(format) => expected.documentFormats?.[field].includes(format) ?? true
+								)
+							])
+						),
 						// The route's limits, narrowed by the model's, which the model's own test states.
 						inputLimits: expect.any(Object),
 						inputModalities: expected.inputModalities.filter(

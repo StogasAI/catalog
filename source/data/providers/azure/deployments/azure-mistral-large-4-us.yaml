@@ -17,6 +17,9 @@ deployments:
     capabilities:
       explicitPromptCaching: false
       toolChoice: false
+      # The model calls the tool or writes the call into its text under tool_choice none (capture
+      # azure/other-model-formats-tool-choice-none).
+      toolChoiceNone: false
     # Azure refuses logit_bias for Mistral's models (probed 2026-11-19, capture
     # azure/other-model-formats-sampling).
     sampling:

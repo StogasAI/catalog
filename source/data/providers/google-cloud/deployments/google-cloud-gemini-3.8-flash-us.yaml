@@ -8,15 +8,8 @@ deployments:
   upstream:
     model: gemini-3.8-flash
     inferenceGeo: us
-  # Google gives half of the net spend back as credits through December 31, 2026, Pacific time.
-  periods:
-    - name: 'Launch credits'
-      start: 2026-11-20T00:00:00Z
-      end: 2027-01-01T08:00:00Z
-      set:
-        pricing.input_tokens.per_mill_tokens: '0.825'
-        pricing.cached_input_tokens.per_mill_tokens: '0.0825'
-        pricing.output_tokens.per_mill_tokens: '4.125'
+  # Google bills the full price and gives half of the net spend back later as credits, through
+  # December 31, 2026, Pacific time, so the deployment states the price that Google bills.
   pricing:
     input_tokens:
       per_mill_tokens: '1.65'

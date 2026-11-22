@@ -69,7 +69,6 @@ test('a chain shows each fact once, as the path runs it', () => {
 	);
 	expect(Object.keys(chain.route.data).sort()).toEqual([
 		'batch',
-		'documentFormats',
 		'endpoint',
 		'interfaces',
 		'providerId',
@@ -113,7 +112,7 @@ test('changes affect only paths containing the changed node and preserve old con
 	const original = chains();
 	const graph = structuredClone(catalog.graph);
 	const routeId = 'openai-responses';
-	graph.routes[routeId].documentFormats = { extensions: [], mediaTypes: [] };
+	graph.routes[routeId].endpoint = 'https://example.com/v1/responses';
 	const updated = chains(graph);
 	for (let index = 0; index < original.length; index++) {
 		if (original[index].routeId === routeId) {

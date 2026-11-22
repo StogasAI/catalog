@@ -1,8 +1,9 @@
 # Models other than Claude in Amazon Bedrock:
 # https://bedrock-runtime.{region}.amazonaws.com/openai/v1/chat/completions, called with an
-# inference profile ID and signed as Bedrock's Messages route is. AWS recommends this endpoint and
-# the OpenAI-compatible APIs for the models of other authors. The route keeps nothing between
-# requests, and the gateway serves Responses requests through it.
+# inference profile ID, or with the model's own ID in one of the deployment's Regions for a model
+# that runs only in the Region of each request, and signed as Bedrock's Messages route is. AWS
+# recommends this endpoint and the OpenAI-compatible APIs for the models of other authors. The
+# route keeps nothing between requests, and the gateway serves Responses requests through it.
 # Reviewed 2026-11-20: https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html,
 # https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints.html and
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html
@@ -12,7 +13,10 @@ routes:
   inputModalities: [text, image]
   # A tool message carries an image that the model reads, and Bedrock refuses a file there
   # (capture aws/chat-completions-files). An explicit cache mark is OpenAI's
-  # prompt_cache_breakpoint (capture aws/chat-completions-prompt-caching).
+  # prompt_cache_breakpoint (capture aws/chat-completions-prompt-caching). Under tool_choice none,
+  # the models of the Region of each request call the tool or write the call into their text, and
+  # Kimi answered in text all ten times it was asked, short of the thirty answers that show a
+  # model held to none (capture aws/chat-completions-tool-choice-none).
   capabilities:
     streaming: true
     functionCalling: true
@@ -22,11 +26,13 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: false
     toolResultImages: true
     toolResultDocuments: false
   # The API checks the type of temperature, top_p, top_k, both penalties and seed, and each model
-  # its values. It takes logit_bias with keys that name no token and ignores repetition_penalty
-  # (capture aws/chat-completions-request-fields).
+  # its values, and it ignores repetition_penalty. It applies logit_bias for some models of the
+  # Region of each request, refuses it for others and answers 200 for Kimi without applying it
+  # (captures aws/chat-completions-request-fields and aws/chat-completions-in-region-fields).
   sampling:
     temperature: true
     topP: true
@@ -35,7 +41,7 @@ routes:
     presencePenalty: true
     repetitionPenalty: false
     seed: true
-    logitBias: false
+    logitBias: true
   # Bedrock reads a file's type from the extension of its name and lists these types in its
   # refusal of any other (capture aws/chat-completions-files).
   documentFormats:
@@ -50,8 +56,9 @@ routes:
       - text/markdown
       - text/plain
   # Bedrock keeps nothing of a request to these models. AWS keeps traffic for abuse detection only
-  # for OpenAI's models and Claude Fable, and may store an image that its scan flags as apparent
-  # child sexual abuse material, to confirm and report it.
+  # for Claude Fable and for OpenAI's models other than gpt-oss and gpt-oss-safeguard, and may
+  # store an image that its scan flags as apparent child sexual abuse material, to confirm and
+  # report it.
   # Reviewed 2026-11-20: https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html
   # and https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html
   # AWS says nothing about keeping the prompt caches of these models apart between accounts.

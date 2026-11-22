@@ -1,0 +1,38 @@
+# Bedrock runs Qwen3 32B only in the Region of each request, at the same prices in each US Region.
+# Prices from the AWS Price List (AmazonBedrock, Qwen3-32B-input-tokens and
+# Qwen3-32B-output-tokens), reviewed 2026-11-20:
+# https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json
+# Regions and Chat Completions support reviewed 2026-11-20:
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-qwen-qwen3-32b.html
+deployments:
+  modelId: qwen3-32b
+  routeIds: [aws-bedrock-chat-completions]
+  upstream:
+    model: qwen.qwen3-32b-v1:0
+    inferenceGeo: us
+    regions: [us-east-1, us-east-2, us-west-2]
+  overrides:
+    # Bedrock serves the model's native window, which the prompt and the output share (capture
+    # aws/chat-completions-in-region-limits).
+    contextWindowTokens: 32768
+    maxOutputTokens: 32768
+    # The model reasons only at reasoning_effort high, which the gateway sends to turn reasoning
+    # on, and answers without reasoning when a request sets no effort (capture
+    # aws/chat-completions-in-region-reasoning).
+    reasoningDefault: none
+    # Bedrock refuses logit_bias, caches no prompt and leaves every document out of the prompt
+    # (captures aws/chat-completions-in-region-fields, aws/chat-completions-in-region-caching and
+    # aws/chat-completions-in-region-files).
+    capabilities:
+      implicitPromptCaching: false
+      explicitPromptCaching: false
+    sampling:
+      logitBias: false
+    documentFormats:
+      mediaTypes: []
+      extensions: []
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.15'
+    output_tokens:
+      per_mill_tokens: '0.6'

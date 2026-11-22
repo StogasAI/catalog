@@ -11,6 +11,8 @@ routes:
   interfaces: [chat_completions]
   inputModalities: [text, image, audio]
   # Core sends a tool result to Gemini as text, so the images and files of one are not carried.
+  # Every Gemini model calls a function at mode NONE after an earlier call (capture
+  # google-cloud/generate-content-tool-choice-none).
   capabilities:
     streaming: true
     functionCalling: true
@@ -20,6 +22,7 @@ routes:
     structuredOutputs: true
     systemMessages: true
     toolChoice: true
+    toolChoiceNone: false
     toolResultImages: false
     toolResultDocuments: false
   # The fields of generateContent's generationConfig. Each model states the ones that it refuses or

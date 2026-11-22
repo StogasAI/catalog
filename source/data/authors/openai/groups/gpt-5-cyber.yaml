@@ -1,0 +1,4 @@
+groups:
+  authorId: openai
+  name: 'GPT-5 Cyber'
+  parentIds: [gpt-5, gpt-cyber]

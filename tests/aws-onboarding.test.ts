@@ -23,6 +23,7 @@ const capabilities = {
 	structuredOutputs: true,
 	systemMessages: true,
 	toolChoice: true,
+	toolChoiceNone: true,
 	toolResultImages: true,
 	toolResultDocuments: true
 };
@@ -358,6 +359,10 @@ const chatHandling = { ...kept, isolatedPromptCache: false } as const;
 const chatCapabilities = {
 	...capabilities,
 	implicitPromptCaching: true,
+	// Kimi answered ten questions under tool_choice none in text, short of the thirty that show a
+	// model held to none, and the models of the Region of each request call the tool or write the
+	// call into their text.
+	toolChoiceNone: false,
 	// Bedrock reads an image in a tool message and refuses a file there.
 	toolResultDocuments: false
 };
@@ -415,10 +420,106 @@ for (const [model, profile, global, geographic] of [
 			routeIds: ['aws-bedrock-chat-completions'],
 			upstream: { inferenceGeo: geo, model: `${geo}.${profile}`, serviceTier: 'standard' },
 			// Bedrock refuses top_p other than 0.95 and penalties other than 0 for Kimi, and takes seed
-			// without applying it.
-			withoutSampling: ['topP', 'frequencyPenalty', 'presencePenalty', 'seed']
+			// and logit_bias without applying them.
+			withoutSampling: ['topP', 'frequencyPenalty', 'presencePenalty', 'seed', 'logitBias']
 		});
 	}
+}
+// Models that Bedrock runs only in the Region of each request, by their own IDs, at the same prices
+// in each US Region. Bedrock caches none of their prompts and leaves every document out of them.
+const usRegions = ['us-east-1', 'us-east-2', 'us-west-2'];
+const inRegionCapabilities = {
+	...chatCapabilities,
+	explicitPromptCaching: false,
+	implicitPromptCaching: false
+};
+const tokens = (input: string, output: string) => ({
+	input_tokens: { per_mill_tokens: input },
+	output_tokens: { per_mill_tokens: output }
+});
+// The models other than gpt-oss-120b and Mistral Large 3 reason only at high, which the gateway
+// sends to turn reasoning on, and answer without reasoning when a request sets no effort.
+const switched = { modelReasoning: 'optional', reasoningDefault: 'none' } as const;
+for (const expected of [
+	{
+		authorId: 'openai',
+		// Bedrock applies neither tool_choice nor a response_format schema for gpt-oss-120b, which
+		// calls one tool in a turn.
+		capabilities: {
+			...inRegionCapabilities,
+			parallelFunctionCalling: false,
+			structuredOutputs: false,
+			toolChoice: false
+		},
+		contextWindowTokens: 131072,
+		maxOutputTokens: 131072,
+		modelId: 'gpt-oss-120b',
+		modelReasoning: 'required',
+		modelReasoningEfforts: ['low', 'medium', 'high'],
+		pricing: tokens('0.15', '0.6'),
+		upstream: 'openai.gpt-oss-120b-1:0',
+		withoutSampling: ['logitBias']
+	},
+	{
+		...switched,
+		authorId: 'deepseek',
+		contextWindowTokens: 131072,
+		maxOutputTokens: 131072,
+		modelId: 'deepseek-v3.2',
+		pricing: tokens('0.62', '1.85'),
+		upstream: 'deepseek.v3.2'
+	},
+	{
+		...switched,
+		authorId: 'alibaba',
+		// Bedrock serves the model's native window.
+		contextWindowTokens: 32768,
+		maxOutputTokens: 32768,
+		modelContextWindowTokens: 131072,
+		modelId: 'qwen3-32b',
+		modelMaxOutputTokens: 131072,
+		pricing: tokens('0.15', '0.6'),
+		upstream: 'qwen.qwen3-32b-v1:0',
+		withoutSampling: ['logitBias']
+	},
+	{
+		...switched,
+		authorId: 'nvidia',
+		contextWindowTokens: 262144,
+		maxOutputTokens: 262144,
+		modelContextWindowTokens: 1048576,
+		modelId: 'nemotron-3-super',
+		modelMaxOutputTokens: 1048576,
+		pricing: tokens('0.15', '0.65'),
+		upstream: 'nvidia.nemotron-super-3-120b'
+	},
+	{
+		authorId: 'mistral-ai',
+		// Bedrock refuses an image in a tool message.
+		capabilities: { ...inRegionCapabilities, toolResultImages: false },
+		contextWindowTokens: 262144,
+		inputModalities: ['text', 'image'],
+		maxOutputTokens: 262144,
+		modelId: 'mistral-large-2512',
+		pricing: tokens('0.5', '1.5'),
+		upstream: 'mistral.mistral-large-3-675b-instruct',
+		withoutSampling: ['logitBias']
+	}
+] as const) {
+	const { upstream, ...facts } = expected;
+	deployments.push({
+		capabilities: inRegionCapabilities,
+		dataHandling: { ...providerHandling, ...chatHandling, processingLocation: 'US' },
+		documentFormats: { extensions: [], mediaTypes: [] },
+		hosting: 'amazon',
+		id: `aws-${expected.modelId}-us`,
+		inputModalities: ['text'],
+		outputModalities: ['text'],
+		retirementDate: null,
+		routeIds: ['aws-bedrock-chat-completions'],
+		...facts,
+		upstream: { inferenceGeo: 'us', model: upstream, regions: usRegions, serviceTier: 'standard' }
+	});
 }
 
 describe('AWS onboarding contract', () => {
@@ -490,7 +591,15 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-bedrock-chat-completions',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions'],
-					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
+					sampling: [
+						'temperature',
+						'topP',
+						'topK',
+						'frequencyPenalty',
+						'presencePenalty',
+						'seed',
+						'logitBias'
+					]
 				},
 				{
 					capabilities: { streaming: false },

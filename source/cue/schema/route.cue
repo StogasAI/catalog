@@ -3,9 +3,10 @@ package catalog
 // File types the provider reads natively from a document part. Image and audio
 // parts follow inputModalities. A route that reads none omits documentFormats.
 #MediaType: string & =~"^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+#Extension: string & =~"^\\.[a-z0-9][a-z0-9._+-]*$"
 #DocumentFormats: close({
 	mediaTypes: [#MediaType, ...#MediaType]
-	extensions: [...string & =~"^\\.[a-z0-9][a-z0-9._+-]*$"]
+	extensions: [...#Extension]
 })
 
 #RouteCapabilities: close({
@@ -16,7 +17,11 @@ package catalog
 	explicitPromptCaching:   bool
 	structuredOutputs:       bool
 	systemMessages:          bool
-	toolChoice:              bool
+	// The model calls the tool that tool_choice requires or names.
+	toolChoice: bool
+	// The model calls no tool and writes no call into its text under tool_choice none, also after
+	// an earlier call.
+	toolChoiceNone: bool
 	// A tool result takes the images that a user message takes. Chat Completions at OpenAI and
 	// Azure answers 200 for an image there that the model never sees.
 	toolResultImages: bool
@@ -35,6 +40,7 @@ package catalog
 	structuredOutputs?:       false
 	systemMessages?:          false
 	toolChoice?:              false
+	toolChoiceNone?:          false
 	toolResultImages?:        false
 	toolResultDocuments?:     false
 })
