@@ -1,0 +1,22 @@
+# Meta's model pages state the window, the output ceiling and text, image, video, audio and PDF
+# input. The model always reasons, at minimal to max, max by default, and takes no
+# frequency_penalty or presence_penalty. Reviewed 2026-11-22:
+# https://dev.meta.ai/docs/muse-ember, https://dev.meta.ai/docs/reasoning and
+# https://dev.meta.ai/docs/protocols/responses. Released 2026-11-09:
+# https://research.meta.ai/blog/muse-ember
+models:
+  authorId: meta
+  name: Muse Ember
+  groupIds: [muse]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 524288
+  inputModalities: [text, image, audio, video]
+  outputModalities: [text]
+  reasoning: required
+  reasoningEfforts: [minimal, low, medium, high, xhigh, max]
+  reasoningDefault: max
+  sampling:
+    frequencyPenalty: false
+    presencePenalty: false
+  openWeights: false
+  releaseDate: 2026-11-09

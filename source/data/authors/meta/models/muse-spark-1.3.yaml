@@ -1,0 +1,22 @@
+# Meta's model pages state the window and text, image, video, audio and PDF input for every Muse
+# Spark version, and no output ceiling. The model always reasons, at minimal to max, high by
+# default, and takes no frequency_penalty or presence_penalty. Reviewed 2026-11-22:
+# https://dev.meta.ai/docs/muse-spark, https://dev.meta.ai/docs/reasoning and
+# https://dev.meta.ai/docs/protocols/responses. Released 2026-09-02:
+# https://research.meta.ai/blog/introducing-muse-spark-1-3
+models:
+  authorId: meta
+  name: Muse Spark 1.3
+  groupIds: [muse-spark]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 1048576
+  inputModalities: [text, image, audio, video]
+  outputModalities: [text]
+  reasoning: required
+  reasoningEfforts: [minimal, low, medium, high, xhigh, max]
+  reasoningDefault: high
+  sampling:
+    frequencyPenalty: false
+    presencePenalty: false
+  openWeights: false
+  releaseDate: 2026-09-02

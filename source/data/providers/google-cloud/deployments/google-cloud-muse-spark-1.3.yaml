@@ -1,0 +1,20 @@
+# Agent Platform's global endpoint, which offers Muse Spark 1.3 the efforts minimal to xhigh
+# (capture google-cloud/responses-reasoning). Vertex AI lists no SKUs for Meta's models, so these
+# prices come from the partner model pricing page. Reviewed 2026-11-22:
+# https://cloud.google.com/model-garden/partner-models/pricing and
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/meta
+deployments:
+  modelId: muse-spark-1.3
+  routeIds: [google-cloud-agent-platform-meta-responses]
+  upstream:
+    model: muse-spark-1.3
+    inferenceGeo: global
+  overrides:
+    reasoningEfforts: [minimal, low, medium, high, xhigh]
+  pricing:
+    input_tokens:
+      per_mill_tokens: '1.25'
+    cached_input_tokens:
+      per_mill_tokens: '0.15'
+    output_tokens:
+      per_mill_tokens: '4.25'

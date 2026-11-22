@@ -23,6 +23,9 @@ companies:
   google:
     name: Google
     headquarteredCountry: US
+  meta:
+    name: Meta
+    headquarteredCountry: US
   microsoft:
     name: Microsoft
     headquarteredCountry: US

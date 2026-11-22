@@ -1,0 +1,27 @@
+# Agent Platform's global endpoint. Google takes a max_output_tokens above Muse Ember's limit, so
+# the gateway sends the limit to a request that sets none (capture google-cloud/responses-limits).
+# Vertex AI lists no SKUs for Meta's models, so these prices come from the partner model pricing
+# page, which charges every token of a request with more than 200,000 input tokens at the higher
+# rates. Reviewed 2026-11-22: https://cloud.google.com/model-garden/partner-models/pricing and
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/meta
+deployments:
+  modelId: muse-ember-1.0
+  routeIds: [google-cloud-agent-platform-meta-responses]
+  upstream:
+    model: muse-ember-1.0
+    inferenceGeo: global
+  overrides:
+    capabilities:
+      # The model calls the tool or writes the call into its text under tool_choice none (capture
+      # google-cloud/responses-tools).
+      toolChoiceNone: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.1'
+      per_mill_context_gt_200k: '0.3'
+    cached_input_tokens:
+      per_mill_tokens: '0.004'
+      per_mill_context_gt_200k: '0.012'
+    output_tokens:
+      per_mill_tokens: '0.5'
+      per_mill_context_gt_200k: '1.5'

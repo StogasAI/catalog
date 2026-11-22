@@ -6,6 +6,12 @@ deployments:
     serviceTier: flex
   # Reviewed 2026-11-13: https://developers.openai.com/api/docs/deprecations
   retirementDate: 2026-12-11
+  # OpenAI's model page lists neither image generation nor the hosted shell among the model's
+  # tools. Reviewed 2026-11-22: https://developers.openai.com/api/docs/models/gpt-5-nano
+  overrides:
+    hostedTools:
+      shell: false
+      image_generation: false
   pricing:
     input_tokens:
       per_mill_tokens: '0.025'

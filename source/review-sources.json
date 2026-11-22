@@ -11,6 +11,7 @@
 			"https://ai.google.dev/gemma/docs/core/model_card_4",
 			"https://huggingface.co/google/gemma-4-26B-A4B/blob/24548b62aa021d562695c04aaf7758a1ea47990b/tokenizer.json"
 		],
+		"meta": ["https://dev.meta.ai/docs/models"],
 		"minimax": ["https://huggingface.co/MiniMaxAI"],
 		"mistral-ai": [
 			"https://docs.mistral.ai/getting-started/models/models_overview/",
@@ -73,7 +74,9 @@
 			"https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/anthropic-managed",
 			"https://cloud.google.com/vertex-ai/generative-ai/pricing",
 			"https://platform.claude.com/docs/en/about-claude/pricing",
-			"https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention"
+			"https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention",
+			"https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/meta",
+			"https://cloud.google.com/model-garden/partner-models/pricing"
 		],
 		"openai": [
 			"https://developers.openai.com/api/docs/guides/your-data",

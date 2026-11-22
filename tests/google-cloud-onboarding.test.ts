@@ -400,6 +400,79 @@ for (const facts of openModels) {
 		}
 	});
 }
+// Meta's Muse models, which Google runs as managed APIs on Meta's Responses API at the global
+// endpoint only.
+const museCapabilities = {
+	explicitPromptCaching: false,
+	functionCalling: true,
+	implicitPromptCaching: true,
+	parallelFunctionCalling: true,
+	streaming: true,
+	structuredOutputs: true,
+	systemMessages: true,
+	toolChoice: true,
+	toolChoiceNone: true,
+	toolResultImages: true,
+	toolResultDocuments: false
+};
+// Muse Ember and Muse Wonder call the tool, or write the call into their text, under tool_choice
+// none, and Google refuses max for the two other models.
+const museEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+const muse: Pick<
+	ProviderDeploymentContract,
+	| 'capabilities'
+	| 'id'
+	| 'maxOutputTokens'
+	| 'modelId'
+	| 'pricing'
+	| 'reasoningDefault'
+	| 'reasoningEfforts'
+>[] = [
+	{
+		capabilities: { ...museCapabilities, toolChoiceNone: false },
+		id: 'google-cloud-muse-ember-1.0',
+		maxOutputTokens: 524288,
+		modelId: 'muse-ember-1.0',
+		pricing: {
+			cached_input_tokens: { per_mill_context_gt_200k: '0.012', per_mill_tokens: '0.004' },
+			input_tokens: { per_mill_context_gt_200k: '0.3', per_mill_tokens: '0.1' },
+			output_tokens: { per_mill_context_gt_200k: '1.5', per_mill_tokens: '0.5' }
+		}
+	},
+	{
+		capabilities: museCapabilities,
+		id: 'google-cloud-muse-spark-1.3',
+		maxOutputTokens: 1048576,
+		modelId: 'muse-spark-1.3',
+		pricing: geminiPrices('1.25', '0.15', '4.25'),
+		reasoningEfforts: museEfforts
+	},
+	{
+		capabilities: { ...museCapabilities, toolChoiceNone: false },
+		id: 'google-cloud-muse-wonder-1.0',
+		maxOutputTokens: 1048576,
+		modelId: 'muse-wonder-1.0',
+		pricing: geminiPrices('4', '0.2', '20'),
+		// Meta's default is max, and Google states none.
+		reasoningDefault: null,
+		reasoningEfforts: museEfforts
+	}
+];
+for (const facts of muse) {
+	deployments.push({
+		...facts,
+		authorId: 'meta',
+		contextWindowTokens: 1048576,
+		hosting: 'google',
+		inputModalities: ['text', 'image', 'audio', 'video'],
+		modelReasoning: 'required',
+		modelReasoningEfforts: [...museEfforts, 'max'],
+		outputModalities: ['text'],
+		retirementDate: null,
+		routeIds: ['google-cloud-agent-platform-meta-responses'],
+		upstream: { inferenceGeo: 'global', model: facts.modelId, serviceTier: 'standard' }
+	});
+}
 // Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
 // serves what Anthropic's does. Of the Mythos models, Anthropic lists only Mythos 5.2 there.
 const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
@@ -511,6 +584,16 @@ describe('Google Cloud onboarding contract', () => {
 					inputModalities: ['text', 'image', 'audio'],
 					interfaces: ['chat_completions'],
 					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
+				},
+				{
+					capabilities: museCapabilities,
+					// Neither Google nor Meta says anything about keeping prompt caches apart.
+					dataHandling: { isolatedPromptCache: false },
+					documentFormats: { extensions: ['.pdf'], mediaTypes: ['application/pdf'] },
+					id: 'google-cloud-agent-platform-meta-responses',
+					inputModalities: ['text', 'image'],
+					interfaces: ['responses'],
+					sampling: ['temperature', 'topP']
 				},
 				{
 					capabilities: openModelCapabilities,

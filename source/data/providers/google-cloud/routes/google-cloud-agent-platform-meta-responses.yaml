@@ -1,0 +1,60 @@
+# Meta's Muse models on Agent Platform: Meta's Responses API at
+# https://aiplatform.googleapis.com/v1/projects/{project}/locations/global/publishers/meta/v1/responses,
+# which names the model with its bare ID in the body and runs only at the global endpoint. Google
+# runs the models as managed APIs, shares no prompt or response with Meta, and stores no response:
+# the gateway sends store: false. Google offers them as previews under its terms for Separate
+# Offerings and Pre-GA Offerings and the terms of each model card. The gateway serves Chat
+# Completions requests through the route.
+# Reviewed 2026-11-22: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/meta,
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/use-partner-models
+# and https://cloud.google.com/terms/service-terms
+routes:
+  providerId: google-cloud
+  interfaces: [responses]
+  # Google says that the models read text and images but no PDF, audio or video. Every model read a
+  # PDF all the same, inline and by URL, and Google fetched images by URL, but refused audio and text
+  # files (capture google-cloud/responses-files).
+  inputModalities: [text, image]
+  documentFormats:
+    extensions: [.pdf]
+    mediaTypes: [application/pdf]
+  # Google caches a repeated prompt by itself (capture google-cloud/responses-caching). A function
+  # output carries an image that the model reads, and Google refuses a PDF there (capture
+  # google-cloud/responses-files). Google documents only tool_choice auto, but every model called
+  # the tool that tool_choice required or named, and Muse Spark 1.3 answered thirty questions in
+  # text under none (capture google-cloud/responses-tools).
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: false
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+    toolChoiceNone: true
+    toolResultImages: true
+    toolResultDocuments: false
+  # The models apply temperature and top_p. Meta says that its Responses API applies no other
+  # sampling field (capture google-cloud/responses-fields).
+  # Reviewed 2026-11-22: https://dev.meta.ai/docs/protocols/responses
+  sampling:
+    temperature: true
+    topP: true
+    topK: false
+    frequencyPenalty: false
+    presencePenalty: false
+    repetitionPenalty: false
+    seed: false
+    logitBias: false
+  # Neither Google nor Meta says anything about keeping prompt caches apart between projects.
+  # Google's terms for preview models apply no data processing terms unless its documentation says
+  # otherwise, and its documentation says that the certifications of generative AI on Agent
+  # Platform still apply when a partner model runs as a managed API, and that Google trains on no
+  # managed model's data, preview models' included.
+  # Reviewed 2026-11-22: https://dev.meta.ai/docs/prompt-caching,
+  # https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/use-partner-models,
+  # https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention
+  # and https://cloud.google.com/terms/service-terms (Pre-GA Offerings Terms)
+  dataHandling:
+    isolatedPromptCache: false

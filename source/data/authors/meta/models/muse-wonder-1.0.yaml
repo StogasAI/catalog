@@ -1,0 +1,22 @@
+# Meta's model pages state the window and text, image, video, audio and PDF input, and no output
+# ceiling. The model always reasons, at minimal to max, max by default, and takes no
+# frequency_penalty or presence_penalty. Reviewed 2026-11-22:
+# https://dev.meta.ai/docs/muse-wonder, https://dev.meta.ai/docs/reasoning and
+# https://dev.meta.ai/docs/protocols/responses. Released 2026-10-12:
+# https://research.meta.ai/blog/muse-wonder
+models:
+  authorId: meta
+  name: Muse Wonder
+  groupIds: [muse]
+  contextWindowTokens: 1048576
+  maxOutputTokens: 1048576
+  inputModalities: [text, image, audio, video]
+  outputModalities: [text]
+  reasoning: required
+  reasoningEfforts: [minimal, low, medium, high, xhigh, max]
+  reasoningDefault: max
+  sampling:
+    frequencyPenalty: false
+    presencePenalty: false
+  openWeights: false
+  releaseDate: 2026-10-12

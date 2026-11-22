@@ -1991,7 +1991,8 @@ function compileGraph(source, places, companies) {
 			aws: ['aws-bedrock-chat-completions'],
 			'google-cloud': [
 				'google-cloud-agent-platform-chat-completions',
-				'google-cloud-agent-platform-generate-content'
+				'google-cloud-agent-platform-generate-content',
+				'google-cloud-agent-platform-meta-responses'
 			]
 		}[providerId];
 		const anthropicWire =
@@ -2030,8 +2031,13 @@ function compileGraph(source, places, companies) {
 			if (otherModelRoutes.includes(routeId) === anthropicWire) {
 				throw new Error(`${deploymentId}: only models other than Claude use the ${routeId} route`);
 			}
+			// Meta's Responses API sits under Meta's publisher path, which serves no other author.
+			if (routeId === 'google-cloud-agent-platform-meta-responses' && model.authorId !== 'meta') {
+				throw new Error(`${deploymentId}: only Meta's models use the ${routeId} route`);
+			}
 			// The open models' endpoint takes the publisher and model in the body, as
-			// openai/gpt-oss-120b-maas, and generateContent's URL names a Gemini model alone.
+			// openai/gpt-oss-120b-maas, while generateContent's URL and Meta's body name the model
+			// alone.
 			if (
 				otherModelRoutes.includes(routeId) &&
 				providerId === 'google-cloud' &&

@@ -10,8 +10,8 @@ deployments:
     deploymentType: global_standard
   approvalRequired: true
   # ARM hides gated models, so the date comes from Microsoft's lifecycle table.
-  # Reviewed 2026-11-18: https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/model-lifecycle-retirement
-  retirementDate: 2027-09-01
+  # Reviewed 2026-11-22: https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/model-lifecycle-retirement
+  retirementDate: 2027-12-07
   overrides:
     # Foundry offers no max effort for Claude Fable and Mythos; its xhigh gives the same result.
     # Reviewed 2026-10-14: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models

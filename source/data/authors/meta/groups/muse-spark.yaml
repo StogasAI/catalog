@@ -1,0 +1,4 @@
+groups:
+  authorId: meta
+  name: 'Muse Spark'
+  parentIds: [muse]

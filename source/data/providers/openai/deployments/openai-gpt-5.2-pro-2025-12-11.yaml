@@ -3,6 +3,12 @@ deployments:
   routeIds: [openai-responses]
   upstream:
     model: gpt-5.2-pro-2025-12-11
+  # OpenAI's model page lists neither code interpreter nor the hosted shell among the model's
+  # tools. Reviewed 2026-11-22: https://developers.openai.com/api/docs/models/gpt-5.2-pro
+  overrides:
+    hostedTools:
+      code_interpreter: false
+      shell: false
   pricing:
     input_tokens:
       per_mill_tokens: '21'

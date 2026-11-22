@@ -1,0 +1,25 @@
+# Agent Platform's global endpoint, which offers Muse Wonder the efforts minimal to xhigh (capture
+# google-cloud/responses-reasoning) and states no default, where Meta's own default is max. Vertex
+# AI lists no SKUs for Meta's models, so these prices come from the partner model pricing page.
+# Reviewed 2026-11-22: https://cloud.google.com/model-garden/partner-models/pricing and
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/meta
+deployments:
+  modelId: muse-wonder-1.0
+  routeIds: [google-cloud-agent-platform-meta-responses]
+  upstream:
+    model: muse-wonder-1.0
+    inferenceGeo: global
+  overrides:
+    reasoningEfforts: [minimal, low, medium, high, xhigh]
+    reasoningDefault: null
+    capabilities:
+      # The model calls the tool or writes the call into its text under tool_choice none (capture
+      # google-cloud/responses-tools).
+      toolChoiceNone: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '4'
+    cached_input_tokens:
+      per_mill_tokens: '0.2'
+    output_tokens:
+      per_mill_tokens: '20'
