@@ -26,7 +26,7 @@ package catalog
 #Modality:        "text" | "image" | "audio" | "video"
 #ReasoningEffort: "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 #Reasoning:       "unsupported" | "optional" | "required"
-#Interface:       "chat_completions" | "responses"
+#Interface:       "chat_completions" | "responses" | "messages"
 #ProcessingLocation: "unknown" | #LocationId
 #StorageLocation:    "none" | #ProcessingLocation
 

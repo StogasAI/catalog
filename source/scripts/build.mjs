@@ -40,7 +40,7 @@ const canonicalModalityRanks = new Map(
 	canonicalModalityOrder.map((modality, index) => [modality, index])
 );
 const canonicalInterfaceRanks = new Map(
-	['chat_completions', 'responses'].map((value, index) => [value, index])
+	['chat_completions', 'responses', 'messages'].map((value, index) => [value, index])
 );
 const reasoningValues = new Set(['unsupported', 'optional', 'required']);
 const capabilityNames = [

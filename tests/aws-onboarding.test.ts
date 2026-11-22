@@ -570,7 +570,7 @@ describe('AWS onboarding contract', () => {
 					dataHandling: kept,
 					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses', 'messages']
 				},
 				{
 					capabilities: chatCapabilities,
@@ -621,7 +621,7 @@ describe('AWS onboarding contract', () => {
 					},
 					id: 'aws-claude-platform-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses', 'messages']
 				},
 				{
 					capabilities: { streaming: false },

@@ -538,7 +538,7 @@ describe('Google Cloud onboarding contract', () => {
 					},
 					id: 'google-cloud-agent-platform-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses', 'messages']
 				},
 				{
 					// Anthropic stores data in the US and deletes inputs and outputs within 30 days.
@@ -556,7 +556,7 @@ describe('Google Cloud onboarding contract', () => {
 					},
 					id: 'google-cloud-anthropic-managed-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses']
+					interfaces: ['chat_completions', 'responses', 'messages']
 				},
 				{
 					capabilities: { streaming: false },
