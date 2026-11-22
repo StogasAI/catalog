@@ -288,6 +288,118 @@ for (const { model, efforts, global, regional, ...facts } of gemini) {
 		});
 	}
 }
+// Open models that Google runs as managed APIs in OpenAI's Chat Completions format, at the global
+// endpoint only.
+const openModelCapabilities = {
+	explicitPromptCaching: false,
+	functionCalling: true,
+	implicitPromptCaching: true,
+	parallelFunctionCalling: true,
+	streaming: true,
+	structuredOutputs: true,
+	systemMessages: true,
+	toolChoice: true,
+	// Every model called the tool under tool_choice none.
+	toolChoiceNone: false,
+	toolResultImages: true,
+	toolResultDocuments: false
+};
+// Google applies no penalty to DeepSeek V4.1 Flash, and none on every request to gpt-oss-120b.
+const penalties = ['frequencyPenalty', 'presencePenalty', 'repetitionPenalty'];
+const openModels: Omit<
+	ProviderDeploymentContract,
+	'hosting' | 'outputModalities' | 'retirementDate' | 'routeIds' | 'upstream'
+>[] = [
+	{
+		authorId: 'openai',
+		// Google prices no cached token of gpt-oss-120b and refuses a required tool choice for it, and
+		// the model calls one tool in a turn and sometimes answers outside a schema.
+		capabilities: {
+			...openModelCapabilities,
+			implicitPromptCaching: false,
+			parallelFunctionCalling: false,
+			structuredOutputs: false,
+			toolChoice: false
+		},
+		contextWindowTokens: 131072,
+		id: 'google-cloud-gpt-oss-120b',
+		inputModalities: ['text'],
+		maxOutputTokens: 131072,
+		modelId: 'gpt-oss-120b',
+		modelReasoning: 'required',
+		modelReasoningEfforts: ['low', 'medium', 'high'],
+		pricing: {
+			input_tokens: { per_mill_tokens: '0.09' },
+			output_tokens: { per_mill_tokens: '0.36' }
+		},
+		withoutSampling: penalties
+	},
+	{
+		authorId: 'google',
+		capabilities: openModelCapabilities,
+		contextWindowTokens: 262144,
+		id: 'google-cloud-gemma-4-26b-a4b',
+		inputModalities: ['text', 'image', 'video'],
+		maxOutputTokens: 32768,
+		modelId: 'gemma-4-26b-a4b',
+		modelMaxOutputTokens: 262144,
+		modelReasoning: 'optional',
+		pricing: geminiPrices('0.15', '0.015', '0.6'),
+		promptCacheMinimumTokens: 1,
+		reasoningDefault: 'none'
+	},
+	{
+		authorId: 'deepseek',
+		capabilities: openModelCapabilities,
+		contextWindowTokens: 1048576,
+		id: 'google-cloud-deepseek-v4.1-flash-1017',
+		inputModalities: ['text', 'image'],
+		maxOutputTokens: 393216,
+		modelId: 'deepseek-v4.1-flash-1017',
+		modelReasoning: 'optional',
+		modelReasoningEfforts: ['low', 'high', 'max'],
+		pricing: geminiPrices('0.3', '0.006', '1.2'),
+		promptCacheMinimumTokens: 256,
+		reasoningDefault: 'none',
+		reasoningEfforts: ['high', 'max'],
+		withoutSampling: penalties
+	},
+	{
+		authorId: 'z-ai',
+		// GLM-5.2 ignores a required or named tool choice in some answers.
+		capabilities: { ...openModelCapabilities, toolChoice: false },
+		contextWindowTokens: 1048576,
+		id: 'google-cloud-glm-5.2',
+		inputModalities: ['text'],
+		maxOutputTokens: 1048576,
+		modelId: 'glm-5.2',
+		modelReasoning: 'optional',
+		modelReasoningEfforts: ['high', 'max'],
+		pricing: geminiPrices('1.4', '0.14', '4.4'),
+		promptCacheMinimumTokens: 64,
+		reasoningDefault: 'max'
+	}
+];
+const openModelUpstreams: Record<string, string> = {
+	'gpt-oss-120b': 'openai/gpt-oss-120b-maas',
+	'gemma-4-26b-a4b': 'google/gemma-4-26b-a4b-it-maas',
+	'deepseek-v4.1-flash-1017': 'deepseek-ai/deepseek-v4.1-flash-1017-maas',
+	'glm-5.2': 'zai-org/glm-5.2-maas'
+};
+for (const facts of openModels) {
+	deployments.push({
+		...facts,
+		hosting: 'google',
+		outputModalities: ['text'],
+		retirementDate: null,
+		routeIds: ['google-cloud-agent-platform-chat-completions'],
+		upstream: {
+			inferenceGeo: 'global',
+			model: openModelUpstreams[facts.modelId]!,
+			serviceTier: 'standard'
+		}
+	});
+}
 // Claude on Google Cloud (Anthropic managed) is Anthropic's own API, so each of its deployments
 // serves what Anthropic's does. Of the Mythos models, Anthropic lists only Mythos 5.2 there.
 const platformModels = (Object.keys(claudeModels) as ClaudeModelId[]).filter(
@@ -399,6 +511,24 @@ describe('Google Cloud onboarding contract', () => {
 					inputModalities: ['text', 'image', 'audio'],
 					interfaces: ['chat_completions'],
 					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
+				},
+				{
+					capabilities: openModelCapabilities,
+					// Google says nothing about keeping the prompt caches of open models apart.
+					dataHandling: { isolatedPromptCache: false },
+					documentFormats: { extensions: [], mediaTypes: [] },
+					id: 'google-cloud-agent-platform-chat-completions',
+					inputModalities: ['text', 'image'],
+					interfaces: ['chat_completions'],
+					sampling: [
+						'temperature',
+						'topP',
+						'topK',
+						'frequencyPenalty',
+						'presencePenalty',
+						'repetitionPenalty',
+						'logitBias'
+					]
 				}
 			],
 			deployments,

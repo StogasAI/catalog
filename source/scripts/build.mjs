@@ -113,14 +113,16 @@ const certificationIncludes = {
 // Hosted tools in canonical order, and the call meters that each may charge. Content that a tool
 // adds to the context bills as input tokens, so only the searches that also charge for each call
 // have call meters. OpenAI bills the containers that code interpreter and hosted shells run in by
-// session, which no request measures.
+// session, which no request measures, and image generation by the image model's tokens, whose
+// cached part no reply reports.
 const hostedToolIds = [
 	'web_search',
 	'web_fetch',
 	'mcp',
 	'file_search',
 	'code_interpreter',
-	'shell'
+	'shell',
+	'image_generation'
 ];
 const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
 const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
@@ -136,7 +138,8 @@ const hostedToolMeters = {
 	mcp: [],
 	file_search: openaiFileSearchMeters,
 	code_interpreter: [],
-	shell: []
+	shell: [],
+	image_generation: []
 };
 // The request names the server that a remote MCP tool sends content to, so the catalog knows no
 // fact about it, and no audit or agreement covers it.
@@ -1294,8 +1297,9 @@ function validateServedFacts(
 				}
 			}
 		}
-		// Only OpenAI's own Responses API runs file search, code interpreter and hosted shells.
-		for (const tool of ['file_search', 'code_interpreter', 'shell']) {
+		// Only OpenAI's own Responses API runs file search, code interpreter, hosted shells and image
+		// generation.
+		for (const tool of ['file_search', 'code_interpreter', 'shell', 'image_generation']) {
 			if (anthropicWire && route.hostedTools[tool]) {
 				throw new Error(`${deploymentId} on ${routeId}: Claude's wire has no ${tool}`);
 			}
@@ -1977,11 +1981,15 @@ function compileGraph(source, places, companies) {
 			serviceTier: deployment.upstream.serviceTier ?? 'standard'
 		};
 		// AWS and Google Cloud serve Claude through Anthropic's Messages API, and other models through
-		// a route of their own: OpenAI's format on AWS and Gemini's on Google Cloud.
+		// routes of their own: OpenAI's format on AWS, and on Google Cloud Gemini's own format or, for
+		// the open models that Google runs, OpenAI's format at one endpoint.
 		const cloud = providerId === 'aws' || providerId === 'google-cloud';
-		const otherModelRoute = {
-			aws: 'aws-bedrock-chat-completions',
-			'google-cloud': 'google-cloud-agent-platform-generate-content'
+		const otherModelRoutes = {
+			aws: ['aws-bedrock-chat-completions'],
+			'google-cloud': [
+				'google-cloud-agent-platform-chat-completions',
+				'google-cloud-agent-platform-generate-content'
+			]
 		}[providerId];
 		const anthropicWire =
 			providerId === 'anthropic' ||
@@ -2015,13 +2023,21 @@ function compileGraph(source, places, companies) {
 				);
 			}
 		}
-		if (
-			cloud &&
-			deployment.routeIds.some((routeId) => (routeId === otherModelRoute) === anthropicWire)
-		) {
-			throw new Error(
-				`${deploymentId}: only models other than Claude use the ${otherModelRoute} route`
-			);
+		for (const routeId of cloud ? deployment.routeIds : []) {
+			if (otherModelRoutes.includes(routeId) === anthropicWire) {
+				throw new Error(`${deploymentId}: only models other than Claude use the ${routeId} route`);
+			}
+			// The open models' endpoint takes the publisher and model in the body, as
+			// openai/gpt-oss-120b-maas, and generateContent's URL names a Gemini model alone.
+			if (
+				otherModelRoutes.includes(routeId) &&
+				providerId === 'google-cloud' &&
+				(routeId === 'google-cloud-agent-platform-chat-completions') !== upstreamModel.includes('/')
+			) {
+				throw new Error(
+					`${deploymentId}: name the model with its publisher exactly on the google-cloud-agent-platform-chat-completions route`
+				);
+			}
 		}
 		if (
 			providerId === 'azure' &&

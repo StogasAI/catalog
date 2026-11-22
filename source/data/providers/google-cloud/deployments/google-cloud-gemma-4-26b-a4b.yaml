@@ -1,0 +1,29 @@
+# Google runs Gemma 4 26B A4B IT as an experimental model at the global endpoint only.
+# Prices from the Cloud Billing Catalog (Vertex AI, Model as a Service Gemma-4 Input Token, Cached
+# Input Token and Output Token), reviewed 2026-11-22: https://cloud.google.com/skus
+# Launch stage, modalities and features reviewed 2026-11-22:
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations#genai-open-models
+# and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/google/gemma-4-26b-a4b-it
+deployments:
+  modelId: gemma-4-26b-a4b
+  routeIds: [google-cloud-agent-platform-chat-completions]
+  upstream:
+    model: google/gemma-4-26b-a4b-it-maas
+    inferenceGeo: global
+  overrides:
+    # Google refuses a max_tokens above 32,768 (capture google-cloud/chat-completions-limits).
+    maxOutputTokens: 32768
+    # Google turns thinking off by default, and the model ignores every effort. Reviewed 2026-11-22:
+    # https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/capabilities/thinking
+    # and capture google-cloud/chat-completions-reasoning.
+    reasoningDefault: none
+    # Google documents a minimum of 4,096 tokens, but caches every token of a repeated prompt but
+    # the last, on few repeats (capture google-cloud/chat-completions-caching).
+    promptCacheMinimumTokens: 1
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.15'
+    cached_input_tokens:
+      per_mill_tokens: '0.015'
+    output_tokens:
+      per_mill_tokens: '0.6'

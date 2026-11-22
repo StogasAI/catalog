@@ -1,0 +1,38 @@
+# Google runs DeepSeek V4.1 Flash as a preview at the global endpoint only. Its model page names
+# only the undated ID deepseek-v4.1-flash-maas, and its SKUs name version 1017, which the dated ID
+# calls, so that a later version behind the undated ID cannot serve this model. The model's server
+# takes a max_tokens up to the context window, above the model's limit, which the gateway sends to
+# a request that sets none (capture google-cloud/chat-completions-limits).
+# Prices from the Cloud Billing Catalog (Vertex AI, Model as a Service DeepSeek V4.1-1017 Input
+# Tokens, Cached Text Input Tokens and Output Tokens), reviewed 2026-11-22:
+# https://cloud.google.com/skus
+# Launch stage, modalities and features reviewed 2026-11-22:
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations#genai-open-models
+# and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/deepseek/deepseek-v41-flash
+deployments:
+  modelId: deepseek-v4.1-flash-1017
+  routeIds: [google-cloud-agent-platform-chat-completions]
+  upstream:
+    model: deepseek-ai/deepseek-v4.1-flash-1017-maas
+    inferenceGeo: global
+  overrides:
+    # The model answers without reasoning when a request sets no effort, reasons as long at low as
+    # at high and longer at max (capture google-cloud/chat-completions-reasoning).
+    reasoningEfforts: [high, max]
+    reasoningDefault: none
+    # Google documents a minimum of 4,096 tokens, but caches the prompt in blocks of 256 tokens
+    # from the first block on (capture google-cloud/chat-completions-caching).
+    promptCacheMinimumTokens: 256
+    # Google takes every penalty without applying it to the model (capture
+    # google-cloud/chat-completions-fields).
+    sampling:
+      frequencyPenalty: false
+      presencePenalty: false
+      repetitionPenalty: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.3'
+    cached_input_tokens:
+      per_mill_tokens: '0.006'
+    output_tokens:
+      per_mill_tokens: '1.2'

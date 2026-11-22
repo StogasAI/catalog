@@ -1,0 +1,34 @@
+# Google runs gpt-oss-120b as a generally available model at the global endpoint only.
+# Prices from the Cloud Billing Catalog (Vertex AI, Model as a Service OpenAI gpt-oss-120b Input
+# Token and Output Token), reviewed 2026-11-22: https://cloud.google.com/skus
+# Launch stage, modalities and features reviewed 2026-11-22:
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations#genai-open-models
+# and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/openai/gpt-oss-120b
+deployments:
+  modelId: gpt-oss-120b
+  routeIds: [google-cloud-agent-platform-chat-completions]
+  upstream:
+    model: openai/gpt-oss-120b-maas
+    inferenceGeo: global
+  overrides:
+    # Google refuses tool_choice required or naming a function for gpt-oss-120b, and the model calls
+    # one tool in a turn and sometimes answers outside a response_format schema (capture
+    # google-cloud/chat-completions-fields). Google prices no cached token of the model, so some
+    # replies report cached tokens that it bills as input.
+    capabilities:
+      parallelFunctionCalling: false
+      implicitPromptCaching: false
+      structuredOutputs: false
+      toolChoice: false
+    # Google applies frequency_penalty only to some requests that set no temperature, and so is
+    # taken to apply presence_penalty, whose effect is too small to measure, and repetition_penalty
+    # 2 leaves the model without an answer (capture google-cloud/chat-completions-fields).
+    sampling:
+      frequencyPenalty: false
+      presencePenalty: false
+      repetitionPenalty: false
+  pricing:
+    input_tokens:
+      per_mill_tokens: '0.09'
+    output_tokens:
+      per_mill_tokens: '0.36'

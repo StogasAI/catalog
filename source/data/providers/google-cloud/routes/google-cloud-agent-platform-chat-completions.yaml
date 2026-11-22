@@ -1,0 +1,50 @@
+# The open models that Google runs as managed APIs on Agent Platform:
+# https://aiplatform.googleapis.com/v1/projects/{project}/locations/global/endpoints/openapi/chat/completions,
+# which takes OpenAI's Chat Completions format and names the model with its publisher in the body,
+# as openai/gpt-oss-120b-maas. Google serves these models only at the global endpoint, which keeps
+# no data in a chosen location, and announces each retirement on its deprecations page while the
+# model still runs. The gateway serves Responses requests through the route.
+# Reviewed 2026-11-22: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/call-open-model-apis,
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/use-open-models,
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations#genai-open-models
+# and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models
+routes:
+  providerId: google-cloud
+  interfaces: [chat_completions]
+  inputModalities: [text, image]
+  # Google caches a repeated prompt by itself for the models that it names, and a tool message
+  # carries an image that the model reads (captures google-cloud/chat-completions-caching and
+  # google-cloud/chat-completions-files). Under tool_choice none, every model called the tool
+  # (capture google-cloud/chat-completions-tool-choice-none).
+  capabilities:
+    streaming: true
+    functionCalling: true
+    parallelFunctionCalling: true
+    implicitPromptCaching: true
+    explicitPromptCaching: false
+    structuredOutputs: true
+    systemMessages: true
+    toolChoice: true
+    toolChoiceNone: false
+    toolResultImages: true
+    toolResultDocuments: false
+  # Every model takes a seed without applying it (capture google-cloud/chat-completions-fields).
+  sampling:
+    temperature: true
+    topP: true
+    topK: true
+    frequencyPenalty: true
+    presencePenalty: true
+    repetitionPenalty: true
+    seed: false
+    logitBias: true
+  # Google says nothing about keeping the prompt caches of open models apart between projects.
+  # Google's terms for preview models apply no data processing terms unless its documentation says
+  # otherwise, and its documentation says that the certifications of generative AI on Agent
+  # Platform still apply when an open model runs as a managed API, and that Google trains on no
+  # managed model's data, preview models' included.
+  # Reviewed 2026-11-22: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/use-open-models,
+  # https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention
+  # and https://cloud.google.com/terms/service-terms (Pre-GA Offerings Terms)
+  dataHandling:
+    isolatedPromptCache: false
