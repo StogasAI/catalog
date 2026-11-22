@@ -1,0 +1,25 @@
+deployments:
+  modelId: gpt-6.2-astra
+  routeIds: [azure-chat-completions, azure-responses]
+  upstream:
+    model: gpt-6.2-astra
+    modelFormat: OpenAI
+    modelVersion: '2026-11-17'
+    deploymentType: data_zone_standard_eu
+  retirementDate: 2027-11-17
+  pricing:
+    input_tokens:
+      per_mill_tokens: '9.6'
+      per_mill_context_gt_272k: '19.2'
+    cached_input_tokens:
+      per_mill_tokens: '0.48'
+      per_mill_context_gt_272k: '0.96'
+    cache_write_input_tokens:
+      per_mill_tokens: '12'
+      per_mill_context_gt_272k: '24'
+    cache_write_12h_input_tokens:
+      per_mill_tokens: '24'
+      per_mill_context_gt_272k: '48'
+    output_tokens:
+      per_mill_tokens: '48'
+      per_mill_context_gt_272k: '72'

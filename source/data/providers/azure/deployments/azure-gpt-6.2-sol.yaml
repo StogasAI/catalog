@@ -1,0 +1,25 @@
+deployments:
+  modelId: gpt-6.2-sol
+  routeIds: [azure-chat-completions, azure-responses]
+  upstream:
+    model: gpt-6.2-sol
+    modelFormat: OpenAI
+    modelVersion: '2026-11-17'
+    deploymentType: global_standard
+  retirementDate: 2027-11-17
+  pricing:
+    input_tokens:
+      per_mill_tokens: '2'
+      per_mill_context_gt_272k: '4'
+    cached_input_tokens:
+      per_mill_tokens: '0.1'
+      per_mill_context_gt_272k: '0.2'
+    cache_write_input_tokens:
+      per_mill_tokens: '2.5'
+      per_mill_context_gt_272k: '5'
+    cache_write_12h_input_tokens:
+      per_mill_tokens: '5'
+      per_mill_context_gt_272k: '10'
+    output_tokens:
+      per_mill_tokens: '10'
+      per_mill_context_gt_272k: '15'

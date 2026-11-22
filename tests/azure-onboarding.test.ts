@@ -425,6 +425,18 @@ describe('Azure provider onboarding contract', () => {
 				['flex', 'global']
 			]),
 			...gptTargets('gpt-6.1-terra', '2026-10-26', [...standardNodes, ['standard', 'apac']]),
+			...gptTargets(
+				'gpt-6.2-astra',
+				'2026-11-17',
+				[...standardNodes, ['standard', 'apac'], ['flex', 'global']],
+				{ pro: false }
+			),
+			...gptTargets(
+				'gpt-6.2-sol',
+				'2026-11-17',
+				[...standardNodes, ['standard', 'apac'], ['flex', 'global']],
+				{ pro: false }
+			),
 			...otherTargets
 		]
 			.map((target) => ({ ...target, upstream: { serviceTier: 'standard', ...target.upstream } }))
