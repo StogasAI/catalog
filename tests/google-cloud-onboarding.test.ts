@@ -258,8 +258,9 @@ const gemini: {
 		global: geminiPrices('0.25', '0.025', '1.5'),
 		regional: geminiPrices('0.275', '0.027', '1.65'),
 		withoutSampling: ['topK'],
-		// Google charges twice the text price for audio, which the catalog cannot price.
-		withoutInputModalities: ['audio']
+		// Google charges twice the text price for audio, which the catalog cannot price, and video
+		// arrives only in a URL, which can hold audio.
+		withoutInputModalities: ['audio', 'video']
 	}
 ];
 for (const { model, efforts, global, regional, ...facts } of gemini) {
@@ -581,7 +582,7 @@ describe('Google Cloud onboarding contract', () => {
 					},
 					inputLimits: { images: { count: 3000 }, documents: { count: 3000 } },
 					id: 'google-cloud-agent-platform-generate-content',
-					inputModalities: ['text', 'image', 'audio'],
+					inputModalities: ['text', 'image', 'audio', 'video'],
 					interfaces: ['chat_completions'],
 					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
 				},
