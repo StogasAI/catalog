@@ -2422,7 +2422,8 @@ describe('catalog source compiler invariants', () => {
 				endToEndEncrypted: false,
 				tee: false,
 				teeVerified: false,
-				sharedWith: ['unknown']
+				sharedWith: ['unknown'],
+				certifications: []
 			};
 			const offer = (dataHandling?: object) =>
 				changed((candidate) => {
@@ -2441,20 +2442,18 @@ describe('catalog source compiler invariants', () => {
 			};
 			const { graph } = buildCatalog(source);
 			expect(graph.routes['openai-responses'].hostedTools).toEqual([
-				{
-					tool: 'mcp',
-					dataHandling: { ...unknown, withoutCertifications: ['soc2-type2', 'iso-27001'] }
-				}
+				{ tool: 'mcp', dataHandling: unknown }
 			]);
 			expect(
 				graph.deployments['openai-gpt-test'].routes['openai-responses'].hostedTools.mcp
-			).toEqual({
-				dataHandling: {
-					...unknown,
-					withoutCertifications: ['soc2-type2', 'iso-27001', 'iso-42001']
-				},
-				pricing: {}
-			});
+			).toEqual({ dataHandling: unknown, pricing: {} });
+			// A record without certifications has none for the tool to lose.
+			const bare = offer();
+			bare.graph.providers.openai.dataHandling.certifications = [];
+			const { certifications: _, ...stated } = unknown;
+			expect(buildCatalog(bare).graph.routes['openai-responses'].hostedTools).toEqual([
+				{ tool: 'mcp', dataHandling: stated }
+			]);
 			expect(() => buildCatalog(offer({ trainingUse: null }))).toThrow(
 				'openai-responses.hostedTools[0]: mcp states no dataHandling, because the request names its server'
 			);
@@ -2513,25 +2512,48 @@ describe('catalog source compiler invariants', () => {
 			expect(certifications(other, id)).toEqual(['iso-27001', 'iso-42001']);
 		});
 
-		test('lets a hosted tool remove only certifications that its route lists', () => {
+		test('lets a hosted tool keep part of the certifications that its route lists', () => {
 			const source = changed((candidate) => {
 				Object.assign(candidate.graph.providers.openai.dataHandling, {
 					certifications: ['soc2-type2', 'hipaa-eligible']
 				});
 				candidate.graph.routes['openai-responses'].hostedTools = [
-					{ tool: 'web_fetch', dataHandling: { withoutCertifications: ['hipaa-eligible'] } }
+					{ tool: 'web_fetch', dataHandling: { certifications: ['soc2-type2'] } }
 				];
 			});
-			expect(
+			const fetched = () =>
 				buildCatalog(source).graph.deployments['openai-gpt-test'].routes['openai-responses']
-					.hostedTools.web_fetch.dataHandling
-			).toEqual({ withoutCertifications: ['hipaa-eligible'] });
+					.hostedTools.web_fetch.dataHandling;
+			expect(fetched()).toEqual({ certifications: ['soc2-type2'] });
+			// A deployment keeps those of its own entries that the tool's list names, and the list
+			// goes when it keeps them all.
+			const deployment = source.graph.deployments['openai-gpt-test'];
+			deployment.overrides = { dataHandling: { certifications: ['soc2-type2', 'iso-27001'] } };
+			expect(fetched()).toEqual({ certifications: ['soc2-type2'] });
+			deployment.overrides = { dataHandling: { certifications: ['soc2-type2'] } };
+			expect(fetched()).toEqual({});
+			delete deployment.overrides;
+			for (const [listed, message] of [
+				[['pci-dss'], ': certifications names an entry that its route does not list'],
+				[
+					['soc2-type2', 'hipaa-eligible'],
+					': certifications lists every entry of its route, so leave it out'
+				],
+				[
+					['hipaa-eligible', 'soc2-type2'],
+					'.certifications must use canonical order without repeats'
+				]
+			] as const) {
+				source.graph.routes['openai-responses'].hostedTools = [
+					{ tool: 'web_fetch', dataHandling: { certifications: [...listed] } }
+				];
+				expect(() => buildCatalog(source)).toThrow(`openai-responses.hostedTools[0]${message}`);
+			}
+			// An empty list says that no certification covers the tool.
 			source.graph.routes['openai-responses'].hostedTools = [
-				{ tool: 'web_fetch', dataHandling: { withoutCertifications: ['pci-dss'] } }
+				{ tool: 'web_fetch', dataHandling: { certifications: [] } }
 			];
-			expect(() => buildCatalog(source)).toThrow(
-				'openai-responses.hostedTools[0]: withoutCertifications removes only what its route lists'
-			);
+			expect(fetched()).toEqual({ certifications: [] });
 		});
 	});
 

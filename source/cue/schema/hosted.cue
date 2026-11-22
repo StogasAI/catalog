@@ -8,9 +8,9 @@ package catalog
 // location joins to the smallest place that holds both, a retention to the
 // longer one, unknown retention wins, training use turns unknown and then
 // true, the other flags can only turn false, sharedWith adds the companies
-// that the tool sends content to, and withoutCertifications removes the audits
-// and agreements that do not cover the tool. An omitted field leaves the
-// deployment's value.
+// that the tool sends content to, and certifications keeps only the audits and
+// agreements that cover the tool, an empty list when none does. An omitted
+// field leaves the deployment's value.
 #HostedToolDataHandling: close({
 	processingLocation?: #ProcessingLocation
 	storageLocation?:    #ProcessingLocation
@@ -21,7 +21,7 @@ package catalog
 	tee?:                false
 	teeVerified?:        false
 	sharedWith?: [#CompanyRef, ...#CompanyRef]
-	withoutCertifications?: [#Certification, ...#Certification]
+	certifications?: [...#Certification]
 })
 
 #HostedTool: close({
@@ -29,6 +29,6 @@ package catalog
 	pricing?: #HostedToolPricing
 	// Omitted when the tool's processing changes none of the deployment's facts, and always for
 	// mcp: the request names the server, so the build states every fact of it as unknown and
-	// removes every certification.
+	// no certification as covering it.
 	dataHandling?: #HostedToolDataHandling
 })

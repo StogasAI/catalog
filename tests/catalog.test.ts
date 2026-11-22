@@ -526,7 +526,7 @@ describe('compiled catalog', () => {
 					zeroDataRetention: false,
 					sharedWith: ['unknown'],
 					// Anthropic's business associate agreement does not cover web fetch.
-					withoutCertifications: ['hipaa-eligible']
+					certifications: ['soc2-type2', 'iso-27001', 'iso-42001']
 				}
 			}
 		]);

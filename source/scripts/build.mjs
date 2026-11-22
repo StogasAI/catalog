@@ -142,7 +142,8 @@ const hostedToolMeters = {
 	image_generation: []
 };
 // The request names the server that a remote MCP tool sends content to, so the catalog knows no
-// fact about it, and no audit or agreement covers it.
+// fact about it, and no audit or agreement covers it. The build states these facts, so source
+// states none.
 const unknownDestination = {
 	processingLocation: 'unknown',
 	storageLocation: 'unknown',
@@ -152,15 +153,18 @@ const unknownDestination = {
 	endToEndEncrypted: false,
 	tee: false,
 	teeVerified: false,
-	sharedWith: ['unknown']
+	sharedWith: ['unknown'],
+	certifications: []
 };
 
-// The facts of a remote MCP tool for a record with these certifications. The build states them,
-// so source states none.
-function remoteServerFacts(certifications) {
+// A tool's facts for a record with these certifications. Its own list keeps only the record's
+// entries that cover it, and goes when it keeps them all, as every other fact that changes nothing
+// is left out.
+function toolFacts({ certifications: covering, ...facts }, certifications) {
+	const kept = covering && certifications.filter((id) => covering.includes(id));
 	return {
-		...structuredClone(unknownDestination),
-		...(certifications.length > 0 && { withoutCertifications: [...certifications] })
+		...structuredClone(facts),
+		...(kept && kept.length < certifications.length && { certifications: kept })
 	};
 }
 const maxAliasesPerNode = 8;
@@ -1044,11 +1048,12 @@ function servedFacts(graph, model, deployment, hosting) {
 				offers.map((offer) => [
 					offer.tool,
 					{
-						// A deployment can state certifications of its own, and none covers the server.
-						dataHandling:
-							offer.tool === 'mcp'
-								? remoteServerFacts(dataHandling.certifications)
-								: structuredClone(offer.dataHandling),
+						// A deployment can state certifications of its own, so a tool keeps those of them
+						// that its list names, and no certification covers a remote MCP server.
+						dataHandling: toolFacts(
+							offer.tool === 'mcp' ? unknownDestination : offer.dataHandling,
+							dataHandling.certifications
+						),
 						pricing: structuredClone(offer.pricing ?? {})
 					}
 				])
@@ -1123,19 +1128,22 @@ function compileHostedTools(routeId, source, places, companies, certifications) 
 		}
 		if (offer.dataHandling?.sharedWith)
 			validateSharedWith(owner, offer.dataHandling.sharedWith, companies);
-		const without = offer.dataHandling?.withoutCertifications;
-		if (without) {
-			validateCanonicalList(without, certificationRanks, `${owner}.withoutCertifications`);
-			if (without.some((id) => !certifications.includes(id)))
-				throw new Error(`${owner}: withoutCertifications removes only what its route lists`);
+		const covering = offer.dataHandling?.certifications;
+		if (covering) {
+			if (covering.length > 0)
+				validateCanonicalList(covering, certificationRanks, `${owner}.certifications`);
+			if (covering.some((id) => !certifications.includes(id)))
+				throw new Error(`${owner}: certifications names an entry that its route does not list`);
+			if (covering.length === certifications.length)
+				throw new Error(`${owner}: certifications lists every entry of its route, so leave it out`);
 		}
 		return {
 			tool: offer.tool,
 			...(offer.pricing && { pricing: structuredClone(offer.pricing) }),
-			dataHandling:
-				offer.tool === 'mcp'
-					? remoteServerFacts(certifications)
-					: structuredClone(offer.dataHandling ?? {})
+			dataHandling: toolFacts(
+				offer.tool === 'mcp' ? unknownDestination : (offer.dataHandling ?? {}),
+				certifications
+			)
 		};
 	});
 	offers.sort((left, right) => hostedToolRanks.get(left.tool) - hostedToolRanks.get(right.tool));

@@ -263,11 +263,11 @@ export function assertProviderOnboardingContract(
 		// Route IDs, chain hashes and notes name the provider; everything that the routes serve
 		// matches, except the data handling that the cloud changes, its own request limits and the
 		// account options, which are each provider's own.
-		// A hosted tool removes only the certifications that its route lists, so the cloud's route
-		// states none of the removals that its own list makes moot.
+		// A hosted tool keeps those certifications of the record that its list names, so each tool's
+		// list compares under the cloud's own.
 		type Served = {
 			dataHandling: { certifications: string[] };
-			hostedTools: Record<string, { dataHandling: { withoutCertifications?: string[] } }>;
+			hostedTools: Record<string, { dataHandling: { certifications?: string[] } }>;
 		};
 		const served = (deployment: typeof relayed, dataHandling = {}) => ({
 			...deployment,
@@ -282,17 +282,17 @@ export function assertProviderOnboardingContract(
 					dataHandling: handling,
 					hostedTools: Object.fromEntries(
 						Object.entries(hostedTools).map(([tool, offer]) => {
-							const { withoutCertifications = [], ...effect } = offer.dataHandling;
-							const removed = withoutCertifications.filter((id) =>
-								handling.certifications.includes(id)
-							);
+							const { certifications: covering, ...effect } = offer.dataHandling;
+							const kept =
+								covering && handling.certifications.filter((id) => covering.includes(id));
 							return [
 								tool,
 								{
 									...offer,
 									dataHandling: {
 										...effect,
-										...(removed.length > 0 && { withoutCertifications: removed })
+										...(kept &&
+											kept.length < handling.certifications.length && { certifications: kept })
 									}
 								}
 							];
