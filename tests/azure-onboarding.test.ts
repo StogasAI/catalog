@@ -685,6 +685,23 @@ describe('Azure provider onboarding contract', () => {
 		}
 	});
 
+	test('states an isolated prompt cache only for the OpenAI and Anthropic formats', () => {
+		// Microsoft states it for its OpenAI models and Anthropic for Claude, and nothing for the
+		// other formats, gpt-oss among them.
+		const formats = new Set<string>();
+		for (const [, deployment] of azureDeployments()) {
+			const format = deployment.upstream.modelFormat;
+			formats.add(format);
+			for (const route of Object.values(deployment.routes))
+				expect(route.dataHandling.isolatedPromptCache).toBe(
+					format === 'OpenAI' || format === 'Anthropic'
+				);
+		}
+		expect([...formats]).toEqual(
+			expect.arrayContaining(['Anthropic', 'OpenAI', 'OpenAI-OSS', 'xAI'])
+		);
+	});
+
 	test('pins all non-GPT and non-Claude token prices', () => {
 		const expected = {
 			'azure-deepseek-v4-flash-0423': ['0.19', '0.028', '0.51'],
