@@ -112,8 +112,16 @@ const certificationIncludes = {
 };
 // Hosted tools in canonical order, and the call meters that each may charge. Content that a tool
 // adds to the context bills as input tokens, so only the searches that also charge for each call
-// have call meters.
-const hostedToolIds = ['web_search', 'web_fetch', 'mcp', 'file_search'];
+// have call meters. OpenAI bills the containers that code interpreter and hosted shells run in by
+// session, which no request measures.
+const hostedToolIds = [
+	'web_search',
+	'web_fetch',
+	'mcp',
+	'file_search',
+	'code_interpreter',
+	'shell'
+];
 const hostedToolRanks = new Map(hostedToolIds.map((value, index) => [value, index]));
 const anthropicWebSearchMeters = ['anthropic_web_search_calls'];
 const openaiWebSearchMeters = [
@@ -126,7 +134,9 @@ const hostedToolMeters = {
 	web_search: [...anthropicWebSearchMeters, ...openaiWebSearchMeters],
 	web_fetch: [],
 	mcp: [],
-	file_search: openaiFileSearchMeters
+	file_search: openaiFileSearchMeters,
+	code_interpreter: [],
+	shell: []
 };
 // The request names the server that a remote MCP tool sends content to, so the catalog knows no
 // fact about it, and no audit or agreement covers it.
@@ -1284,9 +1294,11 @@ function validateServedFacts(
 				}
 			}
 		}
-		// Only OpenAI's own Responses API runs file search.
-		if (anthropicWire && route.hostedTools.file_search) {
-			throw new Error(`${deploymentId} on ${routeId}: Claude's wire has no file_search`);
+		// Only OpenAI's own Responses API runs file search, code interpreter and hosted shells.
+		for (const tool of ['file_search', 'code_interpreter', 'shell']) {
+			if (anthropicWire && route.hostedTools[tool]) {
+				throw new Error(`${deploymentId} on ${routeId}: Claude's wire has no ${tool}`);
+			}
 		}
 		// Each wire charges a search on its own meters, so an offer must price exactly those, and no
 		// call bills at zero.

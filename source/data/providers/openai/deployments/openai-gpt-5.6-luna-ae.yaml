@@ -19,6 +19,8 @@ deployments:
       web_search: false
       mcp: false
       file_search: false
+      code_interpreter: false
+      shell: false
   pricing:
     input_tokens:
       per_mill_tokens: '0.22'

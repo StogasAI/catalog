@@ -242,6 +242,11 @@ routes:
   # stores that the account keeps, keeps nothing of the request and takes the same residency.
   # Reviewed 2026-11-22: https://developers.openai.com/api/docs/guides/data-residency. Its calls cost
   # $2.50 per 1,000 on the Responses API: https://developers.openai.com/api/docs/pricing
+  # Code interpreter and hosted shells run in containers that keep their files until the container
+  # expires or is deleted: https://developers.openai.com/api/docs/guides/your-data. Code interpreter
+  # takes the same residency, and the data residency guide does not list hosted shells. OpenAI bills
+  # each container by session to the key's account, which no request measures, so neither tool has a
+  # price here. Reviewed 2026-11-22.
   hostedTools:
     - tool: web_search
       pricing:
@@ -256,3 +261,8 @@ routes:
       pricing:
         openai_responses_file_search_calls:
           per_1k_calls: '2.5'
+    - tool: code_interpreter
+    - tool: shell
+      dataHandling:
+        processingLocation: unknown
+        storageLocation: unknown

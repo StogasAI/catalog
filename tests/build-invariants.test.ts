@@ -2069,6 +2069,26 @@ describe('catalog source compiler invariants', () => {
 				"anthropic-gpt-test-us on anthropic-messages: Claude's wire has no file_search"
 			],
 			[
+				"code interpreter on Claude's wire",
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [{ tool: 'code_interpreter' }];
+					asAnthropic(source);
+				},
+				"anthropic-gpt-test-us on anthropic-messages: Claude's wire has no code_interpreter"
+			],
+			[
+				'a call price on a hosted shell',
+				(source: Source) => {
+					source.graph.routes['openai-responses'].hostedTools = [
+						{
+							tool: 'shell',
+							pricing: { openai_responses_file_search_calls: { per_1k_calls: '2.5' } }
+						}
+					];
+				},
+				'openai-responses.hostedTools[0]: shell has no call meter openai_responses_file_search_calls'
+			],
+			[
 				'hosted tool data handling in an unlisted place',
 				(source: Source) => {
 					source.graph.routes['openai-responses'].hostedTools = [
