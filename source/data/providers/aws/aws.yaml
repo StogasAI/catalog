@@ -12,7 +12,7 @@ providers:
   # AWS's API reports neither.
   accountOptions:
     - id: zero-data-retention
-      name: Zero data retention for Claude Platform on AWS
+      name: Anthropic zero data retention
       routes: [aws-claude-platform-messages]
       dataHandling:
         storageLocation: none

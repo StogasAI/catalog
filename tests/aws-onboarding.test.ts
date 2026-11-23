@@ -532,7 +532,7 @@ describe('AWS onboarding contract', () => {
 						grants: [],
 						group: null,
 						id: 'zero-data-retention',
-						name: 'Zero data retention for Claude Platform on AWS',
+						name: 'Anthropic zero data retention',
 						routes: ['aws-claude-platform-messages']
 					},
 					{

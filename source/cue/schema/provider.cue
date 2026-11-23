@@ -40,9 +40,9 @@ package catalog
 	// A setting with several values: an account holds one option of a group at most.
 	group?: #Id
 	// The provider's routes whose requests the option covers. It reaches each deployment on
-	// them but one that removes it in overrides, one whose own terms leave unknown a fact that
-	// the option sets, and one whose model's minimumRetentionDays is over the retention that the
-	// option sets.
+	// them whose record it changes, but one that removes it in overrides, one whose own terms
+	// leave unknown a fact that the option sets, and one whose model's minimumRetentionDays is
+	// over the retention that the option sets.
 	routes: [#Id, ...#Id]
 	dataHandling?: close({
 		storageLocation?:   #StorageLocation

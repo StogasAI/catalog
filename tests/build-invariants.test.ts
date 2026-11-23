@@ -2653,6 +2653,41 @@ describe('catalog source compiler invariants', () => {
 				)
 			).toEqual(['data-sharing']);
 		});
+		test('without an option that changes nothing of the record', () => {
+			expect(
+				reaching(
+					withOptions((source) => {
+						source.graph.providers.openai.accountOptions = [sharing];
+						source.graph.deployments['openai-gpt-test'].overrides = {
+							dataHandling: { trainingUse: true }
+						};
+					})
+				)
+			).toEqual([]);
+		});
+		test('without an agreement on a record that is not eligible for what it grants', () => {
+			const agreement = {
+				id: 'business-associate-agreement',
+				name: 'Business associate agreement',
+				routes: ['openai-responses'],
+				grants: ['hipaa']
+			};
+			const source = withOptions((source) => {
+				source.graph.providers.openai.accountOptions = [agreement];
+				source.graph.providers.openai.dataHandling.certifications = [
+					'soc2-type2',
+					'hipaa-eligible'
+				];
+				source.graph.deployments['openai-gpt-test'].overrides = {
+					dataHandling: { certifications: ['soc2-type2'] }
+				};
+			});
+			const { deployments } = buildCatalog(source).graph;
+			expect(deployments['openai-gpt-test'].routes['openai-responses'].accountOptions).toEqual([]);
+			expect(deployments['openai-gpt-other'].routes['openai-responses'].accountOptions).toEqual([
+				'business-associate-agreement'
+			]);
+		});
 		test('and changes the chain of a record that an option reaches', () => {
 			const plain = buildCatalog(sourceFixture()).graph.deployments['openai-gpt-test'];
 			const reached = buildCatalog(withOptions()).graph.deployments['openai-gpt-test'];
@@ -2750,15 +2785,8 @@ describe('catalog source compiler invariants', () => {
 			[
 				'grant that no record leads to',
 				(source: Source) =>
-					(source.graph.providers.openai.accountOptions = [
-						{
-							id: 'business-associate-agreement',
-							name: 'Business associate agreement',
-							routes: ['openai-responses'],
-							grants: ['hipaa']
-						}
-					]),
-				'openai.accountOptions.business-associate-agreement: no deployment on openai-responses lists hipaa-eligible'
+					(source.graph.providers.openai.accountOptions = [{ ...sharing, grants: ['hipaa'] }]),
+				'openai.accountOptions.data-sharing: no deployment on openai-responses lists hipaa-eligible'
 			],
 			[
 				'removal of an option that does not reach the deployment',

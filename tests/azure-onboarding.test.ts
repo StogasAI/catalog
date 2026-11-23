@@ -785,13 +785,27 @@ describe('Azure provider onboarding contract', () => {
 			for (const [routeId, { accountOptions, dataHandling: handling }] of Object.entries(
 				deployment.routes
 			)) {
-				// Modified abuse monitoring reaches no record whose terms leave retention unknown, such
-				// as Instant, Flex and preview models, or that another company runs.
+				// Modified abuse monitoring reaches no record under Microsoft's preview terms, which
+				// leave retention unknown, as on Instant, Flex and preview models, and none that
+				// another company runs.
 				if (routeId === 'azure-chat-completions' || routeId === 'azure-responses')
 					expect([id, accountOptions.includes('modified-abuse-monitoring')]).toEqual([
 						id,
 						handling.retentionDays !== null
 					]);
+				// An agreement reaches a record only where the record is eligible for what it grants.
+				if (routeId !== 'azure-anthropic-messages')
+					expect([id, accountOptions.includes('business-associate-agreement')]).toEqual([
+						id,
+						handling.certifications.includes('hipaa-eligible')
+					]);
+				// The preview terms leave out Microsoft's audits and its business associate agreement.
+				if (
+					previews.has(id) ||
+					deployment.upstream.deploymentType === 'instant' ||
+					deployment.upstream.serviceTier === 'flex'
+				)
+					expect([id, handling.certifications, accountOptions]).toEqual([id, [], []]);
 				if (previews.has(id)) {
 					expect(handling).toMatchObject({
 						processingLocation: 'world',

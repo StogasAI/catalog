@@ -9,7 +9,7 @@ providers:
   # https://platform.claude.com/docs/en/manage-claude/api-and-data-retention#what-zdr-covers
   accountOptions:
     - id: zero-data-retention
-      name: Zero data retention for Claude Models on Google Cloud (Anthropic managed)
+      name: Anthropic zero data retention
       routes: [google-cloud-anthropic-managed-messages]
       dataHandling:
         storageLocation: none

@@ -317,7 +317,7 @@ const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
  * residency region also stores there, an Azure Data Zone that Microsoft runs keeps processing and
  * storage in its zone, Microsoft's preview terms, which cover Instant, Flex and the models that
  * Azure lists as previews, let it process and store data in any country and drop its commitments
- * on retention and training, and only some Azure model formats keep prompt caches apart.
+ * on retention, training and audits, and only some Azure model formats keep prompt caches apart.
  */
 function selectedDataHandling(graph, providerId, hosting, { upstream, preview }) {
 	const selected = {};
@@ -343,6 +343,12 @@ function selectedDataHandling(graph, providerId, hosting, { upstream, preview })
 		selected.storageLocation = 'unknown';
 		selected.retentionDays = null;
 		selected.trainingUse = null;
+		// Microsoft's data protection addendum leaves its Data Security terms, which hold its audits,
+		// and its HIPAA business associate terms out of a preview, unless the preview's own terms
+		// allow personal data, and the terms of Foundry's model previews do not. Reviewed 2026-11-23:
+		// https://aka.ms/DPA (Previews) and
+		// https://azure.microsoft.com/support/legal/preview-supplemental-terms/
+		selected.certifications = [];
 	}
 	// Microsoft keeps prompt caches apart between subscriptions only for its OpenAI models, and
 	// Anthropic between workspaces for Claude. Azure states nothing for the other formats.
@@ -1014,15 +1020,22 @@ function servedFacts(graph, model, deployment, hosting) {
 		routes[routeId] = {
 			// The provider's account options that reach this record: those that cover its route,
 			// that the deployment does not remove, that set no fact which the deployment's own terms
-			// leave unknown, as Microsoft's preview terms do, and that keep its model's minimum
-			// retention.
+			// leave unknown, as Microsoft's preview terms do, whose retention is not under its model's
+			// minimum, and that change the record, by a fact that differs or a certification that it
+			// is eligible for.
 			accountOptions: graph.providers[route.providerId].accountOptions
 				.filter(
 					(option) =>
 						option.routes.includes(routeId) &&
 						overrides.accountOptions?.[option.id] !== false &&
 						!Object.keys(option.dataHandling).some((field) => selected[field] === null) &&
-						!(option.dataHandling.retentionDays < model.minimumRetentionDays)
+						!(option.dataHandling.retentionDays < model.minimumRetentionDays) &&
+						(Object.entries(option.dataHandling).some(
+							([field, value]) => !same(dataHandling[field], value)
+						) ||
+							option.grants.some((id) =>
+								dataHandling.certifications.includes(grantedCertifications[id])
+							))
 				)
 				.map((option) => option.id),
 			capabilities: Object.fromEntries(
