@@ -6,6 +6,8 @@ deployments:
   routeIds: [aws-claude-platform-message-batches]
   upstream:
     model: claude-opus-4-5-20251101
+  # Reviewed 2026-11-24: https://platform.claude.com/docs/en/about-claude/model-deprecations
+  retirementDate: 2027-01-22
   pricing:
     input_tokens:
       per_mill_tokens: '2.5'

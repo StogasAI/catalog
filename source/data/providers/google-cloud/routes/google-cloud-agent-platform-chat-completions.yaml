@@ -10,7 +10,8 @@
 # and https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models
 routes:
   providerId: google-cloud
-  interfaces: [chat_completions]
+  interfaces: [chat_completions, responses]
+  convertedInterfaces: [responses]
   inputModalities: [text, image]
   # Google caches a repeated prompt by itself for the models that it names, and a tool message
   # carries an image that the model reads (captures google-cloud/chat-completions-caching and

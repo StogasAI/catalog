@@ -1,7 +1,8 @@
 routes:
   providerId: openai
   endpoint: https://api.openai.com/v1/responses
-  interfaces: [responses]
+  interfaces: [chat_completions, responses]
+  convertedInterfaces: [chat_completions]
   inputModalities: [text, image]
   capabilities:
     streaming: true

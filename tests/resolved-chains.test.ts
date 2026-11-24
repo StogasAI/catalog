@@ -69,6 +69,7 @@ test('a chain shows each fact once, as the path runs it', () => {
 	);
 	expect(Object.keys(chain.route.data).sort()).toEqual([
 		'batch',
+		'convertedInterfaces',
 		'endpoint',
 		'interfaces',
 		'providerId',

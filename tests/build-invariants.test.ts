@@ -1599,13 +1599,22 @@ describe('catalog source compiler invariants', () => {
 				'openai-responses': ['low']
 			});
 
-			// A route that translates several interfaces keeps the deployment's list.
+			// A route that converts an interface keeps the list of the one that it takes itself.
 			source.graph.deployments['openai-gpt-test'].routeIds = ['openai-responses'];
 			source.graph.routes['openai-responses'].interfaces = ['chat_completions', 'responses'];
+			source.graph.routes['openai-responses'].convertedInterfaces = ['chat_completions'];
+			expect(efforts()).toEqual({ 'openai-responses': ['low'] });
+
+			// A route that converts every interface keeps the deployment's list.
+			source.graph.routes['openai-responses'].convertedInterfaces = [
+				'chat_completions',
+				'responses'
+			];
 			expect(efforts()).toEqual({ 'openai-responses': ['low', 'high'] });
 
 			// A route left with none of the deployment's efforts is a source error.
 			source.graph.routes['openai-responses'].interfaces = ['responses'];
+			delete source.graph.routes['openai-responses'].convertedInterfaces;
 			source.graph.deployments['openai-gpt-test'].overrides = { reasoningEfforts: ['high'] };
 			expect(efforts).toThrow(
 				'openai-gpt-test: openai-responses serves none of its reasoning efforts'
@@ -1969,7 +1978,7 @@ describe('catalog source compiler invariants', () => {
 						'openai-responses',
 						'openai-responses'
 					]),
-				'routes must serve different interfaces'
+				'routes must take different interfaces themselves'
 			],
 			[
 				'mixed providers',
@@ -3016,7 +3025,7 @@ describe('catalog source compiler invariants', () => {
 		expect(built.graph.deployments['openai-gpt-test'].upstream.serviceTier).toBe('standard');
 	});
 
-	test('allows fixed reasoning mode only on Responses-only routes', () => {
+	test('allows fixed reasoning mode only on routes that take only Responses themselves', () => {
 		const source = changed((candidate) => {
 			const deployment = candidate.graph.deployments['openai-gpt-test'];
 			deployment.upstream.reasoningMode = 'pro';
@@ -3031,7 +3040,54 @@ describe('catalog source compiler invariants', () => {
 					candidate.graph.deployments['openai-gpt-test'].upstream.reasoningMode = 'pro';
 				})
 			)
-		).toThrow('fixed reasoning mode requires Responses-only routes');
+		).toThrow('fixed reasoning mode requires routes that take only Responses themselves');
+
+		// A route that converts Chat Completions to Responses still takes only Responses itself.
+		expect(
+			buildCatalog(
+				changed((candidate) => {
+					const route = candidate.graph.routes['openai-responses'];
+					route.interfaces = ['chat_completions', 'responses'];
+					route.convertedInterfaces = ['chat_completions'];
+					const deployment = candidate.graph.deployments['openai-gpt-test'];
+					deployment.upstream.reasoningMode = 'pro';
+					candidate.graph.deployments = { 'openai-gpt-test-pro': deployment };
+				})
+			).graph.deployments['openai-gpt-test-pro']
+		).toBeDefined();
+	});
+
+	test('lets a second route of a deployment convert an interface that the first takes itself', () => {
+		const route = (source: Source) => {
+			addSecondOpenAIRoute(source);
+			source.graph.deployments['openai-gpt-test'].routeIds = [
+				'openai-chat-completions',
+				'openai-responses'
+			];
+			return source.graph.routes['openai-responses'];
+		};
+		const converting = changed((candidate) => {
+			route(candidate).interfaces = ['chat_completions', 'responses'];
+			route(candidate).convertedInterfaces = ['chat_completions'];
+		});
+		expect(buildCatalog(converting).graph.routes['openai-responses']).toMatchObject({
+			interfaces: ['chat_completions', 'responses'],
+			convertedInterfaces: ['chat_completions']
+		});
+		expect(() =>
+			buildCatalog(
+				changed((candidate) => {
+					route(candidate).interfaces = ['chat_completions', 'responses'];
+				})
+			)
+		).toThrow('routes must take different interfaces themselves');
+		expect(() =>
+			buildCatalog(
+				changed((candidate) => {
+					route(candidate).convertedInterfaces = ['chat_completions'];
+				})
+			)
+		).toThrow('openai-responses: convertedInterfaces must be among its interfaces');
 	});
 
 	test('allows fixed reasoning mode for an Azure-hosted OpenAI-author model', () => {

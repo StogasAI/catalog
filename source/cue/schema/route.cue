@@ -52,7 +52,14 @@ package catalog
 	// calls the same path on its data residency host, the endpoint's host behind the geography,
 	// such as eu.api.openai.com. The gateway calls the hosts in its own code and never reads it.
 	endpoint?: string & =~"^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(/[A-Za-z0-9._~-]+)+$"
+	// The client APIs that Stogas serves on the route. A model's deployments take each one on
+	// the route.
 	interfaces: [#Interface, ...#Interface]
+	// Those of the interfaces that the provider's API at the endpoint does not take itself:
+	// the gateway converts their requests to the provider's API and its replies back. A
+	// deployment's routes take different interfaces themselves, and a request goes to the
+	// route that takes its interface itself where the deployment has one.
+	convertedInterfaces?: [#Interface, ...#Interface]
 	// The route is a provider's batch API, which runs a file of requests within
 	// a window at its batch prices. Its deployments serve no other route and
 	// name no service tier. The gateway has no batch API, so Stogas serves no

@@ -41,6 +41,8 @@ export type ProviderRouteContract = {
 	id: string;
 	inputModalities: string[];
 	interfaces: string[];
+	/** Those of the interfaces that the gateway converts to the provider's API. */
+	convertedInterfaces?: string[];
 	/** The sampling parameters that the route's API takes, where they differ from the provider's. */
 	sampling?: string[];
 	/** The route is a batch API. */
@@ -220,6 +222,7 @@ export function assertProviderOnboardingContract(
 			),
 			inputModalities: route.inputModalities,
 			interfaces: route.interfaces,
+			convertedInterfaces: route.convertedInterfaces ?? [],
 			batch: route.batch === true,
 			supportsCancellation: route.supportsCancellation === true,
 			hostedTools: (route.hostedTools ?? []).map((offer) => ({ dataHandling: {}, ...offer })),

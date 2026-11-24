@@ -570,7 +570,8 @@ describe('AWS onboarding contract', () => {
 					dataHandling: kept,
 					id: 'aws-bedrock-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses', 'messages']
+					interfaces: ['chat_completions', 'responses', 'messages'],
+					convertedInterfaces: ['chat_completions', 'responses']
 				},
 				{
 					capabilities: chatCapabilities,
@@ -590,7 +591,8 @@ describe('AWS onboarding contract', () => {
 					},
 					id: 'aws-bedrock-chat-completions',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions'],
+					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['responses'],
 					sampling: [
 						'temperature',
 						'topP',
@@ -607,6 +609,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-bedrock-batch-messages',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['chat_completions', 'responses'],
 					batch: true
 				},
 				{
@@ -621,7 +624,8 @@ describe('AWS onboarding contract', () => {
 					},
 					id: 'aws-claude-platform-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses', 'messages']
+					interfaces: ['chat_completions', 'responses', 'messages'],
+					convertedInterfaces: ['chat_completions', 'responses']
 				},
 				{
 					capabilities: { streaming: false },
@@ -632,6 +636,7 @@ describe('AWS onboarding contract', () => {
 					id: 'aws-claude-platform-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['chat_completions', 'responses'],
 					batch: true
 				}
 			],

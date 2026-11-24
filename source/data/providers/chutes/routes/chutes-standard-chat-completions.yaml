@@ -2,7 +2,8 @@ routes:
   providerId: chutes
   endpoint: https://llm.chutes.ai/v1/chat/completions
   hosting: unknown
-  interfaces: [chat_completions]
+  interfaces: [chat_completions, responses]
+  convertedInterfaces: [responses]
   inputModalities: [text]
   # Chutes holds no model to tool_choice none, and most of its models call the tool or write the
   # call into their text under it (capture chutes/tool-choice-none).

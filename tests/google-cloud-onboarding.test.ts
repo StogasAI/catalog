@@ -104,10 +104,7 @@ const agentPlatform: { model: ClaudeModelId; global: Prices; regional?: Prices }
 			'2.75'
 		])
 	},
-	...(['claude-opus-4-6', 'claude-opus-4-5'] as const).map((model) => ({
-		model,
-		global: tokenPrices('5', '0.5', '6.25', '10', '25')
-	})),
+	{ model: 'claude-opus-4-6', global: tokenPrices('5', '0.5', '6.25', '10', '25') },
 	{ model: 'claude-sonnet-4-6', global: tokenPrices('3', '0.3', '3.75', '6', '15') },
 	{ model: 'claude-haiku-4-5', global: tokenPrices('1', '0.1', '1.25', '2', '5') }
 ];
@@ -539,7 +536,8 @@ describe('Google Cloud onboarding contract', () => {
 					},
 					id: 'google-cloud-agent-platform-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses', 'messages']
+					interfaces: ['chat_completions', 'responses', 'messages'],
+					convertedInterfaces: ['chat_completions', 'responses']
 				},
 				{
 					// Anthropic stores data in the US and deletes inputs and outputs within 30 days.
@@ -557,7 +555,8 @@ describe('Google Cloud onboarding contract', () => {
 					},
 					id: 'google-cloud-anthropic-managed-messages',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions', 'responses', 'messages']
+					interfaces: ['chat_completions', 'responses', 'messages'],
+					convertedInterfaces: ['chat_completions', 'responses']
 				},
 				{
 					capabilities: { streaming: false },
@@ -572,6 +571,7 @@ describe('Google Cloud onboarding contract', () => {
 					id: 'google-cloud-anthropic-managed-message-batches',
 					inputModalities: ['text', 'image'],
 					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['chat_completions', 'responses'],
 					batch: true
 				},
 				{
@@ -583,7 +583,8 @@ describe('Google Cloud onboarding contract', () => {
 					inputLimits: { images: { count: 3000 }, documents: { count: 3000 } },
 					id: 'google-cloud-agent-platform-generate-content',
 					inputModalities: ['text', 'image', 'audio', 'video'],
-					interfaces: ['chat_completions'],
+					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['chat_completions', 'responses'],
 					sampling: ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']
 				},
 				{
@@ -593,7 +594,8 @@ describe('Google Cloud onboarding contract', () => {
 					documentFormats: { extensions: ['.pdf'], mediaTypes: ['application/pdf'] },
 					id: 'google-cloud-agent-platform-meta-responses',
 					inputModalities: ['text', 'image'],
-					interfaces: ['responses'],
+					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['chat_completions'],
 					sampling: ['temperature', 'topP']
 				},
 				{
@@ -603,7 +605,8 @@ describe('Google Cloud onboarding contract', () => {
 					documentFormats: { extensions: [], mediaTypes: [] },
 					id: 'google-cloud-agent-platform-chat-completions',
 					inputModalities: ['text', 'image'],
-					interfaces: ['chat_completions'],
+					interfaces: ['chat_completions', 'responses'],
+					convertedInterfaces: ['responses'],
 					sampling: [
 						'temperature',
 						'topP',

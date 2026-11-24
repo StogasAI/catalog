@@ -10,7 +10,8 @@
 # and https://cloud.google.com/terms/service-terms
 routes:
   providerId: google-cloud
-  interfaces: [responses]
+  interfaces: [chat_completions, responses]
+  convertedInterfaces: [chat_completions]
   # Google says that the models read text and images but no PDF, audio or video. Every model read a
   # PDF all the same, inline and by URL, and Google fetched images by URL, but refused audio and text
   # files (capture google-cloud/responses-files).

@@ -35,7 +35,7 @@ describe('compiled catalog', () => {
 			Object.fromEntries(
 				graphNodeTypes.map((nodeType) => [nodeType, Object.keys(catalog.graph[nodeType]).length])
 			)
-		).toEqual({ authors: 13, models: 88, providers: 6, routes: 24, deployments: 696 });
+		).toEqual({ authors: 13, models: 88, providers: 6, routes: 24, deployments: 695 });
 		expect(JSON.stringify(catalog)).not.toMatch(
 			/providerOfferings|executionVariants|modelReleases|providerEndpoints|stogasEndpoints/
 		);
@@ -139,7 +139,7 @@ describe('compiled catalog', () => {
 	});
 
 	test('keeps models that their providers retired, with the dates that the providers gave', () => {
-		expect(catalog.graph.deployments['anthropic-claude-opus-4-5'].retirementDate).toBeNull();
+		expect(catalog.graph.deployments['anthropic-claude-opus-4-6'].retirementDate).toBeNull();
 		// Retired before this catalog, retiring within weeks, and a model whose every deployment
 		// has a date, so the model, and a group that holds only such models, retire with them.
 		for (const [deploymentId, date] of [
@@ -407,7 +407,6 @@ describe('compiled catalog', () => {
 			'claude-mythos-5',
 			'claude-mythos-5-1',
 			'claude-mythos-5-2',
-			'claude-opus-4-5',
 			'claude-opus-4-6',
 			'claude-opus-4-7',
 			'claude-opus-4-8',
@@ -912,27 +911,20 @@ describe('compiled catalog', () => {
 		}
 	});
 
-	test('schedules the Chutes price cut and the Ultrafast launch price of the GPT-6.2 models', () => {
+	test('schedules the Ultrafast launch price of the GPT-6.2 models', () => {
 		expect(catalog.schema).toBe('stogas.catalog.v1');
-		// Chutes ends its price cut on November 24, 2026, and OpenAI charges half the list price
-		// until March 1, 2027, Pacific time.
+		// OpenAI charges half the list price until March 1, 2027, Pacific time.
 		expect(catalog.schedule.map(({ start }) => start)).toEqual([
-			'2026-11-17T00:00:00Z',
 			'2026-11-18T00:00:00Z',
-			'2026-11-24T00:00:00Z',
 			'2027-03-01T08:00:00Z'
 		]);
-		const chutes = [
-			'chutes-deepseek-v4.1-flash-1017-unknown-hosted',
-			'chutes-glm-5.3-unknown-hosted'
-		];
 		const ultrafast = ['openai-gpt-6.2-astra-ultrafast', 'openai-gpt-6.2-sol-ultrafast'];
 		expect(
 			catalog.schedule.map(({ graph }) => Object.keys(graph.deployments ?? {}).sort())
-		).toEqual([chutes, [...chutes, ...ultrafast], ultrafast, []]);
+		).toEqual([ultrafast, []]);
 		expect(catalog.schedule.at(-1)!.graph).toEqual({});
 		// Each launch price is half of the list price.
-		const dated = catalog.schedule[2]!.graph.deployments!;
+		const dated = catalog.schedule[0]!.graph.deployments!;
 		for (const id of ultrafast) {
 			const listed = catalog.graph.deployments[id]!.pricing;
 			for (const [meter, rates] of Object.entries(listed))

@@ -984,6 +984,11 @@ function validateReasoningDefault(owner, value, reasoning, efforts) {
 	}
 }
 
+// The interfaces that a route's provider API takes itself, without conversion.
+function ownInterfaces(route) {
+	return route.interfaces.filter((name) => !route.convertedInterfaces.includes(name));
+}
+
 // What a deployment serves: facts that hold on all its routes, its prices among them, and for
 // each route the facts that combine the route with the model and deployment, such as the hosted
 // tools that the route runs for it, with their call prices. Facts of the route alone, such as its
@@ -995,13 +1000,13 @@ function servedFacts(graph, model, deployment, hosting) {
 	const routes = {};
 	for (const routeId of [...deployment.routeIds].sort()) {
 		const route = graph.routes[routeId];
-		// A route that serves one interface passes requests through to that provider API, so a
-		// model's shorter effort list for the interface applies there. Routes that translate
-		// several interfaces to another API keep the deployment's list.
+		// A route passes the requests on the one interface that it takes itself through to that
+		// provider API, and converts the others to it, so a model's shorter effort list for the
+		// interface applies there. A route that converts every interface to another API keeps the
+		// deployment's list.
+		const own = ownInterfaces(route);
 		const interfaceEfforts =
-			route.interfaces.length === 1
-				? model.reasoningEffortsByInterface[route.interfaces[0]]
-				: undefined;
+			own.length === 1 ? model.reasoningEffortsByInterface[own[0]] : undefined;
 		const selected = selectedDataHandling(graph, route.providerId, hosting, deployment);
 		const dataHandling = mergeFacts(
 			mergeFacts(route.dataHandling, selected),
@@ -1612,6 +1617,15 @@ function compileGraph(source, places, companies) {
 			Object.entries(sourceGraph.routes).map(([routeId, route]) => {
 				const provider = requireNode(sourceGraph.providers, route.providerId, routeId);
 				validateCanonicalList(route.interfaces, canonicalInterfaceRanks, `${routeId}: interfaces`);
+				const convertedInterfaces = route.convertedInterfaces ?? [];
+				if (convertedInterfaces.length)
+					validateCanonicalList(
+						convertedInterfaces,
+						canonicalInterfaceRanks,
+						`${routeId}: convertedInterfaces`
+					);
+				if (convertedInterfaces.some((name) => !route.interfaces.includes(name)))
+					throw new Error(`${routeId}: convertedInterfaces must be among its interfaces`);
 				validateCanonicalList(
 					route.inputModalities,
 					canonicalModalityRanks,
@@ -1679,6 +1693,7 @@ function compileGraph(source, places, companies) {
 						providerId: route.providerId,
 						endpoint: route.endpoint ?? null,
 						interfaces: [...route.interfaces],
+						convertedInterfaces,
 						batch: route.batch === true,
 						supportsCancellation: route.supportsCancellation === true,
 						inputModalities: [...route.inputModalities],
@@ -1869,10 +1884,13 @@ function compileGraph(source, places, companies) {
 		const deployment = structuredClone(sourceDeployment);
 		const model = requireNode(graph.models, deployment.modelId, deploymentId);
 		const providerId = providerForDeployment(graph, deploymentId, deployment);
-		// The gateway serves each interface of a deployment through one route.
-		const interfaces = deployment.routeIds.flatMap((routeId) => graph.routes[routeId].interfaces);
+		// One route of a deployment takes each interface itself. Another can convert the same
+		// interface, and serves it only for the requests that the first cannot.
+		const interfaces = deployment.routeIds.flatMap((routeId) =>
+			ownInterfaces(graph.routes[routeId])
+		);
 		if (new Set(interfaces).size !== interfaces.length) {
-			throw new Error(`${deploymentId}: routes must serve different interfaces`);
+			throw new Error(`${deploymentId}: routes must take different interfaces themselves`);
 		}
 		if (!deployment.upstream?.model) {
 			throw new Error(`${deploymentId}: upstream model is required`);
@@ -2081,12 +2099,13 @@ function compileGraph(source, places, companies) {
 		}
 		if (
 			deployment.upstream.reasoningMode &&
-			deployment.routeIds.some((routeId) => {
-				const routeInterfaces = graph.routes[routeId].interfaces;
-				return routeInterfaces.length !== 1 || routeInterfaces[0] !== 'responses';
-			})
+			deployment.routeIds.some(
+				(routeId) => ownInterfaces(graph.routes[routeId]).join() !== 'responses'
+			)
 		) {
-			throw new Error(`${deploymentId}: fixed reasoning mode requires Responses-only routes`);
+			throw new Error(
+				`${deploymentId}: fixed reasoning mode requires routes that take only Responses themselves`
+			);
 		}
 		const served = servedFacts(graph, model, deployment, hosting);
 		validateServedFacts(

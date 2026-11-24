@@ -9,7 +9,8 @@
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html
 routes:
   providerId: aws
-  interfaces: [chat_completions]
+  interfaces: [chat_completions, responses]
+  convertedInterfaces: [responses]
   inputModalities: [text, image]
   # A tool message carries an image that the model reads, and Bedrock refuses a file there
   # (capture aws/chat-completions-files). An explicit cache mark is OpenAI's
