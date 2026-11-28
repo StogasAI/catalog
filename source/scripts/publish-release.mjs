@@ -424,6 +424,30 @@ function publishGitHubRelease(envelope) {
 		'StogasAI/catalog',
 		'--clobber'
 	]);
+	// GitHub writes the link to the commits since the newest public release. By itself it would
+	// compare with the tag before this one, which may never have become a release.
+	const previous = output('gh', [
+		'release',
+		'list',
+		'--repo',
+		'StogasAI/catalog',
+		'--exclude-drafts',
+		'--limit',
+		'1',
+		'--json',
+		'tagName',
+		'--jq',
+		'.[0].tagName // empty'
+	]);
+	const changes = output('gh', [
+		'api',
+		'repos/StogasAI/catalog/releases/generate-notes',
+		'-f',
+		`tag_name=${tag}`,
+		...(previous ? ['-f', `previous_tag_name=${previous}`] : []),
+		'--jq',
+		'.body'
+	]);
 	run('gh', [
 		'release',
 		'edit',
@@ -437,7 +461,9 @@ function publishGitHubRelease(envelope) {
 		[
 			`Catalog: ${envelope.document.artifacts[CATALOG_ROOT].sha256}`,
 			'',
-			"GitLab.com's hosted runners compiled this release from its tag and made the same manifest and catalog. `gitlab-attestation.jsonl` holds their signed build proof."
+			"GitLab.com's hosted runners compiled this release from its tag and made the same manifest and catalog. `gitlab-attestation.jsonl` holds their signed build proof.",
+			'',
+			changes
 		].join('\n')
 	]);
 }
