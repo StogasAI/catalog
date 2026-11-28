@@ -16,22 +16,25 @@ permissions:
 cache-mode: none
 
 jobs:
+  # A release is attested and drafted only for a commit that passes CI, which runs beside the
+  # build. The workflow runs CI itself, because a newer push to main can cancel main's run of the
+  # tagged commit.
+  ci:
+    name: CI
+    uses: $/.github/workflows/ci.yml
+
   build:
     name: Build Catalog
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      attestations: write
-      contents: read
-      id-token: write
     steps:
       - name: Validate tag
-        run: '[[ "$GITHUB_REF_NAME" =~ ^catalog-v[1-9][0-9]*$ ]]'
+        run: '[[ "$GITHUB_REF" =~ ^refs/tags/catalog-v[1-9][0-9]*$ ]]'
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.ref }}
           persist-credentials: false
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -42,34 +45,13 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      - name: Build and check catalog
+      - name: Build catalog
         run: |
           set -euo pipefail
-          sequence="${GITHUB_REF_NAME#catalog-v}"
-          test "$(git rev-list -n1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
           bun install --frozen-lockfile
-          bun run check
-          node source/scripts/create-proposal.mjs "$sequence" "dist/catalog/$GITHUB_REF_NAME"
+          node source/scripts/create-proposal.mjs "${GITHUB_REF_NAME#catalog-v}" "dist/catalog/$GITHUB_REF_NAME"
           cd "dist/catalog/$GITHUB_REF_NAME"
-          sha256sum -c SHA256SUMS
-          sha256sum catalog-release.json catalog.json > ATTESTATION-SHA256SUMS
-
-      - name: Generate GitHub artifact attestation
-        id: attest
-        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4
-        with:
-          create-storage-record: false
-          subject-checksums: dist/catalog/${{ github.ref_name }}/ATTESTATION-SHA256SUMS
-
-      - name: Collect GitHub attestation
-        env:
-          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
-        run: |
-          set -euo pipefail
-          release_dir="dist/catalog/$GITHUB_REF_NAME"
-          cp "$BUNDLE_PATH" "$release_dir/github-attestation.jsonl"
-          cd "$release_dir"
-          sha256sum github-attestation.jsonl >> SHA256SUMS
           sha256sum -c SHA256SUMS
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -79,51 +61,70 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The job that signs the build proof runs no code from the repository or its packages.
   publish:
     name: Publish Draft Release
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [ci, build]
     timeout-minutes: 10
     permissions:
       actions: read
+      attestations: write
       contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          fetch-depth: 0
-          ref: ${{ github.ref_name }}
-          persist-credentials: false
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: catalog-release-${{ github.ref_name }}
           path: dist/catalog/${{ github.ref_name }}
 
-      - name: Create or replace draft release
+      - name: Check the built files
+        working-directory: dist/catalog/${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          sha256sum -c SHA256SUMS
+          sha256sum catalog-release.json catalog.json > "$RUNNER_TEMP/attested"
+
+      - name: Generate GitHub artifact attestation
+        id: attest
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4
+        with:
+          create-storage-record: false
+          subject-checksums: ${{ runner.temp }}/attested
+
+      - name: Collect GitHub attestation
+        working-directory: dist/catalog/${{ github.ref_name }}
         env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$BUNDLE_PATH" github-attestation.jsonl
+          sha256sum github-attestation.jsonl >> SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      # The draft names no target commit, because GitHub refuses the workflow token a release
+      # whose target has workflow files that no branch has, as once main changes a workflow
+      # during the build. The existing tag still decides the commit.
+      - name: Create or replace draft release
+        working-directory: dist/catalog/${{ github.ref_name }}
+        env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          release_dir="dist/catalog/$tag"
-          cd "$release_dir"
-          sha256sum -c SHA256SUMS
-          cd - >/dev/null
-          assets=(
-            "$release_dir/catalog.json"
-            "$release_dir/catalog-release.json"
-            "$release_dir/github-attestation.jsonl"
-            "$release_dir/SHA256SUMS"
-          )
+          assets=(catalog.json catalog-release.json github-attestation.jsonl SHA256SUMS)
           if gh release view "$tag" >/dev/null 2>&1; then
             test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "true" || {
               echo "Catalog release $tag is final and cannot be changed." >&2
               exit 1
             }
-            gh release upload "$tag" "${assets[@]}" --clobber
+            # A run that builds the tag again replaces every file of its earlier draft.
+            gh release view "$tag" --json assets --jq '.assets[].name' |
+              while IFS= read -r asset; do
+                gh release delete-asset "$tag" "$asset" --yes
+              done
+            gh release upload "$tag" "${assets[@]}"
           else
-            # The draft names no target commit, because GitHub refuses the workflow token a
-            # release whose target has workflow files that no branch has, as once main changes a
-            # workflow during the build. The existing tag still decides the commit.
             gh release create "$tag" "${assets[@]}" --draft --verify-tag --title "Catalog ${tag#catalog-v}"
           fi

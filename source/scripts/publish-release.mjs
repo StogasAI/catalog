@@ -39,6 +39,13 @@ const approvalPath = join(outputRoot, 'catalog-approval.json');
 const targetBucket = process.argv[5]?.trim();
 // GitLab's build proof of the tag, which only `prepare` takes.
 const gitlabAttestationPath = process.argv[6];
+// The files of the draft release that GitHub's workflow makes.
+const proposalFiles = [
+	CATALOG_ROOT,
+	'catalog-release.json',
+	'github-attestation.jsonl',
+	'SHA256SUMS'
+];
 const publicationEnvironment = process.env.CATALOG_PUBLICATION_ENVIRONMENT?.trim();
 if (publicationEnvironment !== 'staging' && publicationEnvironment !== 'prod') {
 	throw new Error('CATALOG_PUBLICATION_ENVIRONMENT must be staging or prod.');
@@ -113,7 +120,7 @@ async function prepareRelease() {
 	const workRoot = mkdtempSync(join(tmpdir(), `stogas-catalog-${sequence}-`));
 	try {
 		const proposalRoot = join(workRoot, 'github-proposal');
-		downloadAndVerifyGitHubProposal(proposalRoot);
+		const draft = downloadAndVerifyGitHubProposal(proposalRoot);
 		verifyIndependentBuild(proposalRoot);
 
 		run(
@@ -134,8 +141,9 @@ async function prepareRelease() {
 			throw new Error('The Stogas manifest differs from the GitHub Actions manifest.');
 		}
 		await publishImmutables(artifactPaths(outputRoot), outputRoot);
-		if (publicationEnvironment === 'prod') {
-			publishGitHubRelease(envelope);
+		// A public release cannot change, so a repeated publication finds it as it was checked.
+		if (publicationEnvironment === 'prod' && draft) {
+			publishGitHubRelease(envelope, proposalRoot);
 		}
 		console.log(`Prepared catalog ${sequence}.`);
 		console.log(`  approval ${approvalPath}`);
@@ -244,12 +252,7 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 	}
 	mkdirSync(proposalRoot, { recursive: true });
 	run('gh', ['release', 'download', tag, '--repo', 'StogasAI/catalog', '--dir', proposalRoot]);
-	for (const name of [
-		CATALOG_ROOT,
-		'catalog-release.json',
-		'github-attestation.jsonl',
-		'SHA256SUMS'
-	]) {
+	for (const name of proposalFiles) {
 		if (!existsSync(join(proposalRoot, name))) {
 			throw new Error(`GitHub release ${tag} is missing ${name}.`);
 		}
@@ -273,6 +276,7 @@ function downloadAndVerifyGitHubProposal(proposalRoot) {
 			'--deny-self-hosted-runners'
 		]);
 	}
+	return release.isDraft;
 }
 
 function verifyIndependentBuild(proposalRoot) {
@@ -414,7 +418,7 @@ async function requireImmutableReadbacks(paths, root) {
 	);
 }
 
-function publishGitHubRelease(envelope) {
+function publishGitHubRelease(envelope, proposalRoot) {
 	run('gh', [
 		'release',
 		'upload',
@@ -424,6 +428,19 @@ function publishGitHubRelease(envelope) {
 		'StogasAI/catalog',
 		'--clobber'
 	]);
+	// A draft can change until it is public and never after, so GitHub must hold exactly the
+	// checked files now.
+	const checked = [...proposalFiles.map((name) => join(proposalRoot, name)), gitlabAttestationPath]
+		.map((path) => `${basename(path)} sha256:${sha256(readBoundedRegularFile(path))}`)
+		.sort();
+	const held = JSON.parse(
+		output('gh', ['release', 'view', tag, '--repo', 'StogasAI/catalog', '--json', 'assets'])
+	)
+		.assets.map((asset) => `${asset.name} ${asset.digest}`)
+		.sort();
+	if (held.join('\n') !== checked.join('\n')) {
+		throw new Error(`GitHub's draft of ${tag} does not hold exactly the checked files.`);
+	}
 	// GitHub writes the link to the commits since the newest public release. By itself it would
 	// compare with the tag before this one, which may never have become a release.
 	const previous = output('gh', [
