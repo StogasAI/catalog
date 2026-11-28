@@ -437,6 +437,19 @@ describe('Azure provider onboarding contract', () => {
 				[...standardNodes, ['standard', 'apac'], ['flex', 'global']],
 				{ pro: false }
 			),
+			// Azure Government offers the GPT-5.6 models in its own Data Zone.
+			...['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'].map((modelId) => ({
+				id: `azure-${modelId}-us-gov`,
+				modelId,
+				routeIds: ['azure-chat-completions', 'azure-responses'],
+				hosting: 'microsoft',
+				upstream: {
+					deploymentType: 'data_zone_standard_us_gov',
+					model: modelId,
+					modelFormat: 'OpenAI',
+					modelVersion: '2026-07-09'
+				}
+			})),
 			...otherTargets
 		]
 			.map((target) => ({ ...target, upstream: { serviceTier: 'standard', ...target.upstream } }))
@@ -534,6 +547,23 @@ describe('Azure provider onboarding contract', () => {
 			if (!(deployment.modelId in models)) continue;
 			const [rates, euTenths, retirement] = models[deployment.modelId as keyof typeof models];
 			const { deploymentType, serviceTier } = deployment.upstream;
+			// Azure Government charges 1.25 times the US Data Zone, has no cache write meter and
+			// names no retirement, and its records list only the authorizations that name it.
+			if (deploymentType === 'data_zone_standard_us_gov') {
+				const { cached_input_tokens, input_tokens, output_tokens } = gptPricing(rates, 11n, 8n);
+				expect(deployment.pricing).toEqual({ cached_input_tokens, input_tokens, output_tokens });
+				expect(deployment.retirementDate).toBeNull();
+				expect([deployment.stogasByok, deployment.stogasManaged]).toEqual([false, false]);
+				for (const route of Object.values(deployment.routes)) {
+					expect(route.dataHandling).toMatchObject({
+						certifications: ['fedramp-moderate', 'fedramp-high', 'dod-il2', 'dod-il4'],
+						processingLocation: 'US',
+						storageLocation: 'US'
+					});
+					expect(route.capabilities.explicitPromptCaching).toBe(false);
+				}
+				continue;
+			}
 			const regionTenths =
 				deploymentType === 'data_zone_standard_us'
 					? 11n

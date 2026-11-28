@@ -1,0 +1,39 @@
+# Azure Government is a separate cloud with its own accounts and hosts. Its Data Zone Standard
+# deployments run in its two regions, US Gov Arizona and US Gov Virginia, at 25 percent over the
+# price of the commercial US Data Zone. Models, versions, limits and regions reviewed 2026-11-28:
+# https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-gov
+# Prices from the Azure Retail Prices API for usgovvirginia and usgovarizona ("Std DZ"), which has
+# no cache write meter for these regions, reviewed 2026-11-28:
+# https://prices.azure.com/api/retail/prices?$filter=armRegionName%20eq%20'usgovvirginia'
+# Microsoft names Azure OpenAI in its FedRAMP High and DoD Impact Level 2 and 4 authorizations for
+# Azure Government. Impact Level 5 needs the customer's own isolation settings, and Microsoft's
+# other audits name the service without naming this cloud. Certifications reviewed 2026-11-28:
+# https://learn.microsoft.com/en-us/azure/azure-government/compliance/azure-services-in-fedramp-auditscope
+# Microsoft retires models in Azure Government on dates of its own and names none for this one:
+# https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirements-gov
+deployments:
+  modelId: gpt-5.6-sol
+  routeIds: [azure-chat-completions, azure-responses]
+  upstream:
+    model: gpt-5.6-sol
+    modelFormat: OpenAI
+    modelVersion: '2026-07-09'
+    deploymentType: data_zone_standard_us_gov
+  stogasByok: false
+  overrides:
+    # Nothing shows that these regions take the cache settings that bill a cache write, which
+    # their price list has no meter for.
+    capabilities:
+      explicitPromptCaching: false
+    dataHandling:
+      certifications: [fedramp-moderate, fedramp-high, dod-il2, dod-il4]
+  pricing:
+    input_tokens:
+      per_mill_tokens: '5.5'
+      per_mill_context_gt_272k: '11'
+    cached_input_tokens:
+      per_mill_tokens: '0.55'
+      per_mill_context_gt_272k: '1.1'
+    output_tokens:
+      per_mill_tokens: '27.5'
+      per_mill_context_gt_272k: '41.25'

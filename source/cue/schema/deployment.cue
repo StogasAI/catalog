@@ -30,8 +30,9 @@ package catalog
 #AzureModelFormat: "Anthropic" | "DeepSeek" | "Fireworks" | "Mistral AI" | "MoonshotAI" | "OpenAI" | "OpenAI-OSS" | "xAI"
 
 // The type of Azure deployment that a customer creates. Data Zone types keep processing and
-// storage in their zone, and the batch types serve only the batch routes.
-#AzureDeploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_eu" | "data_zone_standard_apac" | "global_batch" | "data_zone_batch_us"
+// storage in their zone, and the batch types serve only the batch routes. The us_gov zone is the
+// regions of Azure Government, a separate cloud with its own accounts and hosts.
+#AzureDeploymentType: "instant" | "global_standard" | "data_zone_standard_us" | "data_zone_standard_us_gov" | "data_zone_standard_eu" | "data_zone_standard_apac" | "global_batch" | "data_zone_batch_us"
 
 #AzureUpstream: close({
 	model:          #UpstreamId

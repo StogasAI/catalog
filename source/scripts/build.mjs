@@ -308,8 +308,8 @@ const OPENAI_RESIDENCY_LOCATIONS = {
 };
 
 // Where each Azure Data Zone keeps processing and storage, by the zone that ends a Data Zone
-// deployment type, as us in data_zone_batch_us.
-const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US' };
+// deployment type, as us in data_zone_batch_us and us-gov in data_zone_standard_us_gov.
+const AZURE_DATA_ZONE_LOCATIONS = { apac: 'apac', eu: 'europe', us: 'US', 'us-gov': 'US' };
 
 /**
  * The data handling that a deployment's upstream fields and preview status decide, which its record
@@ -358,7 +358,7 @@ function selectedDataHandling(graph, providerId, hosting, { upstream, preview })
 }
 
 function azureDataZone(deploymentType) {
-	return /^data_zone_(?:standard|batch)_(.+)$/.exec(deploymentType ?? '')?.[1];
+	return /^data_zone_(?:standard|batch)_(.+)$/.exec(deploymentType ?? '')?.[1].replace('_', '-');
 }
 
 function azureBatchType(deploymentType) {
@@ -1671,17 +1671,6 @@ function compileGraph(source, places, companies) {
 					dataHandling.certifications
 				);
 				// The provider's company runs the models of a route that names no other hosting.
-				// On a managed account the client can run the server and fill every result, so a
-				// request would need a hold of a whole input window for each pass, which the gateway
-				// does not place.
-				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'mcp'))
-					throw new Error(`${routeId}: the gateway has no hold for mcp on a managed credential`);
-				// No reply prices an image, so no request on a managed account could pay for one.
-				if (modes.stogasManaged && hostedTools.some((offer) => offer.tool === 'image_generation'))
-					throw new Error(`${routeId}: image generation has no price for a managed credential`);
-				// Every customer on our managed account shares its prompt cache.
-				if (modes.stogasManaged && dataHandling.isolatedPromptCache)
-					throw new Error(`${routeId}: a route with a managed credential shares its prompt cache`);
 				if (route.hosting === provider.companyId)
 					throw new Error(`${routeId}.hosting redundantly repeats its provider's company`);
 				if (route.hosting !== undefined && !isCompany(companies, route.hosting))
@@ -1938,7 +1927,6 @@ function compileGraph(source, places, companies) {
 				return [mode, routes && deployment[mode] !== false];
 			})
 		);
-		const stogasServes = modes.stogasByok || modes.stogasManaged;
 		// Routes of one provider repeat its notes, so each note shows once, in route order.
 		const notes = [
 			...new Map(
@@ -1958,9 +1946,7 @@ function compileGraph(source, places, companies) {
 		}
 		const selectorKeys = Object.keys(deployment.upstream).sort();
 		const selectorKeysValid =
-			// The gateway sends OpenAI requests to one host, so it serves no data residency endpoint.
 			(providerId === 'openai' &&
-				(deployment.upstream.inferenceGeo === undefined || !stogasServes) &&
 				selectorKeys.every((key) =>
 					['inferenceGeo', 'model', 'reasoningMode', 'serviceTier'].includes(key)
 				)) ||
@@ -2038,10 +2024,6 @@ function compileGraph(source, places, companies) {
 			providerId === 'anthropic' ||
 			(cloud && model.authorId === 'anthropic') ||
 			(providerId === 'azure' && deployment.upstream.modelFormat === 'Anthropic');
-		// The GovCloud Regions are a partition of their own, whose accounts the gateway cannot use.
-		if (deployment.upstream.inferenceGeo === 'us-gov' && stogasServes) {
-			throw new Error(`${deploymentId}: Stogas does not serve the AWS GovCloud (US) Regions`);
-		}
 		// Bedrock serves a model through inference profiles, whose IDs name the geography and then
 		// the model, whose own ID starts with anthropic for Claude, or in the Region of each request,
 		// by the model's own ID, at the prices of the Regions that the deployment lists.

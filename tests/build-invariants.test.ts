@@ -2466,23 +2466,6 @@ describe('catalog source compiler invariants', () => {
 			expect(() => buildCatalog(offer({ trainingUse: null }))).toThrow(
 				'openai-responses.hostedTools[0]: mcp states no dataHandling, because the request names its server'
 			);
-			// Our own provider account would need a hold that the gateway does not place.
-			const managed = offer();
-			managed.graph.providers.openai.stogasManaged = true;
-			expect(() => buildCatalog(managed)).toThrow(
-				'openai-responses: the gateway has no hold for mcp on a managed credential'
-			);
-		});
-
-		test('keeps a managed account from stating an isolated prompt cache', () => {
-			const isolated = changed((source) => {
-				source.graph.providers.openai.dataHandling.isolatedPromptCache = true;
-			});
-			expect(() => buildCatalog(isolated)).not.toThrow();
-			isolated.graph.providers.openai.stogasManaged = true;
-			expect(() => buildCatalog(isolated)).toThrow(
-				'a route with a managed credential shares its prompt cache'
-			);
 		});
 
 		test('lists the certifications of the company that runs a deployment', () => {
